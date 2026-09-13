@@ -1,0 +1,7 @@
+#!/bin/bash -e
+
+# Gems live in a volume rather than the image, so install any that are missing.
+# The lock stops the web and css containers installing into that volume at the same time.
+flock "${BUNDLE_PATH}" bash -c "bundle check > /dev/null 2>&1 || bundle install"
+
+exec "${@}"

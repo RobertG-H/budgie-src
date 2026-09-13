@@ -1,0 +1,52 @@
+# Local development environment. See README.md for the commands.
+
+x-app: &app
+  build:
+    context: .
+    target: development
+  volumes:
+    - .:/app
+    - bundle:/usr/local/bundle
+  environment:
+    DB_HOST: db
+
+services:
+  web:
+    <<: *app
+    ports:
+      # Only reachable from this machine, like `bin/rails server` outside Docker.
+      - "127.0.0.1:3000:3000"
+    # Lets `docker compose attach web` drive the debugger.
+    stdin_open: true
+    tty: true
+    # Keeps pid files out of the bind mount, so a server that didn't shut down
+    # cleanly can't block the next boot with a stale tmp/pids/server.pid.
+    tmpfs:
+      - /app/tmp/pids
+    depends_on:
+      db:
+        condition: service_healthy
+
+  css:
+    <<: *app
+    command: ./bin/rails tailwindcss:watch
+    # The Tailwind watcher exits when stdin closes; a TTY keeps it running.
+    tty: true
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      # Checks over TCP because the image's first-boot init server only listens on a socket.
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--username=postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  bundle:
+  postgres:
