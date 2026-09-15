@@ -26,11 +26,18 @@
   <body>
     <header class="border-b border-gray-200">
       <div class="container mx-auto px-5 py-4 flex items-center justify-between gap-6">
-        <%= link_to "Budgie", root_path, class: "text-xl font-semibold" %>
+        <div class="flex items-baseline gap-4">
+          <%= link_to "Budgie", root_path, class: "text-xl font-semibold" %>
+          <% if authenticated? && (budget = Current.user.budget) %>
+            <span class="text-sm text-gray-600">Budget in <%= budget.currency %></span>
+          <% end %>
+        </div>
 
-        <nav aria-label="Main">
-          <%# Navigation links go here as features land. %>
+        <nav aria-label="Main" class="flex items-center gap-6">
           <% if authenticated? %>
+            <% if Current.user.budget %>
+              <%= link_to "Envelopes", envelopes_path, class: "text-sm text-gray-600 hover:text-gray-900" %>
+            <% end %>
             <%= button_to "Sign out", session_path, method: :delete, class: "text-sm text-gray-600 hover:text-gray-900" %>
           <% end %>
         </nav>

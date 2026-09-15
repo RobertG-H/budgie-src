@@ -38,5 +38,5 @@ docker compose run --rm web bin/rails user:delete EMAIL=someone@example.com
 ```
 
 The task shows what it will delete and asks you to type the email to confirm.
-It permanently deletes the user, their identities, their sessions (which signs them out) and their invite, so the address can be invited again with `invite:create`.
+It permanently deletes the user, their identities, their sessions (which signs them out), their budget and its envelopes, and their invite, so the address can be invited again with `invite:create`.
 This is handy for testing invites with an account you've already signed in with.
