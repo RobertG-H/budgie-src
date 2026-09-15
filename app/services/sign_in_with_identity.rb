@@ -24,7 +24,7 @@ class SignInWithIdentity
       # Linking another identity to an existing user is a separate, deliberate feature.
       failure(:email_conflict)
     else
-      success(create_user)
+      create_invited_user
     end
   end
 
@@ -47,10 +47,17 @@ class SignInWithIdentity
       user
     end
 
-    def create_user
+    # Only an email with a pending invite may create an account. The invite row is locked so it can't be
+    # revoked, or accepted by a second sign-in, while the user is being created.
+    def create_invited_user
       User.transaction do
-        User.create!(email: profile.email, name: profile.name, avatar_url: profile.avatar_url).tap do |user|
+        if (invite = Invite.pending.lock.find_by(email: profile.email))
+          user = User.create!(email: profile.email, name: profile.name, avatar_url: profile.avatar_url)
           user.identities.create!(provider: profile.provider, uid: profile.uid, email: profile.email)
+          invite.accept!(user)
+          success(user)
+        else
+          failure(:not_invited)
         end
       end
     end

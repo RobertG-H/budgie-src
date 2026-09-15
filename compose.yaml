@@ -1,4 +1,4 @@
-# Local development environment. See README.md for the commands.
+# Local development environment. See docs/development.md for the commands.
 
 x-app: &app
   build:

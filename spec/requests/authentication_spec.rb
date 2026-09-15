@@ -21,6 +21,9 @@ RSpec.describe "Authentication", type: :request do
   end
 
   describe "after signing in" do
+    # sign_in_with_google's default email, so its first sign-in may create the user.
+    before { create(:invite, email: "robin@example.com") }
+
     it "returns the visitor to the page they asked for" do
       get root_path(ref: "bookmark")
 
