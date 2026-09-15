@@ -50,15 +50,35 @@ RSpec.describe "Sessions", type: :request do
   end
 
   describe "GET /auth/google_oauth2/callback" do
-    it "creates the user and identity on first sign-in, and starts a session" do
+    it "creates the user and identity on an invited first sign-in, accepts the invite, and starts a session" do
+      invite = create(:invite, email: "robin@example.com")
+
       expect { sign_in_with_google(uid: "109876543210", email: "Robin@Example.com", name: "Robin Budgie") }
         .to change(User, :count).by(1).and change(Identity, :count).by(1).and change(Session, :count).by(1)
 
       user = User.sole
       expect(user).to have_attributes(email: "robin@example.com", name: "Robin Budgie")
       expect(user.identities.sole).to have_attributes(provider: "google_oauth2", uid: "109876543210")
+      expect(invite.reload).to have_attributes(status: "accepted", user: user)
       expect(cookies["session_id"]).to be_present
       expect(response).to redirect_to(root_url)
+    end
+
+    it "refuses a first sign-in without a pending invite, says Budgie is invite-only, and creates nothing" do
+      create(:invite, :revoked, email: "robin@example.com")
+
+      expect { sign_in_with_google(email: "robin@example.com") }.not_to change { record_counts }
+      expect(response).to redirect_to(sign_in_path)
+
+      follow_redirect!
+
+      assert_select "[role=alert]", text: "Budgie is invite-only. Ask for an invite to sign in."
+    end
+
+    it "shows only the generic message when /auth/failure is given the not-invited reason" do
+      get auth_failure_path(message: "not_invited", strategy: "google_oauth2")
+
+      expect(flash[:alert]).to eq("We couldn't sign you in.")
     end
 
     it "signs a returning user in without creating another" do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_13_192828) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_125028) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,6 +23,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_13_192828) do
     t.bigint "user_id", null: false
     t.index ["provider", "uid"], name: "index_identities_on_provider_and_uid", unique: true
     t.index ["user_id"], name: "index_identities_on_user_id"
+  end
+
+  create_table "invites", force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.datetime "revoked_at"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["email"], name: "index_invites_on_email", unique: true
+    t.index ["user_id"], name: "index_invites_on_user_id"
   end
 
   create_table "sessions", force: :cascade do |t|
@@ -45,5 +56,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_13_192828) do
   end
 
   add_foreign_key "identities", "users"
+  add_foreign_key "invites", "users"
   add_foreign_key "sessions", "users"
 end

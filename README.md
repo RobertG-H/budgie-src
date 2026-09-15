@@ -2,109 +2,59 @@
 
 An envelope budgeting app built with Rails 8.1, PostgreSQL 18, Tailwind CSS 4 and Hotwire.
 
-## Prerequisites
+## What you need
 
-[Docker](https://docs.docker.com/get-started/get-docker/) with Compose v2. Docker Desktop includes both.
+Budgie has no passwords and is invite-only, so it depends on two outside services: Google for sign-in and an SMTP provider for invite emails.
+What you have to set up depends on where it runs.
+
+| | Local development | Production |
+| --- | --- | --- |
+| [Docker](https://docs.docker.com/get-started/get-docker/) with Compose v2 | Required | Required |
+| [Google OAuth client](docs/google-oauth.md) | **Required**: without it nobody can sign in | **Required**, with its own production client |
+| [SMTP provider (Zedmail)](docs/email.md#production-zedmail) | Not needed: emails are saved to http://localhost:3000/letter_opener instead of being sent | **Required**: without it invites can't be sent, so nobody new can sign up |
+
 Development runs entirely in containers, so you don't need Ruby or PostgreSQL on your machine.
+The specs need neither Google nor SMTP.
 
-## Getting started
+## Getting started (local development)
 
-```sh
-docker compose run --rm web bin/rails db:prepare
-docker compose up
-```
+1. **Set up the databases and start the app.**
 
-Then open http://localhost:3000.
+   ```sh
+   docker compose run --rm web bin/rails db:prepare
+   docker compose up
+   ```
 
-The first command installs the gems and creates the development and test databases, so it takes a few minutes the first time.
-Code, view and Tailwind changes show up on refresh without restarting anything.
+   The first command installs the gems and creates the development and test databases, so it takes a few minutes the first time.
+   Code, view and Tailwind changes show up on refresh without restarting anything.
 
-Every page needs you to sign in, and signing in needs Google OAuth credentials.
-Set them up once by following [OAuth setup (Google)](#oauth-setup-google).
-The specs run without them.
+2. **Set up Google OAuth.** Every page needs you to sign in, and signing in needs a Google OAuth client.
+   Follow [Google OAuth setup](docs/google-oauth.md) once, then restart the app.
 
-## OAuth setup (Google)
+3. **Invite yourself.** Only invited addresses can create an account.
 
-Budgie has no passwords. People sign in with Google, so the app needs an OAuth client from Google Cloud.
-Each environment has its own client; these steps create the one for local development.
+   ```sh
+   docker compose run --rm web bin/rails invite:create EMAIL=you@gmail.com
+   ```
 
-### 1. Create the project and consent screen
+   The invite email isn't sent; it appears at http://localhost:3000/letter_opener. You don't need to open it.
 
-You only do this once, for all environments.
+4. **Sign in.** Open http://localhost:3000 and sign in with Google as the address you invited.
 
-1. In the [Google Cloud console](https://console.cloud.google.com/), create a project named **Budgie**.
-2. Go to **Google Auth Platform** > **Branding** and click **Get started**.
-3. Fill in the steps:
-   - **App name:** Budgie
-   - **User support email:** your email address
-   - **Audience:** External
-   - **Contact information:** your email address
-4. Agree to the Google API Services User Data Policy and click **Create**.
+## Production
 
-Leave the publishing status on **Testing**.
-You don't need to add test users: Google lets any account sign in to a Testing app that only asks for name, email address and profile, which is all Budgie asks for.
+Production needs everything above plus email delivery:
 
-### 2. Create the development client
+1. **A production Google OAuth client** with the production callback URL. See [Google OAuth setup](docs/google-oauth.md).
+2. **SMTP through Zedmail**: verify the sending domain, get an API key and set the `SMTP_*` and `MAILER_FROM` variables. See [Email](docs/email.md#production-zedmail).
+3. **Invite yourself** with `invite:create`, and check the email arrives before inviting anyone else.
 
-1. Go to **Google Auth Platform** > **Clients** and click **Create client**.
-2. Set **Application type** to **Web application** and name it **Budgie development**.
-3. Under **Authorized redirect URIs**, add `http://localhost:3000/auth/google_oauth2/callback`.
-   No JavaScript origins are needed.
-4. Click **Create** and copy the client ID and client secret.
-   Google shows the secret only once, so copy it before closing the dialog.
+## Docs
 
-A new redirect URI can take a few minutes to start working.
-
-### 3. Give the credentials to the app
-
-```sh
-cp .env.example .env
-```
-
-Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then restart the app with `docker compose up`.
-Compose loads `.env` into the `web` container. Git ignores the file, so the secret stays on your machine.
-
-Until invites arrive, any Google account with a verified email address can sign in, and its first sign-in creates its Budgie user.
-
-## Commands
-
-| Task | Command |
+| Doc | What's in it |
 | --- | --- |
-| Set up or migrate the databases | `docker compose run --rm web bin/rails db:prepare` |
-| Start the app | `docker compose up` |
-| Stop the app | `docker compose down` |
-| Run the specs | `docker compose run --rm web bin/rspec` |
-| Open a Rails console | `docker compose run --rm web bin/rails console` |
-| Attach to the debugger | `docker compose attach web` |
-| Lint | `docker compose run --rm web bin/rubocop` |
-| Build the production image | `docker build .` |
-
-Other Rails commands work the same way: `docker compose run --rm web bin/rails <command>`.
-
-### Debugging
-
-Add `debugger` where you want to stop and trigger that code, for example by loading the page.
-Then run `docker compose attach web` in a second terminal to reach the `(rdbg)` prompt.
-Detach with `Ctrl-P` `Ctrl-Q`. `Ctrl-C` can stop the server.
-
-### Adding a gem
-
-Add it to the `Gemfile` and restart the containers.
-Missing gems are installed into the `bundle` volume when a container starts, so the image never needs rebuilding.
-Commit the updated `Gemfile.lock`.
-
-## How it's put together
-
-- `compose.yaml` runs three services: `web` (Puma), `css` (the Tailwind watcher) and `db` (PostgreSQL 18).
-  The repo is bind-mounted at `/app`, and gems and database data live in named volumes.
-- The `Dockerfile` has two targets.
-  `development` is what Compose runs.
-  The default target is the production image, which is also what Kamal deploys.
-- Sign-in goes through OmniAuth.
-  `config/auth_providers.yml` lists the enabled providers, `config/initializers/omniauth.rb` configures them, and each has a mapper in `app/models/auth_profile/` that turns what the provider returns into an `AuthProfile`.
-  `SignInWithIdentity` decides who that profile signs in as, without knowing which provider it came from.
-
-## Editor tooling (optional)
-
-Ruby on your machine is only useful for editor tooling such as ruby-lsp or RuboCop.
-If you want that, install the Ruby version in `.ruby-version` and run `bundle install`.
+| [Development](docs/development.md) | Everyday commands, debugging, adding gems and editor tooling |
+| [Google OAuth setup](docs/google-oauth.md) | Creating the Google Cloud project and OAuth client, and giving the credentials to the app |
+| [Invites and users](docs/invites.md) | Inviting people, the invite rules, and deleting users |
+| [Email](docs/email.md) | Reading email in development and setting up Zedmail for production |
+| [Architecture](docs/architecture.md) | How the containers, images and sign-in fit together |
