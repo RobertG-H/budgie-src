@@ -30,11 +30,21 @@
 
         <nav aria-label="Main">
           <%# Navigation links go here as features land. %>
+          <% if authenticated? %>
+            <%= button_to "Sign out", session_path, method: :delete, class: "text-sm text-gray-600 hover:text-gray-900" %>
+          <% end %>
         </nav>
       </div>
     </header>
 
     <main class="container mx-auto px-5 py-10">
+      <% if notice %>
+        <p class="mb-6 rounded-md bg-green-50 px-4 py-3 text-green-800" role="status"><%= notice %></p>
+      <% end %>
+      <% if alert %>
+        <p class="mb-6 rounded-md bg-red-50 px-4 py-3 text-red-800" role="alert"><%= alert %></p>
+      <% end %>
+
       <%= yield %>
     </main>
   </body>

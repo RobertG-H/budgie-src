@@ -1,0 +1,7 @@
+# Identity providers people can sign in with, in the order /sign_in shows them.
+# Each key is an OmniAuth strategy name, mapped to the name on its "Sign in with ..." button.
+#
+# A provider also needs a strategy in config/initializers/omniauth.rb and a mapper in
+# app/models/auth_profile/ that turns its auth hash into an AuthProfile.
+shared:
+  google_oauth2: Google

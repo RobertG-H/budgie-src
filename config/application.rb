@@ -38,5 +38,8 @@ module Budgie
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Identity providers people can sign in with. See config/auth_providers.yml.
+    config.x.auth_providers = config_for(:auth_providers)
   end
 end

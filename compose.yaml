@@ -13,6 +13,10 @@ x-app: &app
 services:
   web:
     <<: *app
+    # Google OAuth credentials, copied from .env.example. Optional so the specs run without them.
+    env_file:
+      - path: .env
+        required: false
     ports:
       # Only reachable from this machine, like `bin/rails server` outside Docker.
       - "127.0.0.1:3000:3000"
