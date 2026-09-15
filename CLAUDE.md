@@ -62,14 +62,28 @@ The `Authentication` concern in `ApplicationController` requires sign-in for eve
 Sessions are database rows referenced by a signed, permanent cookie. They expire after 30 days without use, and `last_active_at` is written at most once an hour.
 The page to return to after sign-in is saved only for GET requests that aren't Turbo hover prefetches. `Current.user` is the signed-in user.
 
+### Budget and envelopes
+
+Each user has at most one `Budget` (unique `user_id`), in a currency they choose on first-run setup. There's no app-wide default currency.
+`Budget::CURRENCIES` lists the supported two-decimal currencies with their names and display units; add a currency there. Amounts are shown with `money(amount, budget:)` from `ApplicationHelper`, and the currency code appears once, in the header.
+The `RequireBudget` concern in `ApplicationController` redirects a signed-in user without a budget to `new_budget_path`; opt out with `allow_missing_budget`.
+`budget:currency EMAIL= CURRENCY=` in `lib/tasks/budget.rake` is the only way to change a currency, and it doesn't convert amounts.
+
+Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb` with the table `budget_envelopes`, and later tables follow suit (`Budget::Deposit`, …).
+`Budget.use_relative_model_naming?` drops the prefix from routes, params and DOM ids, so it's `envelopes_path`, `params[:envelope]` and `EnvelopesController`.
+Controllers look records up through `Current.user.budget`, so another user's record is a 404, and `budget_id` is never a permitted param.
+
+Constraints live in the database as well as the model (check constraints, unique indexes such as `(budget_id, lower(name))`). Foreign keys are `ON DELETE RESTRICT`, and Rails deletes children first through `dependent: :destroy`, so give new budget tables `dependent:` options to keep `user:delete` working.
+PostgreSQL reports a restrict violation as `PG::RestrictViolation`, which Rails raises as a plain `ActiveRecord::StatementInvalid`, not `ActiveRecord::InvalidForeignKey`.
+
 ### Specs
 
 Request, model and service specs use FactoryBot and shoulda-matchers; there are no system specs yet.
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
-In request specs, `sign_in_as(user)` signs in without going through a provider. Time helpers such as `travel` are available in every spec.
+In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
 
 ## Tickets and product rules
 
 - Work is tracked as GitHub issues in `RobertG-H/budgie-src` titled `[NN] ...`, where the number is the build order. An issue's Decisions, Build and Done when sections are the spec, and they're more detailed than the plan linked from issue #1.
-- User-facing budgeting copy may only use these terms: Envelope, Assigned, Available, Spent, Overspent, Ready to Assign, and Carried over / Rolls over. Internal field names stay out of the UI.
+- User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spent, Refund, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Internal field names stay out of the UI.
 - Envelopes never reset at month end: leftover money and overspending both carry into the next month.

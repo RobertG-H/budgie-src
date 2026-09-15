@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe "Authentication", type: :request do
-  let(:user) { create(:user) }
+  let(:user) { create(:user, :with_budget) }
 
   describe "a protected page" do
     it "redirects a signed-out visitor to the sign-in page" do

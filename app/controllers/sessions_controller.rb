@@ -1,5 +1,6 @@
 class SessionsController < ApplicationController
   allow_unauthenticated_access only: %i[ new create failure ]
+  allow_missing_budget only: :destroy
 
   # Refusals the visitor can act on get their own message; every other reason stays behind the generic one.
   REFUSAL_MESSAGES = {

@@ -13,6 +13,9 @@ Rails.application.routes.draw do
     constraints: { provider: Regexp.union(Rails.configuration.x.auth_providers.keys.map(&:to_s)) }
   get "auth/failure" => "sessions#failure", as: :auth_failure
 
+  resource :budget, only: [ :new, :create ]
+  resources :envelopes, except: :show
+
   # Sent emails, such as invites, land here instead of being delivered.
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 
@@ -21,5 +24,5 @@ Rails.application.routes.draw do
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
   # Defines the root path route ("/")
-  root "home#index"
+  root "envelopes#index"
 end

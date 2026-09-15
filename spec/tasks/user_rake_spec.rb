@@ -8,15 +8,26 @@ RSpec.describe "user rake tasks", type: :task do
       create(:identity, user: user)
       create(:session, user: user)
       create(:invite, :accepted, email: user.email, user: user)
+      budget = create(:budget, user: user)
+      create_list(:budget_envelope, 2, budget: budget)
     end
 
-    it "deletes the user, their identities, sessions and invite once the email is typed to confirm" do
+    it "deletes the user, their identities, sessions, budget, envelopes and invite once the email is typed to confirm" do
       output = nil
 
       expect { output = run_task("user:delete", stdin: "Robin@Example.com\n", "EMAIL" => "robin@example.com") }
         .to change(User, :count).by(-1).and change(Identity, :count).by(-1)
         .and change(Session, :count).by(-1).and change(Invite, :count).by(-1)
-      expect(output).to include("1 identity, 1 session and their invite", "Deleted robin@example.com.")
+        .and change(Budget, :count).by(-1).and change(Budget::Envelope, :count).by(-2)
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes and their invite", "Deleted robin@example.com.")
+    end
+
+    it "says when the user has no budget" do
+      user.budget.destroy!
+
+      output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
+
+      expect(output).to include("1 identity, 1 session, no budget and their invite")
     end
 
     it "lets the email be invited again afterwards" do

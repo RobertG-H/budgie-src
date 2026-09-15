@@ -10,9 +10,29 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_125028) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "budget_envelopes", force: :cascade do |t|
+    t.bigint "budget_id", null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.decimal "starting_balance", precision: 15, scale: 2, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.index "budget_id, lower((name)::text)", name: "index_budget_envelopes_on_budget_id_and_lower_name", unique: true
+    t.index ["budget_id"], name: "index_budget_envelopes_on_budget_id"
+    t.check_constraint "btrim(name::text) <> ''::text", name: "budget_envelopes_name_not_blank"
+  end
+
+  create_table "budgets", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "currency", limit: 3, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_budgets_on_user_id", unique: true
+    t.check_constraint "currency::text ~ '^[A-Z]{3}$'::text", name: "budgets_currency_format"
+  end
 
   create_table "identities", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -55,6 +75,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_125028) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "budget_envelopes", "budgets", on_delete: :restrict
+  add_foreign_key "budgets", "users", on_delete: :restrict
   add_foreign_key "identities", "users"
   add_foreign_key "invites", "users"
   add_foreign_key "sessions", "users"

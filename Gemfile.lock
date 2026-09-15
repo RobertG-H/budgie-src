@@ -132,7 +132,6 @@ GEM
       logger
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
-    image_processing (2.1.0)
     importmap-rails (2.2.3)
       actionpack (>= 6.0.0)
       activesupport (>= 6.0.0)
@@ -459,7 +458,6 @@ DEPENDENCIES
   bundler-audit
   debug
   factory_bot_rails
-  image_processing (~> 2.1)
   importmap-rails
   jbuilder
   json (< 3)

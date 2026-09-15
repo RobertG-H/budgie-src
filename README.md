@@ -40,6 +40,19 @@ The specs need neither Google nor SMTP.
    The invite email isn't sent; it appears at http://localhost:3000/letter_opener. You don't need to open it.
 
 4. **Sign in.** Open http://localhost:3000 and sign in with Google as the address you invited.
+   The first time, you choose your budget's currency before reaching your envelopes.
+
+## Changing a budget's currency
+
+There's no page for this. An operator can change a user's currency with:
+
+```sh
+docker compose run --rm web bin/rails budget:currency EMAIL=someone@example.com CURRENCY=USD
+```
+
+The task shows the current and new currency and asks you to type the email to confirm.
+Amounts aren't converted: every amount keeps its number and is shown in the new currency.
+The supported currencies are listed in `Budget::CURRENCIES`.
 
 ## Production
 

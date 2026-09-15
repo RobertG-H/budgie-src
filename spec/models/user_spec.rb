@@ -6,6 +6,7 @@ RSpec.describe User, type: :model do
   it { is_expected.to have_many(:identities).dependent(:destroy) }
   it { is_expected.to have_many(:sessions).dependent(:destroy) }
   it { is_expected.to have_one(:invite).dependent(:destroy) }
+  it { is_expected.to have_one(:budget).dependent(:destroy) }
   it { is_expected.to validate_presence_of(:email) }
   # Case can't matter: the email is lowercased before it's checked.
   it { is_expected.to validate_uniqueness_of(:email).ignoring_case_sensitivity }
