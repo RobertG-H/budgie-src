@@ -56,6 +56,9 @@ The supported currencies are listed in `Budget::CURRENCIES`.
 
 ## Production
 
+Budgie runs on two OVHcloud VPS instances running Ubuntu 26.04 LTS, `budgie-testing` and `budgie-production`.
+[`script/provision.sh`](script/provision.sh) configures a host from scratch; see [Provisioning the hosts](docs/provisioning.md) for the OVH panel steps and the checks.
+
 Production needs everything above plus email delivery:
 
 1. **A production Google OAuth client** with the production callback URL. See [Google OAuth setup](docs/google-oauth.md).
@@ -71,3 +74,4 @@ Production needs everything above plus email delivery:
 | [Invites and users](docs/invites.md) | Inviting people, the invite rules, and deleting users |
 | [Email](docs/email.md) | Reading email in development and setting up Zedmail for production |
 | [Architecture](docs/architecture.md) | How the containers, images and sign-in fit together |
+| [Provisioning the hosts](docs/provisioning.md) | Ordering the OVH VPS instances, running `script/provision.sh` and checking the result |
