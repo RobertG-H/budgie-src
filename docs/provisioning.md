@@ -149,7 +149,7 @@ ok
 
 On 26.04 that's sudo-rs, Ubuntu's Rust implementation, rather than GNU sudo. It parses the `NOPASSWD` drop-in the script writes, and the script validates the file with `visudo -cf` before installing it either way.
 
-**Nothing is listening on the web ports.** Only SSH should be reachable; the tunnel from ticket 06 dials out instead of listening.
+**Nothing is listening on the web ports.** Only SSH should be reachable; the [Cloudflare Tunnel](cloudflare.md) dials out instead of listening.
 
 ```sh
 ssh deploy@<ip> 'sudo ss -tlnp'
@@ -259,7 +259,9 @@ Kamal needs them to deploy, and ticket 07 is what puts them in `config/deploy.ym
 
 ## Two things the script deliberately doesn't do
 
-- **It opens no HTTP or HTTPS port**, and ticket 06 doesn't either. `cloudflared` makes an outbound connection to Cloudflare's edge, so the tunnel never needs an inbound port. If an outbound deny policy is ever added to ufw, it has to allow TCP and UDP 7844.
+- **It opens no HTTP or HTTPS port**, and [Cloudflare](cloudflare.md) doesn't either. `cloudflared` makes an outbound connection to Cloudflare's edge, so the tunnel never needs an inbound port. If an outbound deny policy is ever added to ufw, it has to allow TCP and UDP 7844.
 - **It doesn't install fail2ban.** With passwords off entirely, it guards a door with no keyhole; ufw's rate limit already drops an IP that opens six connections in thirty seconds.
 
 One thing to keep in mind as containers start arriving: **Docker's published ports bypass ufw**. Docker writes its own iptables rules, so a container published with `-p 80:80` is reachable from the internet even though ufw says deny. Keeping ports unpublished is what keeps the host closed, not the firewall.
+
+That's the next thing to do to a finished host: [Cloudflare](cloudflare.md) puts it behind a tunnel and proves that its IP address answers nothing.
