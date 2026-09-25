@@ -59,6 +59,9 @@ The supported currencies are listed in `Budget::CURRENCIES`.
 Budgie runs on two OVHcloud VPS instances running Ubuntu 26.04 LTS, `budgie-testing` and `budgie-production`.
 [`script/provision.sh`](script/provision.sh) configures a host from scratch; see [Provisioning the hosts](docs/provisioning.md) for the OVH panel steps and the checks.
 
+Neither host is reachable at its IP address. `budgiebuddie.com` and `testing.budgiebuddie.com` are served by Cloudflare, which reaches each host through a Cloudflare Tunnel that dials out from it.
+[`script/cloudflare-tunnel.sh`](script/cloudflare-tunnel.sh) puts a host behind its tunnel; see [Cloudflare](docs/cloudflare.md) for the domain, the dashboard steps and the checks.
+
 Production needs everything above plus email delivery:
 
 1. **A production Google OAuth client** with the production callback URL. See [Google OAuth setup](docs/google-oauth.md).
@@ -75,3 +78,4 @@ Production needs everything above plus email delivery:
 | [Email](docs/email.md) | Reading email in development and setting up Zedmail for production |
 | [Architecture](docs/architecture.md) | How the containers, images and sign-in fit together |
 | [Provisioning the hosts](docs/provisioning.md) | Ordering the OVH VPS instances, running `script/provision.sh` and checking the result |
+| [Cloudflare](docs/cloudflare.md) | The domain, the tunnels that reach the hosts, and keeping the hosts off the public internet |
