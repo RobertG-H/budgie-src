@@ -206,26 +206,16 @@ curl: (28) Connection timed out after 10001 milliseconds
 
 `-p 127.0.0.1:80:80` is precisely what `kamal proxy boot_config set --publish-host-ip 127.0.0.1` makes Kamal do, which is the line ticket 07 owes this ticket.
 
-**Tear it down.**
-
-```sh
-ssh deploy@budgie-testing 'docker rm -f origin-test'
-ssh deploy@budgie-testing 'sudo ss -tlnp | grep :80 || echo "nothing on 80"'
-curl -sS -o /dev/null -w '%{http_code}\n' https://testing.budgiebuddie.com/
-```
-
-```
-nothing on 80
-502
-```
-
-A 502 from the hostname is the correct end state for this ticket: the tunnel is up and there's nothing behind it yet.
+**Leave the loopback-bound origin running.** Section 7 needs something answering behind each tunnel; section 8 tears it down at the end.
 
 > If the hostname 502s while something *is* listening on `127.0.0.1:80`, the host is resolving `localhost` to `::1` and the proxy is only on IPv4. Change the tunnel's ingress URL to `127.0.0.1:80`.
 
 ## 7. Verify
 
-From your laptop. This is what finished looks like.
+From your laptop, **with the loopback-bound origin from section 6 still running on both hosts**. This is what finished looks like.
+
+Every check below that expects a `200`, a header set by a rule, or a cache status needs a real response coming back through the tunnel.
+With nothing behind the tunnel, Cloudflare generates the 502 itself, and a response Cloudflare generates doesn't go through your response-header rules: `x-robots-tag` and `cf-cache-status` come back empty and the redirect checks still pass, which looks like a broken rule and isn't one.
 
 **The names resolve to Cloudflare, and the zone is Cloudflare's.**
 
@@ -317,6 +307,9 @@ x-robots-tag: noindex
 ```
 
 The second prints nothing.
+
+If *both* print nothing, check what the response actually is: `curl -sSI https://testing.budgiebuddie.com/ | head -1`.
+On a `502` the throwaway origin isn't running, and Cloudflare's own error page never carries this header however right the rule is.
 
 **Nothing is being cached that shouldn't be.**
 
@@ -412,7 +405,25 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://testing.budgiebuddie.com/
 
 The tunnel is active again with nothing done to it, and the hostname answers.
 
-## 8. What ticket 07 has to do
+## 8. Tear the throwaway origin down
+
+Once section 7 passes on both hosts:
+
+```sh
+ssh deploy@budgie-testing 'docker rm -f origin-test'
+ssh deploy@budgie-testing 'sudo ss -tlnp | grep :80 || echo "nothing on 80"'
+curl -sS -o /dev/null -w '%{http_code}\n' https://testing.budgiebuddie.com/
+```
+
+```
+nothing on 80
+502
+```
+
+A 502 from the hostname is the correct end state for this ticket: the tunnel is up and there's nothing behind it yet.
+Ticket 07 is what puts the app there.
+
+## 9. What ticket 07 has to do
 
 This ticket owns the requirement that a host can't be reached by IP, and the proof above. Ticket 07 owns the line that implements it once a real app is behind the tunnel, plus everything else that follows from being behind Cloudflare:
 
