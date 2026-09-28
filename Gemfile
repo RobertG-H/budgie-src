@@ -4,7 +4,7 @@ source "https://rubygems.org"
 gem "rails", "~> 8.1.3", ">= 8.1.3.1"
 # Rails 8.1.3.1 passes JSON.parse its options positionally, which json 3 rejects, so reading any cookie
 # (including the session) raises ArgumentError. Remove this pin once Rails supports json 3.
-gem "json", "< 3"
+gem "json", "< 4"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 gem "propshaft"
 # Use postgresql as the database for Active Record
