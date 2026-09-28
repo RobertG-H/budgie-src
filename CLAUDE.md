@@ -29,7 +29,8 @@ Use these exact spellings. They match `docs/development.md`, and this checkout's
 - Specs load the test schema from `db/schema.rb`, so run `db:migrate` after adding a migration to update it.
 - Gems live in the Compose `bundle` volume, not the image. After editing the `Gemfile`, run `docker compose exec -T web bundle install`, then `docker compose restart web` so the server loads new gems and initializers.
 - `json` is pinned below 3 in the `Gemfile`: with json 3, Rails 8.1.3.1 raises on every cookie read, including the session.
-- CI (`.github/workflows/ci.yml`) runs RuboCop, Brakeman, bundler-audit and `bin/importmap audit`, but not the specs yet. RuboCop uses the Rails omakase style, including double quotes and spaces inside array brackets (`[ :a, :b ]`).
+- CI (`.github/workflows/ci.yml`, see `docs/ci.md`) runs four checks, which a ruleset requires on `main`: `scan_ruby` (Brakeman and bundler-audit), `scan_js` (`bin/importmap audit`), `lint` (RuboCop) and `test`. RuboCop uses the Rails omakase style, including double quotes and spaces inside array brackets (`[ :a, :b ]`).
+- `test` runs the specs with `CI=true`, which eager-loads every file, so a file that fails to load fails CI even when the local run passes. Then it rebuilds `db/schema.rb` from the migrations on an empty database and fails if that differs from the committed file, so never hand-edit `schema.rb`: commit the one `db:migrate` writes.
 
 ## Blocked commands and secrets
 

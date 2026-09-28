@@ -88,6 +88,7 @@ The two deployed environments need everything above plus email delivery:
 | Doc | What's in it |
 | --- | --- |
 | [Development](docs/development.md) | Everyday commands, debugging, adding gems and editor tooling |
+| [CI](docs/ci.md) | The four checks on every pull request, running them locally, the schema drift check and the ruleset that requires them on `main` |
 | [Google OAuth setup](docs/google-oauth.md) | Creating the Google Cloud project and OAuth client, and giving the credentials to the app |
 | [Invites and users](docs/invites.md) | Inviting people, the invite rules, and deleting users |
 | [Email](docs/email.md) | Reading email in development and setting up Zedmail for production |

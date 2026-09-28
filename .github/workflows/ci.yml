@@ -5,9 +5,21 @@ on:
   push:
     branches: [ main ]
 
+# Anyone can open a pull request from a fork, so the token gets read access and nothing more.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its superseded run. Every push to main gets a group of its own,
+# because GitHub also cancels a run that's still waiting in a group, so a shared group could leave a
+# main commit without a result.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   scan_ruby:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -20,12 +32,13 @@ jobs:
 
       - name: Scan for common Rails security vulnerabilities using static analysis
         run: bin/brakeman --no-pager
-      
+
       - name: Scan for known security vulnerabilities in gems used
         run: bin/bundler-audit
-      
+
   scan_js:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -41,6 +54,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       RUBOCOP_CACHE_ROOT: tmp/rubocop
     steps:
@@ -65,3 +79,53 @@ jobs:
       - name: Lint code for consistent style
         run: bin/rubocop -f github
 
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # The same major version as compose.yaml and the hosts.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # Checks over TCP because the image's first-boot init server only listens on a socket.
+        options: >-
+          --health-cmd "pg_isready --host=127.0.0.1 --username=postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    # database.yml connects as postgres/postgres when DB_HOST is set. GitHub sets CI=true, which makes
+    # the test environment eager-load, so a file that fails to load fails here too.
+    env:
+      DB_HOST: localhost
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Load db/schema.rb into the test database
+        run: bin/rails db:test:prepare
+
+      - name: Run the specs
+        run: bin/rspec
+
+      # The specs trust db/schema.rb. This catches a migration edited after it ran, and a schema.rb
+      # edited by hand or merged badly. db:migrate would load schema.rb into the empty development
+      # database instead of running the migrations, so it's deleted first.
+      - name: Rebuild db/schema.rb from the migrations
+        run: |
+          rm db/schema.rb
+          bin/rails db:create db:migrate
+
+      - name: Check that db/schema.rb matches the migrations
+        run: git diff --exit-code db/schema.rb
