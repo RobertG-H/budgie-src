@@ -98,9 +98,6 @@ The admin bypass, or a direct push, can still land a commit on `main` that never
 
 Dependabot's pull requests run the same four checks, and the ruleset blocks them the same way, so a bump that breaks the app can't merge.
 
-`.github/dependabot.yml` ignores json 3 and later. The `Gemfile` pins json below 3, because Rails 8.1.3.1 passes `JSON.parse` its options in a way json 3 rejects, so every cookie read raises `ArgumentError`.
-Remove the pin and the ignore together once Rails supports json 3.
-
 ## Verify
 
 Check each item once. This is what finished looks like.
@@ -136,8 +133,8 @@ gh run list --workflow CI --branch main --event push --limit 1
 
 It shows the merge commit, completed with success.
 
-**A spec failure fails `test`, and blocks the merge.** Dependabot's #10 is the real case: it bumps json to 3.0.2, which the `Gemfile` pins below 3 because Rails 8.1.3.1 raises on every cookie read with json 3.
-Comment `@dependabot rebase` on it. `test` fails with that `ArgumentError`, and the pull request's merge button says the ruleset blocks it. Then close it.
+**A spec failure fails `test`, and blocks the merge.** Open a throwaway pull request, not a draft, that changes one expectation in a spec so it fails.
+In its `test` log, **Run the specs** fails, and the pull request's merge button says the ruleset blocks it. Then close it.
 
 **The drift check fails a hand-edited `schema.rb`.** Open a throwaway draft pull request that adds a column to a table in `db/schema.rb` and changes nothing else.
 In its `test` log, **Run the specs** passes and **Check that db/schema.rb matches the migrations** fails, with the added line shown as `-`. Then close it.
