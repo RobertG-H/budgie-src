@@ -289,8 +289,7 @@ If you change what a host should look like, change the script and re-run it ever
 
 ## Where the IP addresses go
 
-Kamal needs them to deploy, so they're in `config/deploy.testing.yml` and `config/deploy.production.yml`, as well as the OVH panel and the `HostName` lines in your `~/.ssh/config`.
-They aren't secret, and once a host is behind its [tunnel](cloudflare.md), nothing answers on them anyway.
+Kamal needs them to deploy, so they're in `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files, as well as the OVH panel and the `HostName` lines in your `~/.ssh/config`.
 Kamal runs in a container that can't see your `~/.ssh/config`, so the names there are only for you. See [Deploying](deployment.md).
 
 ## Two things the script deliberately doesn't do

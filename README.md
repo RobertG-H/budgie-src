@@ -95,3 +95,7 @@ The two deployed environments need everything above plus email delivery:
 | [Provisioning the hosts](docs/provisioning.md) | Ordering the OVH VPS instances, running `script/provision.sh` and checking the result |
 | [Cloudflare](docs/cloudflare.md) | The domain, the tunnels that reach the hosts, and keeping the hosts off the public internet |
 | [Deploying](docs/deployment.md) | Deploying with Kamal: secrets, first deploys, everyday deploys, operator tasks, rollback and the checks |
+
+## License
+
+The source is public to read, but all rights are reserved: see [LICENSE](LICENSE).
