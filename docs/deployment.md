@@ -25,9 +25,10 @@ Deploys are run by hand from your laptop until ticket 09 automates them.
 | Thing | Where it's written down |
 | --- | --- |
 | What both destinations share: registry, proxy, database, env, aliases | `config/deploy.yml` |
-| What differs: IP address, hostname, `APP_HOST` and `MAILER_FROM` | `config/deploy.testing.yml` and `config/deploy.production.yml` |
+| What differs: hostname, `APP_HOST`, `MAILER_FROM` and which variable holds the IP address | `config/deploy.testing.yml` and `config/deploy.production.yml` |
 | Which secret each variable comes from | `.kamal/secrets-common`, `.kamal/secrets.testing` and `.kamal/secrets.production`: names only |
 | The secret values | `.env.kamal`, `.env.testing` and `.env.production` on your laptop, which git ignores, with the master copy in your password manager |
+| Each host's IP address | `TESTING_HOST_IP` in `.env.testing` and `PRODUCTION_HOST_IP` in `.env.production` |
 | TLS, the allowed hostnames and the host in email links | `config/environments/production.rb` |
 | The image | `ghcr.io/robertg-h/budgie`, a private GitHub package, tagged with the commit SHA it was built from |
 | The database | `/home/deploy/budgie-db/data` on each host, and nowhere else yet |
@@ -111,9 +112,9 @@ ssh budgie-production 'sed -i "/ kamal-laptop$/d" ~/.ssh/authorized_keys'
 
 #### Each host's key, under its IP address
 
-Kamal connects to the IP addresses in the destination files, and the container checks each host's key against your `~/.ssh/known_hosts`, mounted read-only.
+Kamal connects to each host's IP address, from [`TESTING_HOST_IP` and `PRODUCTION_HOST_IP`](#the-secrets), and the container checks each host's key against your `~/.ssh/known_hosts`, mounted read-only.
 If your `~/.ssh/config` uses the IP addresses as `HostName`, as [Provisioning the hosts](provisioning.md) sets it up, logging in as `budgie-testing` and `budgie-production` has already recorded them.
-Check with the addresses from `config/deploy.testing.yml` and `config/deploy.production.yml`:
+Check with each host's address from the OVH panel or your `~/.ssh/config`:
 
 ```sh
 ssh-keygen -F <testing ip>
@@ -139,8 +140,8 @@ Deploys read their secrets from three files in the repo root, next to your devel
 | File | What's in it |
 | --- | --- |
 | `.env.kamal` | The registry token, which both destinations share |
-| `.env.testing` | Testing's six secrets, each named `TESTING_...` |
-| `.env.production` | Production's six secrets, each named `PRODUCTION_...` |
+| `.env.testing` | Testing's six secrets and its host's IP address, each named `TESTING_...` |
+| `.env.production` | Production's six secrets and its host's IP address, each named `PRODUCTION_...` |
 
 Git ignores all three, as it does `.env`, but they're separate from it.
 `.env` is development's, holding the development Google client from [Google OAuth setup](google-oauth.md), and only the `web` container loads it.
@@ -156,6 +157,7 @@ Every file is loaded into every run, which is why each destination's names carry
   set -C
   printf '%s\n' "KAMAL_REGISTRY_PASSWORD=" > .env.kamal
   printf '%s\n' \
+    "TESTING_HOST_IP=" \
     "TESTING_SECRET_KEY_BASE=$(openssl rand -hex 64)" \
     "TESTING_BUDGIE_DATABASE_PASSWORD=$(openssl rand -hex 32)" \
     "TESTING_GOOGLE_CLIENT_ID=" \
@@ -163,6 +165,7 @@ Every file is loaded into every run, which is why each destination's names carry
     "TESTING_SMTP_USERNAME=" \
     "TESTING_SMTP_PASSWORD=" > .env.testing
   printf '%s\n' \
+    "PRODUCTION_HOST_IP=" \
     "PRODUCTION_SECRET_KEY_BASE=$(openssl rand -hex 64)" \
     "PRODUCTION_BUDGIE_DATABASE_PASSWORD=$(openssl rand -hex 32)" \
     "PRODUCTION_GOOGLE_CLIENT_ID=" \
@@ -181,6 +184,7 @@ It fills in the values that are only random: each destination's `SECRET_KEY_BASE
 | Variable | Value |
 | --- | --- |
 | `KAMAL_REGISTRY_PASSWORD` | [A GitHub token](#the-github-token) |
+| `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` | That host's IP address, from the OVH panel. It isn't a secret, but the destination files read it from here so that the public repo doesn't list it. See [Cloudflare](cloudflare.md) |
 | `TESTING_GOOGLE_CLIENT_ID` and `TESTING_GOOGLE_CLIENT_SECRET` | The **Budgie testing** OAuth client, not the development one in `.env`. See [Google OAuth setup](google-oauth.md#testing-and-production) |
 | `PRODUCTION_GOOGLE_CLIENT_ID` and `PRODUCTION_GOOGLE_CLIENT_SECRET` | The **Budgie production** OAuth client |
 | `TESTING_SMTP_USERNAME` and `PRODUCTION_SMTP_USERNAME` | The email address you log in to Zedmail with, the same in both files. See [Email](email.md#the-settings) |
@@ -199,6 +203,7 @@ docker compose run --rm -T kamal secrets print -d production | grep -E '^[A-Z_]+
 
 Both print nothing. A line names a secret that's empty, usually because of a typo in its env file.
 The pipe keeps the values themselves off your screen.
+The IP addresses aren't secrets, so this doesn't list them. If one isn't set, every command for that destination stops with `key not found` and the variable's name.
 
 Each destination has its own `SECRET_KEY_BASE`, so a cookie or signed ID from one is useless on the other.
 `RAILS_MASTER_KEY` isn't deployed at all. The credentials file holds nothing but a `secret_key_base`, which `SECRET_KEY_BASE` takes precedence over, and nothing else in the app reads credentials.
@@ -476,12 +481,13 @@ checked
 ```
 
 An `in git:` line names a variable whose value is somewhere in the history. `.kamal/secrets*` should only ever hold `$NAME` references.
+The exception is `TESTING_HOST_IP` and `PRODUCTION_HOST_IP`. They show up until the hosts have new addresses, because commits from before the addresses moved out of the destination files still hold them.
 
 ## Rebuilding a host
 
 A rebuilt host has a new IP address and a new host key:
 
-1. Forget the old host key with `ssh-keygen -R <old ip>`, and put the new IP address in `config/deploy.<destination>.yml`, committed, and as that host's `HostName` in `~/.ssh/config`.
+1. Forget the old host key with `ssh-keygen -R <old ip>`, and put the new IP address in that destination's `_HOST_IP` variable and your password manager, and as that host's `HostName` in `~/.ssh/config`.
 2. Provision it, passing `kamal.pub` as the extra key so that [Kamal's key](#kamals-ssh-key) is authorised from the start. See [Provisioning the hosts](provisioning.md).
 3. Put it behind its tunnel again. See [Cloudflare](cloudflare.md).
 4. `docker compose run --rm kamal setup -d <destination>`, with `--skip-push` for production.

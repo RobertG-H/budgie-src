@@ -1,9 +1,10 @@
 # budgie-testing, served as testing.budgiebuddie.com. Kamal merges this over config/deploy.yml for -d testing.
 # Nothing answers on the IP address itself; see docs/cloudflare.md.
+# The IP address comes from TESTING_HOST_IP in .env.testing
 
 servers:
   web:
-    - &ip 148.113.251.185
+    - &ip <%= ENV.fetch("TESTING_HOST_IP") %>
 
 proxy:
   host: &hostname testing.budgiebuddie.com

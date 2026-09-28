@@ -1,9 +1,10 @@
 # budgie-production, served as budgiebuddie.com. Kamal merges this over config/deploy.yml for -d production.
 # Nothing answers on the IP address itself; see docs/cloudflare.md.
+# The IP address comes from PRODUCTION_HOST_IP in .env.production
 
 servers:
   web:
-    - &ip 148.113.251.186
+    - &ip <%= ENV.fetch("PRODUCTION_HOST_IP") %>
 
 proxy:
   host: &hostname budgiebuddie.com
