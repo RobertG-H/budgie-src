@@ -16,7 +16,8 @@ browser → Cloudflare → tunnel → cloudflared → kamal-proxy on 127.0.0.1:8
 Both hosts run the same image with `RAILS_ENV=production`, from the same `config/environments/production.rb`.
 What differs between them comes from each destination's config file and secrets, so testing proves production's configuration rather than a lookalike.
 
-Deploys are run by hand from your laptop until ticket 09 automates them.
+**CI deploys, not your laptop.** A merge to `main` deploys to testing on its own, once CI has passed on that commit on `main` itself. Production only deploys when the operator dispatches **Deploy production**, in GitHub's Actions tab, and only for a commit that testing has already run, using the very image testing built. See [CI deploys](#ci-deploys).
+Deploying from your laptop, covered from [Deploying by hand](#deploying-by-hand-break-glass) onward, still works, but it's break-glass only: for the first setup of a destination, for a deploy when Actions itself is down, and for the operator tasks in `docs/invites.md` that run through the same `kamal` Compose service.
 
 > **Production holds no real budget data until backups exist.** Its database is only on the VPS's own disk until ticket 16 copies it somewhere else and proves a restore. Until then, use production for invites, sign-ins and envelopes you can afford to lose.
 
@@ -27,16 +28,71 @@ Deploys are run by hand from your laptop until ticket 09 automates them.
 | What both destinations share: registry, proxy, database, env, aliases | `config/deploy.yml` |
 | What differs: hostname, `APP_HOST`, `MAILER_FROM` and which variable holds the IP address | `config/deploy.testing.yml` and `config/deploy.production.yml` |
 | Which secret each variable comes from | `.kamal/secrets-common`, `.kamal/secrets.testing` and `.kamal/secrets.production`: names only |
-| The secret values | `.env.kamal`, `.env.testing` and `.env.production` on your laptop, which git ignores, with the master copy in your password manager |
-| Each host's IP address | `TESTING_HOST_IP` in `.env.testing` and `PRODUCTION_HOST_IP` in `.env.production` |
+| The secret values, for a break-glass deploy | `.env.kamal`, `.env.testing` and `.env.production` on your laptop, which git ignores, with the master copy in your password manager |
+| The secret values, for CI | The `testing` and `production` GitHub environments' secrets |
+| Each host's IP address | `TESTING_HOST_IP` and `PRODUCTION_HOST_IP`, both places above |
 | TLS, the allowed hostnames and the host in email links | `config/environments/production.rb` |
 | The image | `ghcr.io/robertg-h/budgie`, a private GitHub package, tagged with the commit SHA it was built from |
+| The build cache | `ghcr.io/robertg-h/budgie-build-cache`, a private GitHub package |
 | The database | `/home/deploy/budgie-db/data` on each host, and nowhere else yet |
+| The workflows that deploy | `.github/workflows/ci.yml`'s `deploy_testing` job, and `.github/workflows/deploy-production.yml` |
 | The SSH key you log in with | 1Password, with its public half in `~/.ssh/budgie/budgie.pub` |
-| The SSH key Kamal deploys with | `~/.ssh/budgie/kamal` on your laptop, loaded into the macOS agent |
-| The host keys Kamal trusts | Your Mac's `~/.ssh/known_hosts` |
+| The SSH key Kamal deploys with, for a break-glass deploy | `~/.ssh/budgie/kamal` on your laptop, loaded into the macOS agent |
+| The SSH keys Kamal deploys with, in CI | `kamal-ci-testing` and `kamal-ci-production`, one per destination, each only in its own GitHub environment's secrets |
+| The host keys Kamal trusts, for a break-glass deploy | Your Mac's `~/.ssh/known_hosts` |
+| The host keys Kamal trusts, in CI | `TESTING_SSH_KNOWN_HOSTS` and `PRODUCTION_SSH_KNOWN_HOSTS`, in the matching GitHub environment's secrets |
 
-## How Kamal runs
+## CI deploys
+
+The normal path. A push to `main` runs [`ci.yml`](../.github/workflows/ci.yml)'s `deploy_testing` job once `scan_ruby`, `scan_js`, `lint` and `test` pass and `supersede_check` confirms the commit is still main's tip (see [CI](ci.md)); it builds the image, pushes `ghcr.io/robertg-h/budgie:<sha>`, and runs `bin/kamal deploy -d testing` on the runner itself, natively, since GitHub's runners are already amd64.
+Promoting that commit to production is [`deploy-production.yml`](../.github/workflows/deploy-production.yml), dispatched by hand from the Actions tab (**Actions → Deploy production → Run workflow**), or `gh workflow run deploy-production.yml -f sha=<sha>` from a terminal that isn't this checkout — Claude never dispatches it. Left blank, `sha` defaults to main's tip, and an abbreviated SHA works too. Its `guard` job runs first, with no environment and no secrets: it resolves the input to a full SHA, and refuses before any SSH unless that commit is reachable from `main` and its `deploy_testing` check run concluded `success`; only then does `deploy`, with `environment: production`, check out that commit and run `bin/kamal deploy -d production --skip-push`, which pulls the image `deploy_testing` already pushed rather than building it again.
+
+### The environments
+
+**Settings → Environments** has `testing` and `production`, each with **Deployment branches and tags** limited to `main`, so a dispatch against any other branch is refused before the job's secrets are even loaded — that's what refuses a `sha` input on a branch other than `main`. Neither has required reviewers or a wait timer: dispatching production is already a deliberate act, and a reviewer gate would add a second click to the operator's own deploy.
+`deploy_testing` declares `environment: testing`; `deploy-production.yml`'s `deploy` job declares `environment: production`. `guard` declares neither, so a bad `sha` input is refused without ever touching a credential.
+
+### The keys and known_hosts
+
+Each destination deploys with its own SSH key, `kamal-ci-testing` and `kamal-ci-production`, both ed25519 with no passphrase, so that a leak from the `testing` environment's secrets can't reach production. Each is authorised on its own host only, the same way [Kamal's own key](#kamals-ssh-key) is: as `provision.sh`'s extra-key argument. See [Provisioning the hosts](provisioning.md#2-run-the-script).
+Both keys are root-equivalent on their host, the same as the laptop's key, because `deploy` has passwordless sudo and is in the `docker` group.
+
+A job's own step starts an `ssh-agent` and loads the destination's key into it, with no third-party action. The step's `env:` hands it the environment secret as `SSH_PRIVATE_KEY`:
+
+```sh
+export SSH_AUTH_SOCK="$RUNNER_TEMP/ssh-agent.sock"
+ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+ssh-add - <<< "$SSH_PRIVATE_KEY"
+```
+
+A fresh runner's `~/.ssh/known_hosts` is empty, so without pinning the host key, Kamal would accept whatever key answers at that IP address the first time. `TESTING_SSH_KNOWN_HOSTS` and `PRODUCTION_SSH_KNOWN_HOSTS` each hold that host's `known_hosts` lines, keyed by its IP address the way [the laptop already records them](#each-hosts-key-under-its-ip-address), from `ssh-keygen -F <ip>`. A step appends the secret to `~/.ssh/known_hosts` before Kamal runs. Running `ssh-keyscan` at run time was rejected on purpose: it trusts whatever answers, which is the exact check this is meant to prevent.
+
+### The secrets
+
+Each environment has nine secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's version](#the-secrets-1) for what each one is:
+
+| Secret | What it is |
+| --- | --- |
+| `TESTING_HOST_IP` / `PRODUCTION_HOST_IP` | That host's IP address |
+| `TESTING_SSH_PRIVATE_KEY` / `PRODUCTION_SSH_PRIVATE_KEY` | That destination's Kamal deploy key, private half |
+| `TESTING_SSH_KNOWN_HOSTS` / `PRODUCTION_SSH_KNOWN_HOSTS` | That host's `known_hosts` lines |
+| `TESTING_SECRET_KEY_BASE` / `PRODUCTION_SECRET_KEY_BASE` | That destination's Rails `secret_key_base` |
+| `TESTING_BUDGIE_DATABASE_PASSWORD` / `PRODUCTION_BUDGIE_DATABASE_PASSWORD` | That destination's PostgreSQL password |
+| `TESTING_GOOGLE_CLIENT_ID` / `PRODUCTION_GOOGLE_CLIENT_ID` | That destination's Google OAuth client ID |
+| `TESTING_GOOGLE_CLIENT_SECRET` / `PRODUCTION_GOOGLE_CLIENT_SECRET` | That destination's Google OAuth client secret |
+| `TESTING_SMTP_USERNAME` / `PRODUCTION_SMTP_USERNAME` | The Zedmail login email address |
+| `TESTING_SMTP_PASSWORD` / `PRODUCTION_SMTP_PASSWORD` | That destination's Zedmail API key |
+
+`KAMAL_REGISTRY_PASSWORD` isn't one of the nine: each deploy job sets it directly in its `env:` from `secrets.GITHUB_TOKEN`, the run's own built-in token, rather than storing it. `deploy_testing` has `packages: write`, so Kamal can push; `deploy`'s `packages: read` only lets it pull. Kamal logs each host in to `ghcr.io` with it too, so the credential that ends up in `/home/deploy/.docker/config.json` expires with the job rather than being a long-lived token.
+
+### Recreating one
+
+- **A compromised or rotated deploy key:** generate a new `ed25519` key pair, authorise the public half with `provision.sh`'s extra-key argument on that key's own host, replace `TESTING_SSH_PRIVATE_KEY` or `PRODUCTION_SSH_PRIVATE_KEY` in that environment's secrets, then remove the old key's line from the host's `authorized_keys` the way [revoking Kamal's own key](#kamals-ssh-key) works.
+- **A rebuilt host:** see [Rebuilding a host](#rebuilding-a-host). Both the `_HOST_IP` and `_SSH_KNOWN_HOSTS` secrets change.
+- **Any of the other six:** update the value in **Settings → Environments → (testing or production) → Environment secrets**, the same value you'd put in `.env.testing` or `.env.production`. Update your password manager's copy too, since it's still the master copy.
+
+## Deploying by hand (break-glass)
 
 Kamal runs in the `kamal` Compose service rather than on your Mac, so the host still needs no Ruby:
 
@@ -44,7 +100,7 @@ Kamal runs in the `kamal` Compose service rather than on your Mac, so the host s
 docker compose run --rm kamal deploy -d testing
 ```
 
-- It runs the `kamal` gem from `Gemfile.lock`, the same version ticket 09's CI will install.
+- It runs the `kamal` gem from `Gemfile.lock`, the same version [CI](ci.md) installs through `ruby/setup-ruby`.
 - It builds and pushes with Docker Desktop's daemon, through its socket, and reaches the hosts with [its own SSH key](#kamals-ssh-key), through Docker Desktop's forward of the macOS SSH agent.
 - It's in the `deploy` profile, so `docker compose up` never starts it. It's the only service that gets the Docker socket or the SSH agent.
 - Every command needs `-d testing` or `-d production`. `config/deploy.yml` sets `require_destination`, because the servers are only in the destination files.
@@ -112,7 +168,7 @@ ssh budgie-production 'sed -i "/ kamal-laptop$/d" ~/.ssh/authorized_keys'
 
 #### Each host's key, under its IP address
 
-Kamal connects to each host's IP address, from [`TESTING_HOST_IP` and `PRODUCTION_HOST_IP`](#the-secrets), and the container checks each host's key against your `~/.ssh/known_hosts`, mounted read-only.
+Kamal connects to each host's IP address, from [`TESTING_HOST_IP` and `PRODUCTION_HOST_IP`](#the-secrets-1), and the container checks each host's key against your `~/.ssh/known_hosts`, mounted read-only.
 If your `~/.ssh/config` uses the IP addresses as `HostName`, as [Provisioning the hosts](provisioning.md) sets it up, logging in as `budgie-testing` and `budgie-production` has already recorded them.
 Check with each host's address from the OVH panel or your `~/.ssh/config`:
 
@@ -134,6 +190,8 @@ If it says the key has *changed*, stop and find out why: refusing that connectio
 Because the file is read-only, a host the container has never seen isn't refused, just not remembered. Recording each IP address is what turns the check into a real one.
 
 ## The secrets
+
+This is the laptop's break-glass copy of the secrets. [CI's own copy](#the-secrets) lives in the `testing` and `production` GitHub environments instead, under the same names.
 
 Deploys read their secrets from three files in the repo root, next to your development `.env`:
 
@@ -231,7 +289,7 @@ Testing first. Deploy production only once testing passes [the checks](#verify).
 - The host is [provisioned](provisioning.md) and behind its [tunnel](cloudflare.md), with the throwaway origin torn down, so nothing holds port 80.
 - The destination's [Google OAuth client](google-oauth.md#testing-and-production) exists.
 - [Zedmail](email.md#setting-it-up) has verified `budgiebuddie.com`, and the host passes the check that it can reach Zedmail's relay.
-- [The secrets](#the-secrets) are in place, with nothing empty.
+- [The secrets](#the-secrets-1) are in place, with nothing empty.
 - [Kamal's SSH key](#kamals-ssh-key) is authorised on the host and loaded into the agent, and the host's key is recorded under its IP address.
 
 **2. Set it up.**
@@ -287,13 +345,27 @@ Then work through [Verify](#verify).
 
 ## Everyday deploys
 
-1. Commit. Kamal deploys what's committed locally, whether or not it's pushed.
-2. `docker compose run --rm kamal deploy -d testing`, and check testing.
-3. `docker compose run --rm kamal deploy -d production --skip-push`
+1. Merge to `main`. CI deploys it to testing on its own, once `scan_ruby`, `scan_js`, `lint`, `test` and `supersede_check` all pass — no command to run.
+2. Check testing, once `deploy_testing` is green: `https://testing.budgiebuddie.com/up` returns `200`, and whatever you changed works there.
+3. Dispatch **Deploy production** (**Actions → Deploy production → Run workflow**, or `gh workflow run deploy-production.yml`), leaving `sha` blank to deploy main's tip.
 
 Migrations run when the new container starts, because the entrypoint runs `db:prepare`, while the old container is still serving. A migration has to work with the code that's still running, and rolling back the code doesn't roll back a migration.
 
-If a deploy is interrupted, Kamal can leave its lock on the host. `docker compose run --rm kamal lock release -d testing` removes it.
+A break-glass deploy from the laptop looks the way it always did: see [Deploying by hand](#deploying-by-hand-break-glass).
+
+## If a deploy fails
+
+**Read the log.** `gh run view <run id> --log-failed` prints just the failed steps; drop the flag for the whole log. `deploy_testing` and `deploy` end with Kamal's own error, the same one a break-glass deploy would show.
+
+**Re-running.** Once the cause is fixed, the operator re-runs the failed run from the Actions tab, or `gh run rerun <run id> --failed` — Claude never dispatches or re-runs a deploy; see `CLAUDE.md`. Re-running `deploy_testing` redeploys whatever commit that run was for, even if `main` has since moved on; re-running `deploy-production.yml` redeploys whatever `sha` that dispatch resolved to.
+
+**A stale lock.** A job killed partway through a deploy, by its timeout or a manual cancel, can leave Kamal's lock on the host, and the next deploy — from CI or the laptop — fails until it's released:
+
+```sh
+docker compose run --rm kamal lock release -d testing
+```
+
+CI never releases a stale lock itself: a killed job can't tell whether something else is still mid-deploy, and releasing the lock automatically would hide a real overlap with a break-glass deploy from the laptop. It's safe to release once you're sure nothing else is still deploying to that destination — check the Actions tab for another run in progress, and confirm nobody's running a break-glass deploy by hand.
 
 ## Operator tasks
 
@@ -321,7 +393,10 @@ The other aliases work the same way, for example `docker compose run --rm kamal 
 
 ## Rollback
 
-Kamal keeps the containers of the last five versions on each host:
+**Dispatch an older commit.** `gh run list --workflow CI --branch main --event push` lists main's history; find a `sha` whose `deploy_testing` succeeded, and dispatch **Deploy production** with it. `guard` accepts any commit reachable from `main` whose `deploy_testing` concluded `success`, not only the newest, so this is a real deploy through the normal path, with a record in the Actions tab of who ran it and which commit.
+Migrations don't roll back: one that ran on a newer commit stays applied, so rolling back past a migration the older code can't handle breaks it.
+
+**From the laptop (break-glass).** Kamal keeps the containers of the last five versions on each host:
 
 ```sh
 docker compose run --rm kamal app containers -d testing
@@ -333,8 +408,7 @@ Each one is named `budgie-web-testing-<version>`, where the version is a commit 
 docker compose run --rm kamal rollback <version> -d testing
 ```
 
-It runs that version again from its image, which is still on the host, and points the proxy at it, without building or pulling anything. To come forward again, deploy as usual.
-A rollback doesn't undo migrations, so rolling back past a migration the older code can't handle breaks it.
+It runs that version again from its image, which is still on the host, and points the proxy at it, without building, pulling or any of dispatching's SSH setup — faster than the CI path, since the old image is already there. To come forward again, deploy as usual. Migrations don't roll back here either.
 
 ## Verify
 
@@ -487,9 +561,10 @@ The exception is `TESTING_HOST_IP` and `PRODUCTION_HOST_IP`. They show up until 
 
 A rebuilt host has a new IP address and a new host key:
 
-1. Forget the old host key with `ssh-keygen -R <old ip>`, and put the new IP address in that destination's `_HOST_IP` variable and your password manager, and as that host's `HostName` in `~/.ssh/config`.
-2. Provision it, passing `kamal.pub` as the extra key so that [Kamal's key](#kamals-ssh-key) is authorised from the start. See [Provisioning the hosts](provisioning.md).
+1. Forget the old host key with `ssh-keygen -R <old ip>`, and put the new IP address in that destination's `_HOST_IP` variable and your password manager, as that host's `HostName` in `~/.ssh/config`, and in its `_HOST_IP` GitHub environment secret.
+2. Provision it, passing `kamal.pub` as the extra key so that [Kamal's key](#kamals-ssh-key) is authorised from the start. Then provision it a second time, passing that destination's CI deploy key's public half, so [its CI key](#the-keys-and-known_hosts) is authorised too. See [Provisioning the hosts](provisioning.md).
 3. Put it behind its tunnel again. See [Cloudflare](cloudflare.md).
 4. `docker compose run --rm kamal setup -d <destination>`, with `--skip-push` for production.
+5. Record the new host's key under its new IP address, the way [the laptop already does](#each-hosts-key-under-its-ip-address), and update that destination's `_SSH_KNOWN_HOSTS` GitHub environment secret with `ssh-keygen -F <new ip>`'s output.
 
 Its database starts empty: until ticket 16, there's no backup to restore.

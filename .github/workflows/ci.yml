@@ -129,3 +129,129 @@ jobs:
 
       - name: Check that db/schema.rb matches the migrations
         run: git diff --exit-code db/schema.rb
+
+  # Only on pull requests: this catches Dockerfile and assets:precompile breakage before the merge,
+  # rather than as a red deploy_testing on main right after it. It never pushes, so a fork's or
+  # Dependabot's read-only token doesn't need write:packages.
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # A fork's or Dependabot's token can't read this private package, so a failed login isn't fatal:
+      # the build below falls back to running without the cache rather than failing.
+      - name: Log in to the container registry, to read the build cache
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the production image
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          cache-from: type=registry,ref=ghcr.io/robertg-h/budgie-build-cache
+
+  # Only on push to main: compares this commit with main's current tip, so deploy_testing below can skip
+  # a commit a later push has already superseded rather than putting testing back. Not in any concurrency
+  # group of its own: the workflow-level group above already gives each commit's run its own slot, and
+  # two commits' supersede_check jobs racing each other is harmless.
+  supersede_check:
+    if: github.event_name == 'push'
+    needs: [ scan_ruby, scan_js, lint, test ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      superseded: ${{ steps.compare.outputs.superseded }}
+
+    steps:
+      - name: Compare this commit with main's current tip
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq .object.sha)
+          if [ "$current" = "${{ github.sha }}" ]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main's tip is now $current; ${{ github.sha }} was superseded"
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Only on push to main, and only for the commit that's still main's tip: a superseded commit shows this
+  # as skipped, not green. GITHUB_SHA here is the commit this push event carries, so this check run and
+  # the deployment record it creates both point at the exact commit CI tested, which is what
+  # deploy-production.yml's guard job later reads.
+  deploy_testing:
+    if: github.event_name == 'push' && needs.supersede_check.outputs.superseded == 'false'
+    needs: supersede_check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: testing
+    permissions:
+      contents: read
+      packages: write
+    # Two deploys never overlap. When a newer one queues, GitHub cancels one still waiting in this group,
+    # which is what we want: the newer commit should win.
+    concurrency:
+      group: deploy-testing
+      cancel-in-progress: false
+
+    # KAMAL_REGISTRY_PASSWORD is this run's own GITHUB_TOKEN, not a stored secret. The rest map by name to
+    # .kamal/secrets-common and .kamal/secrets.testing; see docs/deployment.md.
+    env:
+      KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      TESTING_HOST_IP: ${{ secrets.TESTING_HOST_IP }}
+      TESTING_SECRET_KEY_BASE: ${{ secrets.TESTING_SECRET_KEY_BASE }}
+      TESTING_BUDGIE_DATABASE_PASSWORD: ${{ secrets.TESTING_BUDGIE_DATABASE_PASSWORD }}
+      TESTING_GOOGLE_CLIENT_ID: ${{ secrets.TESTING_GOOGLE_CLIENT_ID }}
+      TESTING_GOOGLE_CLIENT_SECRET: ${{ secrets.TESTING_GOOGLE_CLIENT_SECRET }}
+      TESTING_SMTP_USERNAME: ${{ secrets.TESTING_SMTP_USERNAME }}
+      TESTING_SMTP_PASSWORD: ${{ secrets.TESTING_SMTP_PASSWORD }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # No third-party action: an ssh-agent started in this step, loaded with testing's own deploy key.
+      - name: Load the testing deploy key into an SSH agent
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.TESTING_SSH_PRIVATE_KEY }}
+        run: |
+          export SSH_AUTH_SOCK="$RUNNER_TEMP/ssh-agent.sock"
+          ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          ssh-add - <<< "$SSH_PRIVATE_KEY"
+
+      # Pinned by IP address, from ssh-keygen -F <ip> on the laptop. A fresh runner's known_hosts is
+      # otherwise empty, so without this Kamal would accept whatever key answers for the host.
+      - name: Trust the testing host's key
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.TESTING_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy to testing
+        run: bin/kamal deploy -d testing

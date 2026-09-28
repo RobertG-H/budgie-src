@@ -54,8 +54,8 @@ Each deployed environment has its own client, so each one accepts only its own c
    | Budgie testing | `https://testing.budgiebuddie.com/auth/google_oauth2/callback` |
    | Budgie production | `https://budgiebuddie.com/auth/google_oauth2/callback` |
 
-3. Put each client's ID and secret in your password manager and in the deploy env files: `TESTING_GOOGLE_CLIENT_ID` and `TESTING_GOOGLE_CLIENT_SECRET` in `.env.testing`, and `PRODUCTION_GOOGLE_CLIENT_ID` and `PRODUCTION_GOOGLE_CLIENT_SECRET` in `.env.production`.
-   See [Deploying](deployment.md#the-secrets).
+3. Put each client's ID and secret in your password manager, in the deploy env files: `TESTING_GOOGLE_CLIENT_ID` and `TESTING_GOOGLE_CLIENT_SECRET` in `.env.testing`, and `PRODUCTION_GOOGLE_CLIENT_ID` and `PRODUCTION_GOOGLE_CLIENT_SECRET` in `.env.production`, and in the matching GitHub environment secret CI reads instead.
+   See [Deploying](deployment.md#the-secrets-1).
 
 Only a sign-in by someone who isn't the project's owner proves the publishing status, since the owner may be let in either way. [Deploying](deployment.md#verify) checks it on production with an invited account that isn't yours.
 
