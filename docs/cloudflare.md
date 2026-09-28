@@ -24,7 +24,7 @@ Do [Provisioning the hosts](provisioning.md) first. This assumes two finished ho
 | The domain, the zone settings, the rules, each tunnel's ingress | The Cloudflare dashboard — and, so it can be rebuilt, this page |
 | The two tunnel tokens | A password manager, and nowhere else |
 | The hostnames | This repo: `config/deploy.testing.yml`, `config/deploy.production.yml` and `config/environments/production.rb` |
-| The VPS IP addresses | `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files, which git ignores, and the OVH panel. See [Deploying](deployment.md#the-secrets) |
+| The VPS IP addresses | `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files, which git ignores, in the matching GitHub environment secret, and the OVH panel. See [Deploying](deployment.md#the-secrets-1) |
 | Zedmail's two DNS records | The Cloudflare dashboard, **DNS only**. See [Zedmail's DNS records](#zedmails-dns-records) |
 
 Hostnames are public: they're in DNS and permanently in Certificate Transparency logs the moment Cloudflare issues a certificate, so there's nothing to hide by keeping them out of git.

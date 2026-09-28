@@ -68,7 +68,7 @@ Budgie runs on two OVHcloud VPS instances running Ubuntu 26.04 LTS, `budgie-test
 Neither host is reachable at its IP address. `budgiebuddie.com` and `testing.budgiebuddie.com` are served by Cloudflare, which reaches each host through a Cloudflare Tunnel that dials out from it.
 [`script/cloudflare-tunnel.sh`](script/cloudflare-tunnel.sh) puts a host behind its tunnel; see [Cloudflare](docs/cloudflare.md) for the domain, the dashboard steps and the checks.
 
-[Kamal](https://kamal-deploy.org/) deploys the app to both hosts by hand, from the `kamal` Compose service, with PostgreSQL running next to it on each host. See [Deploying](docs/deployment.md) for the secrets, the first deploy, everyday deploys, rollback and the checks.
+[Kamal](https://kamal-deploy.org/) deploys the app, with PostgreSQL running next to it on each host. A merge to `main` deploys testing on its own, once CI passes; the operator dispatches **Deploy production** to promote a commit testing has already run. Deploying from the laptop, through the `kamal` Compose service, is break-glass only. See [Deploying](docs/deployment.md) for CI's setup, the secrets, the first deploy, rollback and the checks.
 
 > **Production holds no real budget data until backups exist.** Its database is only on the VPS's own disk until ticket 16 adds backups and a restore drill.
 
@@ -76,7 +76,7 @@ The two deployed environments need everything above plus email delivery:
 
 1. **Google OAuth clients for testing and production**, with their callback URLs, and the consent screen published. See [Google OAuth setup](docs/google-oauth.md#testing-and-production).
 2. **SMTP through Zedmail**: verify the sending domain and get an API key per environment. See [Email](docs/email.md#production-zedmail).
-3. **Deploy**, testing first. See [Deploying](docs/deployment.md).
+3. **Set up each host by hand, once**, testing first, with `kamal setup`. CI's deploys take over from there. See [Deploying](docs/deployment.md#first-deploy-of-a-destination).
 4. **Invite yourself**, and check the email arrives before inviting anyone else:
 
    ```sh
@@ -88,14 +88,14 @@ The two deployed environments need everything above plus email delivery:
 | Doc | What's in it |
 | --- | --- |
 | [Development](docs/development.md) | Everyday commands, debugging, adding gems and editor tooling |
-| [CI](docs/ci.md) | The four checks on every pull request, running them locally, the schema drift check and the ruleset that requires them on `main` |
+| [CI](docs/ci.md) | The checks on every pull request, running them locally, the schema drift check, the ruleset that requires them on `main`, and how a push to `main` deploys testing |
 | [Google OAuth setup](docs/google-oauth.md) | Creating the Google Cloud project and OAuth client, and giving the credentials to the app |
 | [Invites and users](docs/invites.md) | Inviting people, the invite rules, and deleting users |
 | [Email](docs/email.md) | Reading email in development and setting up Zedmail for production |
 | [Architecture](docs/architecture.md) | How the containers, images and sign-in fit together |
 | [Provisioning the hosts](docs/provisioning.md) | Ordering the OVH VPS instances, running `script/provision.sh` and checking the result |
 | [Cloudflare](docs/cloudflare.md) | The domain, the tunnels that reach the hosts, and keeping the hosts off the public internet |
-| [Deploying](docs/deployment.md) | Deploying with Kamal: secrets, first deploys, everyday deploys, operator tasks, rollback and the checks |
+| [Deploying](docs/deployment.md) | Deploying with Kamal: CI deploys, secrets, first deploys, operator tasks, rollback, break-glass deploys by hand, and the checks |
 
 ## License
 

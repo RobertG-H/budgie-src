@@ -96,7 +96,7 @@ scp script/provision.sh ~/.ssh/budgie/kamal.pub ubuntu@budgie-testing:
 ssh ubuntu@budgie-testing 'sudo bash provision.sh budgie-testing kamal.pub'
 ```
 
-That's how [Kamal's key](deployment.md#kamals-ssh-key) gets onto a host, and how the GitHub Actions deploy key will in ticket 09.
+That's how [Kamal's key](deployment.md#kamals-ssh-key) gets onto a host, and how each host's [CI deploy key](deployment.md#ci-deploys) does too: `kamal-ci-testing` on `budgie-testing`, `kamal-ci-production` on `budgie-production`, each authorised on its own host only, the same way, as a second `provision.sh` run with that key's public half as the extra argument.
 On a host that's already provisioned, run the same as `deploy`, with `budgie-testing` in place of `ubuntu@budgie-testing`.
 
 The script is safe to re-run. On a host that's already set up it changes nothing and ends with `no changes: this host was already provisioned`.
@@ -289,8 +289,8 @@ If you change what a host should look like, change the script and re-run it ever
 
 ## Where the IP addresses go
 
-Kamal needs them to deploy, so they're in `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files, as well as the OVH panel and the `HostName` lines in your `~/.ssh/config`.
-Kamal runs in a container that can't see your `~/.ssh/config`, so the names there are only for you. See [Deploying](deployment.md).
+Kamal needs them to deploy, so they're in `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files and in each destination's GitHub environment secrets, as well as the OVH panel and the `HostName` lines in your `~/.ssh/config`.
+Kamal runs in a container that can't see your `~/.ssh/config`, so the names there are only for you. See [Deploying](deployment.md#ci-deploys).
 
 ## Two things the script deliberately doesn't do
 

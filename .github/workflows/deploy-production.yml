@@ -1,0 +1,135 @@
+name: Deploy production
+
+# Manual only. This never runs on a push and is never a required check; the operator dispatches it, from
+# the Actions tab or gh workflow run deploy-production.yml -f sha=<sha>. See docs/deployment.md.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit to deploy. Defaults to main's tip."
+        required: false
+        type: string
+        default: ""
+
+run-name: "Deploy production: ${{ inputs.sha || github.sha }}"
+
+permissions:
+  contents: read
+
+jobs:
+  # No environment and no secrets, so a refusal here never reaches SSH or a production credential.
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+
+    steps:
+      # The input is a free-text string, so it goes through env rather than into the script, and the API
+      # turns whatever was typed, such as an abbreviated SHA, into the full 40-character one that
+      # actions/checkout needs below. Anything that isn't a commit in this repository stops here.
+      - name: Resolve the commit to deploy
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          ref="${INPUT_SHA:-$GITHUB_SHA}"
+          sha=$(gh api "repos/${{ github.repository }}/commits/$ref" --jq .sha 2>/dev/null) || sha=""
+          [[ $sha =~ ^[0-9a-f]{40}$ ]] ||
+            { echo "::error::'$ref' isn't a commit in this repository"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse a commit that isn't reachable from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          status=$(gh api "repos/${{ github.repository }}/compare/main...$SHA" --jq .status) ||
+            { echo "::error::couldn't compare $SHA with main"; exit 1; }
+          case "$status" in
+            identical | behind) ;;
+            *) echo "::error::$SHA isn't reachable from main (compare status: $status)"; exit 1 ;;
+          esac
+
+      # This is what proves CI passed on main and that testing already built, pushed and deployed this
+      # exact commit: deploy_testing only concludes success after all three. A commit with no such check
+      # run at all, or one that's skipped, failed, cancelled or still running, is refused.
+      - name: Refuse a commit that testing hasn't deployed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          state=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs?check_name=deploy_testing&per_page=100" --jq '
+            [.check_runs[] | select(.name == "deploy_testing")] | sort_by(.id) | last | (.conclusion // .status) // "missing"
+          ')
+          [ "$state" = success ] ||
+            { echo "::error::deploy_testing for $SHA is '$state', not success"; exit 1; }
+
+  deploy:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    # Like deploy_testing in ci.yml: two production deploys never overlap, and a newer dispatch cancels
+    # one still waiting in this group.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    # KAMAL_REGISTRY_PASSWORD is this run's own GITHUB_TOKEN, not a stored secret. The rest map by name to
+    # .kamal/secrets-common and .kamal/secrets.production; see docs/deployment.md.
+    env:
+      KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      PRODUCTION_HOST_IP: ${{ secrets.PRODUCTION_HOST_IP }}
+      PRODUCTION_SECRET_KEY_BASE: ${{ secrets.PRODUCTION_SECRET_KEY_BASE }}
+      PRODUCTION_BUDGIE_DATABASE_PASSWORD: ${{ secrets.PRODUCTION_BUDGIE_DATABASE_PASSWORD }}
+      PRODUCTION_GOOGLE_CLIENT_ID: ${{ secrets.PRODUCTION_GOOGLE_CLIENT_ID }}
+      PRODUCTION_GOOGLE_CLIENT_SECRET: ${{ secrets.PRODUCTION_GOOGLE_CLIENT_SECRET }}
+      PRODUCTION_SMTP_USERNAME: ${{ secrets.PRODUCTION_SMTP_USERNAME }}
+      PRODUCTION_SMTP_PASSWORD: ${{ secrets.PRODUCTION_SMTP_PASSWORD }}
+
+    steps:
+      # config/deploy*.yml need to match the image being promoted, not whatever's newest on main, in case
+      # an older SHA is being deployed as a rollback.
+      - name: Checkout the commit being deployed
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # No third-party action: an ssh-agent started in this step, loaded with production's own deploy key.
+      - name: Load the production deploy key into an SSH agent
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+        run: |
+          export SSH_AUTH_SOCK="$RUNNER_TEMP/ssh-agent.sock"
+          ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          ssh-add - <<< "$SSH_PRIVATE_KEY"
+
+      # Pinned by IP address, from ssh-keygen -F <ip> on the laptop. A fresh runner's known_hosts is
+      # otherwise empty, so without this Kamal would accept whatever key answers for the host.
+      - name: Trust the production host's key
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # deploy_testing already built and pushed this image; this only pulls it, so production runs
+      # exactly what testing ran.
+      - name: Deploy to production
+        run: bin/kamal deploy -d production --skip-push

@@ -1,9 +1,13 @@
 # Kamal deploys Budgie to budgie-testing and budgie-production. See docs/deployment.md.
 #
-# This file holds what both destinations share. config/deploy.testing.yml and config/deploy.production.yml
-# hold what differs, and Kamal merges one of them over this file:
+# CI is the normal way this runs: .github/workflows/ci.yml deploys testing on every push to main that
+# passes, and .github/workflows/deploy-production.yml deploys production on a manual dispatch. The kamal
+# Compose service runs the same commands by hand, for break-glass deploys and operator tasks:
 #
 #   docker compose run --rm kamal deploy -d testing
+#
+# This file holds what both destinations share. config/deploy.testing.yml and config/deploy.production.yml
+# hold what differs, and Kamal merges one of them over this file.
 
 service: budgie
 
@@ -25,9 +29,17 @@ ssh:
   # to reach the other with your key.
   forward_agent: false
 
-# The hosts are amd64, so an arm64 laptop builds under QEMU: slow, but it works.
+# The hosts are amd64. CI builds natively on its amd64 runners; a break-glass build from an arm64 laptop
+# builds under QEMU instead: slow, but it works.
 builder:
   arch: amd64
+  # A registry cache in GHCR, so a deploy with a warm cache only rebuilds the layers that changed. Kamal
+  # prefixes this with the registry server, so it resolves to ghcr.io/robertg-h/budgie-build-cache. The
+  # first CI deploy creates the package, and a laptop build shares it too, once docker login has run.
+  cache:
+    type: registry
+    options: mode=max
+    image: robertg-h/budgie-build-cache
 
 # Cloudflare terminates TLS, and cloudflared reaches kamal-proxy at http://localhost:80 on each host.
 proxy:
