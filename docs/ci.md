@@ -87,15 +87,38 @@ In GitHub, go to the repo's **Settings → Rules → Rulesets → New ruleset �
   - **Block force pushes:** ticked
 
 Leave every other rule unticked, and **Create** it.
+The page doesn't make a missing check obvious, and **Require status checks to pass** with no checks added blocks nothing, so read the checks back with the first item in [Verify](#verify).
 
 "Up to date" stays off because it would mean rebasing every open Dependabot pull request after each merge.
 Two pull requests that each pass but break when combined are caught instead by the `push` run on `main` straight after the second merge.
 
 The admin bypass, or a direct push, can still land a commit on `main` that never passed. That's why ticket 09's deploy to testing checks this workflow's result on `main` itself, not just that the pull request was green.
 
+## Dependabot
+
+Dependabot's pull requests run the same four checks, and the ruleset blocks them the same way, so a bump that breaks the app can't merge.
+
+`.github/dependabot.yml` ignores json 3 and later. The `Gemfile` pins json below 3, because Rails 8.1.3.1 passes `JSON.parse` its options in a way json 3 rejects, so every cookie read raises `ArgumentError`.
+Remove the pin and the ignore together once Rails supports json 3.
+
 ## Verify
 
 Check each item once. This is what finished looks like.
+
+**The ruleset requires all four checks, from GitHub Actions.**
+
+```sh
+gh api repos/RobertG-H/budgie-src/rules/branches/main --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | "\(.context) \(.integration_id)"'
+```
+
+```
+scan_ruby 15368
+scan_js 15368
+lint 15368
+test 15368
+```
+
+`15368` is GitHub Actions. A check missing from the list isn't required, and `null` in place of the number means any app could report it.
 
 **A pull request shows four green checks.**
 
