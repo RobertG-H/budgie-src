@@ -145,7 +145,7 @@ GEM
     jbuilder (2.15.1)
       actionview (>= 7.0.0)
       activesupport (>= 7.0.0)
-    json (2.21.2)
+    json (3.0.2)
     jwt (3.3.0)
       base64
     kamal (2.12.0)
@@ -460,7 +460,6 @@ DEPENDENCIES
   factory_bot_rails
   importmap-rails
   jbuilder
-  json (< 3)
   kamal
   letter_opener_web
   omniauth
