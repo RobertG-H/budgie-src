@@ -1,7 +1,7 @@
 # Google OAuth setup
 
 Budgie has no passwords. People sign in with Google, so the app needs an OAuth client from Google Cloud.
-Each environment has its own client; these steps create the one for local development.
+Each environment has its own client in the same Google Cloud project: **Budgie development**, **Budgie testing** and **Budgie production**.
 
 ## 1. Create the project and consent screen
 
@@ -15,9 +15,10 @@ You only do this once, for all environments.
    - **Audience:** External
    - **Contact information:** your email address
 4. Agree to the Google API Services User Data Policy and click **Create**.
+5. Go to **Google Auth Platform** > **Audience** and click **Publish app**, then confirm. The publishing status changes from **Testing** to **In production**.
 
-Leave the publishing status on **Testing**.
-You don't need to add test users: Google lets any account sign in to a Testing app that only asks for name, email address and profile, which is all Budgie asks for.
+While the status is Testing, Google only lets the accounts listed as test users sign in. Budgie's invites decide who gets in, so the app is published instead of keeping a second list of people in Google.
+Publishing doesn't send the app to Google for verification, because Budgie only asks for `openid email profile` and has no logo. Keep it that way: adding a logo or a broader scope would.
 
 ## 2. Create the development client
 
@@ -41,8 +42,21 @@ Compose loads `.env` into the `web` container. Git ignores the file, so the secr
 
 Budgie is invite-only, so invite yourself before your first sign-in. See [Invites and users](invites.md).
 
-## Production
+## Testing and production
 
-Production needs its own client.
-Repeat step 2 with the name **Budgie production** and the redirect URI `https://<production host>/auth/google_oauth2/callback`, then set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the production environment.
-Production also needs [SMTP set up](email.md#production-zedmail), or invites can't be sent.
+Each deployed environment has its own client, so each one accepts only its own callback URL, and a secret leaked from one environment can be revoked without touching the others.
+
+1. Under **Google Auth Platform** > **Branding**, add `budgiebuddie.com` to **Authorized domains**. Google requires a domain used in a client's redirect URIs to be registered there first.
+2. Repeat step 2 twice:
+
+   | Name | Authorized redirect URI |
+   | --- | --- |
+   | Budgie testing | `https://testing.budgiebuddie.com/auth/google_oauth2/callback` |
+   | Budgie production | `https://budgiebuddie.com/auth/google_oauth2/callback` |
+
+3. Put each client's ID and secret in your password manager and in the deploy env files: `TESTING_GOOGLE_CLIENT_ID` and `TESTING_GOOGLE_CLIENT_SECRET` in `.env.testing`, and `PRODUCTION_GOOGLE_CLIENT_ID` and `PRODUCTION_GOOGLE_CLIENT_SECRET` in `.env.production`.
+   See [Deploying](deployment.md#the-secrets).
+
+Only a sign-in by someone who isn't the project's owner proves the publishing status, since the owner may be let in either way. [Deploying](deployment.md#verify) checks it on production with an invited account that isn't yours.
+
+Deployed environments also need [SMTP set up](email.md#production-zedmail), or invites can't be sent.

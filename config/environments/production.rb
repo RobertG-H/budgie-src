@@ -24,14 +24,17 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :local
 
-  # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  # config.assume_ssl = true
+  # Cloudflare terminates TLS, and requests reach the app over plain HTTP through the tunnel and kamal-proxy.
+  config.assume_ssl = true
 
-  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  # config.force_ssl = true
+  # Mark cookies secure. Every request counts as HTTPS here, so redirecting http:// is left to
+  # Cloudflare's Always Use HTTPS.
+  config.force_ssl = true
 
-  # Skip http-to-https redirect for the default health check endpoint.
-  # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
+  # HSTS stays off, here and at Cloudflare, because browsers keep its max-age and it can't be taken back
+  # (see docs/cloudflare.md). hsts: false still sends the header, with max-age=0, which tells browsers to forget it.
+  # Skip the http-to-https redirect for the health check.
+  config.ssl_options = { hsts: false, redirect: { exclude: ->(request) { request.path == "/up" } } }
 
   # Log to STDOUT with the current request id as a default log tag.
   config.log_tags = [ :request_id ]
@@ -56,8 +59,9 @@ Rails.application.configure do
   # Invites are sent with deliver_now, so the operator should see delivery failures.
   config.action_mailer.raise_delivery_errors = true
 
-  # Set host to be used by links generated in mailer templates. The real host is wired in ticket 07.
-  config.action_mailer.default_url_options = { host: "example.com" }
+  # Links in emails point at this destination's hostname, which Kamal sets. Fetched so that a destination
+  # without it fails at boot rather than in someone's inbox.
+  config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST"), protocol: "https" }
 
   # Generic SMTP, currently Zedmail's relay, so switching providers only changes these environment variables.
   # Zedmail's SMTP password is its API key. The sender address comes from MAILER_FROM; see ApplicationMailer.
@@ -85,12 +89,10 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  #
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # Enable DNS rebinding protection and other `Host` header attacks. Both hosts accept both names,
+  # which is harmless because Cloudflare routes each hostname to its own host.
+  config.hosts = [ "budgiebuddie.com", "testing.budgiebuddie.com" ]
+
+  # Skip it for the health check, because kamal-proxy's doesn't send a public hostname.
+  config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 end

@@ -3,11 +3,11 @@
 
 # One Dockerfile with two targets:
 #
-# production (the default) is built by Kamal, or build'n'run by hand:
+# production (the default) is built and deployed by Kamal (see docs/deployment.md), or build'n'run by hand:
 #   docker build -t budgie .
-#   docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name budgie budgie
+#   docker run -d -p 80:80 -e SECRET_KEY_BASE=<value from bin/rails secret> -e APP_HOST=<hostname> --name budgie budgie
 #
-# development is built by compose.yaml for local work. See docs/development.md.
+# development is built by compose.yaml for local work (see docs/development.md) and for the kamal service.
 
 # Make sure RUBY_VERSION matches the Ruby version in .ruby-version
 ARG RUBY_VERSION=3.4.10
@@ -34,6 +34,17 @@ FROM base AS development
 # Install packages needed to build gems
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential git libpq-dev libyaml-dev pkg-config && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+# Install the clients the kamal service deploys with, from Docker's apt repository as in script/provision.sh.
+# No daemon: the kamal service uses Docker Desktop's, and the Mac's SSH agent, through their sockets.
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update -qq && \
+    apt-get install --no-install-recommends -y docker-ce-cli docker-buildx-plugin openssh-client && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 # Entrypoint installs any missing gems.
@@ -72,8 +83,9 @@ COPY . .
 # -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
 RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
-# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
+# Precompiling assets for production without the real secrets. production.rb fetches APP_HOST,
+# which only mailer links use, so precompiling gets a placeholder.
+RUN SECRET_KEY_BASE_DUMMY=1 APP_HOST=precompile.invalid ./bin/rails assets:precompile
 
 
 # Final stage for app image. Being last makes it the default target.

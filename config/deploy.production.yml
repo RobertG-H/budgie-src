@@ -1,0 +1,18 @@
+# budgie-production, served as budgiebuddie.com. Kamal merges this over config/deploy.yml for -d production.
+# Nothing answers on the IP address itself; see docs/cloudflare.md.
+
+servers:
+  web:
+    - &ip 148.113.251.186
+
+proxy:
+  host: &hostname budgiebuddie.com
+
+accessories:
+  db:
+    host: *ip
+
+env:
+  clear:
+    APP_HOST: *hostname
+    MAILER_FROM: "Budgie <no-reply@budgiebuddie.com>"

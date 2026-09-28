@@ -17,6 +17,19 @@ There's no admin page: manage invites and users with these tasks.
 Each task prints what it did, or exits non-zero with the reason it refused.
 The same operations are available in `bin/rails console` as `Invite.issue!`, `Invite.resend!` and `Invite.revoke!`.
 
+### In testing and production
+
+The same tasks run on a deployed host through Kamal's `task` alias. Add `-d testing` or `-d production` to choose the destination:
+
+| Task | Command |
+| --- | --- |
+| Invite someone and email them | `docker compose run --rm kamal task invite:create EMAIL=someone@example.com -d production` |
+| Send a pending invite again | `docker compose run --rm kamal task invite:resend EMAIL=someone@example.com -d production` |
+| Revoke a pending invite | `docker compose run --rm kamal task invite:revoke EMAIL=someone@example.com -d production` |
+| List invites | `docker compose run --rm kamal task invite:list -d production`, optionally with `STATUS=pending`, `accepted` or `revoked` |
+
+Production holds no real budget data until backups exist, so for now only invite people who know that. See [Deploying](deployment.md).
+
 ## Invite rules
 
 - An invite is **pending** until its address signs in for the first time, when it becomes **accepted**. Pending invites never expire.
@@ -40,3 +53,9 @@ docker compose run --rm web bin/rails user:delete EMAIL=someone@example.com
 The task shows what it will delete and asks you to type the email to confirm.
 It permanently deletes the user, their identities, their sessions (which signs them out), their budget and its envelopes, and their invite, so the address can be invited again with `invite:create`.
 This is handy for testing invites with an account you've already signed in with.
+
+On a deployed host:
+
+```sh
+docker compose run --rm kamal task user:delete EMAIL=someone@example.com -d production
+```

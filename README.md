@@ -10,7 +10,7 @@ What you have to set up depends on where it runs.
 | | Local development | Production |
 | --- | --- | --- |
 | [Docker](https://docs.docker.com/get-started/get-docker/) with Compose v2 | Required | Required |
-| [Google OAuth client](docs/google-oauth.md) | **Required**: without it nobody can sign in | **Required**, with its own production client |
+| [Google OAuth client](docs/google-oauth.md) | **Required**: without it nobody can sign in | **Required**, with separate clients for testing and production |
 | [SMTP provider (Zedmail)](docs/email.md#production-zedmail) | Not needed: emails are saved to http://localhost:3000/letter_opener instead of being sent | **Required**: without it invites can't be sent, so nobody new can sign up |
 
 Development runs entirely in containers, so you don't need Ruby or PostgreSQL on your machine.
@@ -54,6 +54,12 @@ The task shows the current and new currency and asks you to type the email to co
 Amounts aren't converted: every amount keeps its number and is shown in the new currency.
 The supported currencies are listed in `Budget::CURRENCIES`.
 
+On a deployed host, run it through Kamal instead:
+
+```sh
+docker compose run --rm kamal task budget:currency EMAIL=someone@example.com CURRENCY=USD -d production
+```
+
 ## Production
 
 Budgie runs on two OVHcloud VPS instances running Ubuntu 26.04 LTS, `budgie-testing` and `budgie-production`.
@@ -62,11 +68,20 @@ Budgie runs on two OVHcloud VPS instances running Ubuntu 26.04 LTS, `budgie-test
 Neither host is reachable at its IP address. `budgiebuddie.com` and `testing.budgiebuddie.com` are served by Cloudflare, which reaches each host through a Cloudflare Tunnel that dials out from it.
 [`script/cloudflare-tunnel.sh`](script/cloudflare-tunnel.sh) puts a host behind its tunnel; see [Cloudflare](docs/cloudflare.md) for the domain, the dashboard steps and the checks.
 
-Production needs everything above plus email delivery:
+[Kamal](https://kamal-deploy.org/) deploys the app to both hosts by hand, from the `kamal` Compose service, with PostgreSQL running next to it on each host. See [Deploying](docs/deployment.md) for the secrets, the first deploy, everyday deploys, rollback and the checks.
 
-1. **A production Google OAuth client** with the production callback URL. See [Google OAuth setup](docs/google-oauth.md).
-2. **SMTP through Zedmail**: verify the sending domain, get an API key and set the `SMTP_*` and `MAILER_FROM` variables. See [Email](docs/email.md#production-zedmail).
-3. **Invite yourself** with `invite:create`, and check the email arrives before inviting anyone else.
+> **Production holds no real budget data until backups exist.** Its database is only on the VPS's own disk until ticket 16 adds backups and a restore drill.
+
+The two deployed environments need everything above plus email delivery:
+
+1. **Google OAuth clients for testing and production**, with their callback URLs, and the consent screen published. See [Google OAuth setup](docs/google-oauth.md#testing-and-production).
+2. **SMTP through Zedmail**: verify the sending domain and get an API key per environment. See [Email](docs/email.md#production-zedmail).
+3. **Deploy**, testing first. See [Deploying](docs/deployment.md).
+4. **Invite yourself**, and check the email arrives before inviting anyone else:
+
+   ```sh
+   docker compose run --rm kamal task invite:create EMAIL=you@gmail.com -d production
+   ```
 
 ## Docs
 
@@ -79,3 +94,4 @@ Production needs everything above plus email delivery:
 | [Architecture](docs/architecture.md) | How the containers, images and sign-in fit together |
 | [Provisioning the hosts](docs/provisioning.md) | Ordering the OVH VPS instances, running `script/provision.sh` and checking the result |
 | [Cloudflare](docs/cloudflare.md) | The domain, the tunnels that reach the hosts, and keeping the hosts off the public internet |
+| [Deploying](docs/deployment.md) | Deploying with Kamal: secrets, first deploys, everyday deploys, operator tasks, rollback and the checks |
