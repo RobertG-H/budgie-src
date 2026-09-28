@@ -18,6 +18,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_200000) do
     t.bigint "budget_id", null: false
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.string "hand_edited"
     t.decimal "starting_balance", precision: 15, scale: 2, default: "0.0", null: false
     t.datetime "updated_at", null: false
     t.index "budget_id, lower((name)::text)", name: "index_budget_envelopes_on_budget_id_and_lower_name", unique: true
