@@ -98,5 +98,6 @@ In request specs, `sign_in_as(user)` signs in without going through a provider. 
 ## Tickets and product rules
 
 - Work is tracked as GitHub issues in `RobertG-H/budgie-src` titled `[NN] ...`, where the number is the build order. An issue's Decisions, Build and Done when sections are the spec, and they're more detailed than the plan linked from issue #1.
+- In a PR description, put "close", "fixes" or "resolves" next to `#N` only when merging should close `#N`. GitHub matches them mid-sentence ("would close #10" closed #10 on merge), and Dependabot treats its own PR closed that way as dismissed and deletes its branch.
 - User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spent, Refund, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Internal field names stay out of the UI.
 - Envelopes never reset at month end: leftover money and overspending both carry into the next month.
