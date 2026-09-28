@@ -51,6 +51,38 @@ services:
       timeout: 5s
       retries: 30
 
+  # Runs Kamal for the operator, for example `docker compose run --rm kamal deploy -d testing`.
+  # See docs/deployment.md. It's the only service with the Docker socket and the SSH agent, and the
+  # deploy profile keeps `docker compose up` from starting it.
+  kamal:
+    build:
+      context: .
+      target: development
+    profiles: [ deploy ]
+    entrypoint: [ "/app/bin/docker-entrypoint-dev", "bin/kamal" ]
+    # The deploy secrets, which .kamal/secrets* map by name. Optional so the service runs without them.
+    env_file:
+      - path: .env.kamal
+        required: false
+      - path: .env.testing
+        required: false
+      - path: .env.production
+        required: false
+    environment:
+      SSH_AUTH_SOCK: /run/host-services/ssh-auth.sock
+    volumes:
+      - .:/app
+      - bundle:/usr/local/bundle
+      # Docker Desktop's daemon, which builds and pushes the image.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker Desktop's forward of the Mac's SSH agent, which holds the key the hosts accept.
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      # The host keys you've already accepted, read-only, so a host whose key has changed is refused.
+      - type: bind
+        source: ${HOME}/.ssh/known_hosts
+        target: /root/.ssh/known_hosts
+        read_only: true
+
 volumes:
   bundle:
   postgres:

@@ -23,8 +23,9 @@ Do [Provisioning the hosts](provisioning.md) first. This assumes two finished ho
 | Installing and running `cloudflared` on a host | `script/cloudflare-tunnel.sh` |
 | The domain, the zone settings, the rules, each tunnel's ingress | The Cloudflare dashboard — and, so it can be rebuilt, this page |
 | The two tunnel tokens | A password manager, and nowhere else |
-| The hostnames | This repo, and `config/deploy.yml` and `config/environments/production.rb` from ticket 07 |
-| The VPS IP addresses | Your `~/.ssh/config` and the OVH panel, as before |
+| The hostnames | This repo: `config/deploy.testing.yml`, `config/deploy.production.yml` and `config/environments/production.rb` |
+| The VPS IP addresses | `config/deploy.testing.yml` and `config/deploy.production.yml`, and the OVH panel |
+| Zedmail's two DNS records | The Cloudflare dashboard, **DNS only**. See [Zedmail's DNS records](#zedmails-dns-records) |
 
 Hostnames are public: they're in DNS and permanently in Certificate Transparency logs the moment Cloudflare issues a certificate, so there's nothing to hide by keeping them out of git.
 The IP addresses were never secret either — but after this they're useless, because nothing listens on them.
@@ -110,6 +111,7 @@ Leave the tunnel's catch-all alone. By default anything you haven't routed gets 
 
 Saving this creates a **proxied** DNS record — a CNAME to `<tunnel-uuid>.cfargotunnel.com`.
 Check the orange cloud in **DNS → Records**: a grey-clouded record publishes the origin IP and defeats the whole point.
+The only records that are grey on purpose are [Zedmail's two](#zedmails-dns-records), which point at Zedmail rather than at a host.
 The apex is fine as a CNAME; Cloudflare flattens it.
 
 ## 3. The `www` record and the redirect
@@ -204,7 +206,7 @@ curl: (28) Connection timed out after 10001 milliseconds
 200
 ```
 
-`-p 127.0.0.1:80:80` is precisely what `kamal proxy boot_config set --publish-host-ip 127.0.0.1` makes Kamal do, which is the line ticket 07 owes this ticket.
+`-p 127.0.0.1:80:80` is precisely what `proxy.run.bind_ips` in `config/deploy.yml` makes Kamal do for `kamal-proxy`, and [Deploying](deployment.md#verify) runs this check again against the real app.
 
 **Leave the loopback-bound origin running.** Section 7 needs something answering behind each tunnel; section 8 tears it down at the end.
 
@@ -282,7 +284,9 @@ HTTP/1.1 301 Moved Permanently
 location: https://budgiebuddie.com/
 ```
 
-The second command prints nothing. If it prints a `strict-transport-security` header, HSTS got turned on somewhere.
+Against the throwaway origin, the second command prints nothing.
+Once the app is deployed it prints `strict-transport-security: max-age=0; includeSubDomains`, which is HSTS turned *off*: Rails always sends the header, and `hsts: false` makes it `max-age=0`. See [Deploying](deployment.md#verify).
+Any larger `max-age` means HSTS got turned on somewhere.
 
 **`www` redirects to the apex.**
 
@@ -321,7 +325,7 @@ curl -sSI https://testing.budgiebuddie.com/ | grep -i cf-cache-status
 cf-cache-status: DYNAMIC
 ```
 
-`DYNAMIC` means the edge didn't consider it cacheable at all. Ticket 07 re-checks this against a real signed-in page, which is the case that actually matters.
+`DYNAMIC` means the edge didn't consider it cacheable at all. [Deploying](deployment.md#verify) checks it again against a real signed-in page, which is the case that actually matters.
 
 **The tunnel is running on both hosts and starts itself at boot.**
 
@@ -420,22 +424,37 @@ nothing on 80
 502
 ```
 
-A 502 from the hostname is the correct end state for this ticket: the tunnel is up and there's nothing behind it yet.
-Ticket 07 is what puts the app there.
+A 502 from the hostname is the correct end state for this page: the tunnel is up and there's nothing behind it yet.
+[Deploying](deployment.md) is what puts the app there.
 
-## 9. What ticket 07 has to do
+## 9. What ticket 07 inherited
 
-This ticket owns the requirement that a host can't be reached by IP, and the proof above. Ticket 07 owns the line that implements it once a real app is behind the tunnel, plus everything else that follows from being behind Cloudflare:
+This ticket owns the requirement that a host can't be reached by IP, and the proof above. Ticket 07 owned the line that implements it once a real app is behind the tunnel, plus everything else that follows from being behind Cloudflare. All of it is done:
 
-- `kamal proxy boot_config set --publish-host-ip 127.0.0.1` on **both** hosts, so `kamal-proxy` binds loopback only and `cloudflared` reaches it at `http://localhost:80`. Without it, the raw VPS IP starts answering the moment you deploy, and this ticket's property breaks silently.
-- Re-run the direct-IP check in section 6 against the real deployed app. The duplication is the contract between the two tickets, not a smell.
-- `config.assume_ssl = true` and `config.force_ssl = true`, with `/up` excluded from the redirect through `config.ssl_options`.
-- `config.hosts` pinned to `budgiebuddie.com` and `testing.budgiebuddie.com`, with `/up` excluded from host authorization: the tunnel's health probe won't carry your hostname.
-- `config.action_mailer.default_url_options` set to the real host, replacing the `example.com` placeholder and its "wired in ticket 07" comment.
-- `proxy: { ssl: false, host: <the environment's hostname> }` in `deploy.yml`. **The stock scaffold is actively misleading here** — its comment reads as an invitation to set `ssl: true` with Let's Encrypt, which cannot work: TLS-ALPN-01 needs inbound 443 reaching the host directly, which this design deliberately prevents, and HTTP-01 through the edge is fragile and pointless when Cloudflare already terminates TLS. Delete the comment.
-- A Google OAuth client per environment, with callbacks `https://budgiebuddie.com/auth/google_oauth2/callback` and `https://testing.budgiebuddie.com/auth/google_oauth2/callback`.
-- Zedmail's two CNAMEs published in this zone, once Zedmail has issued them. See [Email](email.md#production-zedmail).
-- Real-client IP: requests arrive from Cloudflare, so `request.remote_ip` in the logs needs `CF-Connecting-IP` / `X-Forwarded-For` handling to mean anything.
+- **Done:** `kamal-proxy` binds loopback only, so `cloudflared` reaches it at `http://localhost:80` and the raw VPS IP never answers. It's `proxy.run.bind_ips` in [`config/deploy.yml`](../config/deploy.yml) rather than `kamal proxy boot_config set --publish-host-ip 127.0.0.1`, which Kamal 2.12 deprecates, so the proxy's very first boot is already bound to loopback and there's no per-host step to forget.
+- **Done:** the direct-IP check in section 6 is repeated against the real app in [Deploying](deployment.md#verify). The duplication is the contract between the two tickets, not a smell.
+- **Done:** `config.assume_ssl = true` and `config.force_ssl = true`, with `/up` excluded from the redirect through `config.ssl_options`, in [`production.rb`](../config/environments/production.rb). `ssl_options` also sets `hsts: false`, which sends `max-age=0`: HSTS stays off, as section 5 decided.
+- **Done:** `config.hosts` pinned to `budgiebuddie.com` and `testing.budgiebuddie.com`, with `/up` excluded from host authorization, in [`production.rb`](../config/environments/production.rb).
+- **Done:** `config.action_mailer.default_url_options` comes from each destination's `APP_HOST`, in [`production.rb`](../config/environments/production.rb).
+- **Done:** `proxy: { ssl: false }` in [`config/deploy.yml`](../config/deploy.yml), and each destination's `host` in [`config/deploy.testing.yml`](../config/deploy.testing.yml) and [`config/deploy.production.yml`](../config/deploy.production.yml). The scaffold's Let's Encrypt comment is gone: TLS-ALPN-01 needs inbound 443 reaching the host directly, which this design deliberately prevents, and HTTP-01 through the edge is fragile and pointless when Cloudflare already terminates TLS.
+- **Done:** a Google OAuth client per environment, with callbacks `https://budgiebuddie.com/auth/google_oauth2/callback` and `https://testing.budgiebuddie.com/auth/google_oauth2/callback`. See [Google OAuth setup](google-oauth.md#testing-and-production).
+- **Done:** Zedmail's two CNAMEs, DNS only. See [below](#zedmails-dns-records).
+- **Done:** real client IPs, with no app code. `forward_headers: true` in [`config/deploy.yml`](../config/deploy.yml) passes Cloudflare's `X-Forwarded-For` through `kamal-proxy`, and Rails' default trusted proxies skip the loopback and Docker addresses the hops add. [Deploying](deployment.md#verify) checks a log line against the address Cloudflare saw.
+
+## Zedmail's DNS records
+
+[Zedmail](email.md#production-zedmail) sends Budgie's email from `budgiebuddie.com`, and verifies the domain through two CNAME records it issues when you add the domain.
+In **DNS → Records**, add both exactly as Zedmail shows them, with the proxy status **DNS only** (grey cloud):
+
+| Type | Name | Target | Proxy |
+| --- | --- | --- | --- |
+| `CNAME` | *(Zedmail's first name)* | *(Zedmail's first target)* | DNS only (grey) |
+| `CNAME` | *(Zedmail's second name)* | *(Zedmail's second target)* | DNS only (grey) |
+
+**Not proxied.** Every record from the sections above is orange, and the dashboard offers orange by default. A proxied CNAME resolves to Cloudflare's own addresses instead of to Zedmail's target, so Zedmail's verification fails, and DKIM with it.
+Grey is safe for these two: they point at Zedmail, not at a host, so they can't reveal an origin IP.
+
+Once Zedmail shows the domain as verified, write the two names and targets into the table above, so the records can be rebuilt from this page like everything else.
 
 ## Rebuilding a tunnel
 

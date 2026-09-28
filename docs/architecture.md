@@ -4,9 +4,11 @@
 
 - `compose.yaml` runs three services: `web` (Puma), `css` (the Tailwind watcher) and `db` (PostgreSQL 18).
   The repo is bind-mounted at `/app`, and gems and database data live in named volumes.
+  A fourth, `kamal`, is in the `deploy` profile, so `docker compose up` never starts it: it runs Kamal for deploys, and it's the only service with the Docker socket and the SSH agent.
 - The `Dockerfile` has two targets.
   `development` is what Compose runs.
   The default target is the production image, which is also what Kamal deploys.
+- Each host runs that image behind `kamal-proxy`, with PostgreSQL 18 as the Kamal accessory `budgie-db`. See [Deploying](deployment.md).
 
 ## Sign-in
 

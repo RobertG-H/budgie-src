@@ -1,0 +1,18 @@
+# budgie-testing, served as testing.budgiebuddie.com. Kamal merges this over config/deploy.yml for -d testing.
+# Nothing answers on the IP address itself; see docs/cloudflare.md.
+
+servers:
+  web:
+    - &ip 148.113.251.185
+
+proxy:
+  host: &hostname testing.budgiebuddie.com
+
+accessories:
+  db:
+    host: *ip
+
+env:
+  clear:
+    APP_HOST: *hostname
+    MAILER_FROM: "Budgie Testing <no-reply@budgiebuddie.com>"
