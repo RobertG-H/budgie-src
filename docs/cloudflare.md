@@ -24,7 +24,7 @@ Do [Provisioning the hosts](provisioning.md) first. This assumes two finished ho
 | The domain, the zone settings, the rules, each tunnel's ingress | The Cloudflare dashboard — and, so it can be rebuilt, this page |
 | The two tunnel tokens | A password manager, and nowhere else |
 | The hostnames | This repo: `config/deploy.testing.yml`, `config/deploy.production.yml` and `config/environments/production.rb` |
-| The VPS IP addresses | `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files, which git ignores, in the matching GitHub environment secret, and the OVH panel. See [Deploying](deployment.md#the-secrets-1) |
+| The VPS IP addresses | `TESTING_HOST_IP` and `PRODUCTION_HOST_IP` in the deploy env files, which git ignores, in the matching GitHub environment secret, and the OVH panel. See [Deploying](deployment.md#the-secrets-on-your-laptop) |
 | Zedmail's two DNS records | The Cloudflare dashboard, **DNS only**. See [Zedmail's DNS records](#zedmails-dns-records) |
 
 Hostnames are public: they're in DNS and permanently in Certificate Transparency logs the moment Cloudflare issues a certificate, so there's nothing to hide by keeping them out of git.
@@ -165,8 +165,8 @@ These are on the zone, so they apply to both hostnames. Several of them break th
 ## 6. Prove the isolation
 
 The headline property of all this is that a host answers on its hostname and not on its IP address.
-Before ticket 07 there's nothing listening on port 80, so "the IP doesn't answer" would be true for the boring reason that there's nothing to answer.
-A throwaway origin makes the check mean something — and it's easier to do now, with nothing real in the way, than later.
+At this stage nothing is listening on port 80, so "the IP doesn't answer" would be true for the boring reason that there's nothing to answer.
+A throwaway origin makes the check mean something, and it's easier to do with nothing real in the way.
 
 Run this on **each** host, with its own IP address.
 
@@ -426,19 +426,34 @@ nothing on 80
 A 502 from the hostname is the correct end state for this page: the tunnel is up and there's nothing behind it yet.
 [Deploying](deployment.md) is what puts the app there.
 
-## 9. What ticket 07 inherited
+## 9. What the app does because it's behind Cloudflare
 
-This ticket owns the requirement that a host can't be reached by IP, and the proof above. Ticket 07 owned the line that implements it once a real app is behind the tunnel, plus everything else that follows from being behind Cloudflare. All of it is done:
+Being behind Cloudflare and a tunnel is what several of the app's settings are for. They're listed here so
+that the whole arrangement can be read in one place:
 
-- **Done:** `kamal-proxy` binds loopback only, so `cloudflared` reaches it at `http://localhost:80` and the raw VPS IP never answers. It's `proxy.run.bind_ips` in [`config/deploy.yml`](../config/deploy.yml) rather than `kamal proxy boot_config set --publish-host-ip 127.0.0.1`, which Kamal 2.12 deprecates, so the proxy's very first boot is already bound to loopback and there's no per-host step to forget.
-- **Done:** the direct-IP check in section 6 is repeated against the real app in [Deploying](deployment.md#verify). The duplication is the contract between the two tickets, not a smell.
-- **Done:** `config.assume_ssl = true` and `config.force_ssl = true`, with `/up` excluded from the redirect through `config.ssl_options`, in [`production.rb`](../config/environments/production.rb). `ssl_options` also sets `hsts: false`, which sends `max-age=0`: HSTS stays off, as section 5 decided.
-- **Done:** `config.hosts` pinned to `budgiebuddie.com` and `testing.budgiebuddie.com`, with `/up` excluded from host authorization, in [`production.rb`](../config/environments/production.rb).
-- **Done:** `config.action_mailer.default_url_options` comes from each destination's `APP_HOST`, in [`production.rb`](../config/environments/production.rb).
-- **Done:** `proxy: { ssl: false }` in [`config/deploy.yml`](../config/deploy.yml), and each destination's `host` in [`config/deploy.testing.yml`](../config/deploy.testing.yml) and [`config/deploy.production.yml`](../config/deploy.production.yml). The scaffold's Let's Encrypt comment is gone: TLS-ALPN-01 needs inbound 443 reaching the host directly, which this design deliberately prevents, and HTTP-01 through the edge is fragile and pointless when Cloudflare already terminates TLS.
-- **Done:** a Google OAuth client per environment, with callbacks `https://budgiebuddie.com/auth/google_oauth2/callback` and `https://testing.budgiebuddie.com/auth/google_oauth2/callback`. See [Google OAuth setup](google-oauth.md#testing-and-production).
-- **Done:** Zedmail's two CNAMEs, DNS only. See [below](#zedmails-dns-records).
-- **Done:** real client IPs, with no app code. `forward_headers: true` in [`config/deploy.yml`](../config/deploy.yml) passes Cloudflare's `X-Forwarded-For` through `kamal-proxy`, and Rails' default trusted proxies skip the loopback and Docker addresses the hops add. [Deploying](deployment.md#verify) checks a log line against the address Cloudflare saw.
+- **`kamal-proxy` binds loopback only**, so `cloudflared` reaches it at `http://localhost:80` and the raw
+  VPS IP never answers. It's `proxy.run.bind_ips` in [`config/deploy.yml`](../config/deploy.yml) rather than
+  `kamal proxy boot_config set --publish-host-ip 127.0.0.1`, which Kamal 2.12 deprecates, so the proxy's
+  very first boot is already bound to loopback and there's no per-host step to forget.
+  [Deploying](deployment.md#verify) repeats section 6's direct-IP check against the real app.
+- **`config.assume_ssl` and `config.force_ssl`** in [`production.rb`](../config/environments/production.rb),
+  with `/up` excluded from the redirect through `config.ssl_options`. `ssl_options` also sets `hsts: false`,
+  which sends `max-age=0`: HSTS stays off, as section 5 decided.
+- **`config.hosts`** pinned to `budgiebuddie.com` and `testing.budgiebuddie.com`, with `/up` excluded from
+  host authorization, in [`production.rb`](../config/environments/production.rb).
+- **`config.action_mailer.default_url_options`** comes from each destination's `APP_HOST`, so links in
+  email point at the hostname that destination is served as.
+- **`proxy: { ssl: false }`** in [`config/deploy.yml`](../config/deploy.yml), with each destination's `host`
+  in its own file. Kamal issues no certificate: TLS-ALPN-01 needs inbound 443 reaching the host directly,
+  which this design deliberately prevents, and HTTP-01 through the edge is fragile and pointless when
+  Cloudflare already terminates TLS.
+- **Real client IPs, with no app code.** `forward_headers: true` in
+  [`config/deploy.yml`](../config/deploy.yml) passes Cloudflare's `X-Forwarded-For` through `kamal-proxy`,
+  and Rails' default trusted proxies skip the loopback and Docker addresses the hops add.
+  [Deploying](deployment.md#verify) checks a log line against the address Cloudflare saw.
+- **One Google OAuth client per environment**, with callbacks on each hostname. See
+  [Google OAuth setup](google-oauth.md#testing-and-production).
+- **Zedmail's two CNAMEs, DNS only.** See [below](#zedmails-dns-records).
 
 ## Zedmail's DNS records
 

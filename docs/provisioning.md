@@ -7,7 +7,7 @@ They're built the same way, from the same script, so that a deploy that works on
 This page covers the OVH panel steps that can't be, and the checks that say a host is finished.
 The script never runs from the application checkout: copy it to the host and run it there.
 
-## Before you start: the SSH key in 1Password
+## The SSH key in 1Password
 
 You log in to both hosts with one SSH key that lives in [1Password](https://1password.com/) and never touches your disk.
 When you connect, 1Password's SSH agent signs with it, after asking you to approve the first time an app uses the key.
@@ -297,6 +297,6 @@ Kamal runs in a container that can't see your `~/.ssh/config`, so the names ther
 - **It opens no HTTP or HTTPS port**, and [Cloudflare](cloudflare.md) doesn't either. `cloudflared` makes an outbound connection to Cloudflare's edge, so the tunnel never needs an inbound port. If an outbound deny policy is ever added to ufw, it has to allow TCP and UDP 7844.
 - **It doesn't install fail2ban.** With passwords off entirely, it guards a door with no keyhole; ufw's rate limit already drops an IP that opens six connections in thirty seconds.
 
-One thing to keep in mind as containers start arriving: **Docker's published ports bypass ufw**. Docker writes its own iptables rules, so a container published with `-p 80:80` is reachable from the internet even though ufw says deny. Keeping ports unpublished is what keeps the host closed, not the firewall.
+One thing to keep in mind once containers are running: **Docker's published ports bypass ufw**. Docker writes its own iptables rules, so a container published with `-p 80:80` is reachable from the internet even though ufw says deny. Keeping ports unpublished is what keeps the host closed, not the firewall.
 
-That's the next thing to do to a finished host: [Cloudflare](cloudflare.md) puts it behind a tunnel and proves that its IP address answers nothing.
+A finished host goes to [Cloudflare](cloudflare.md) next, which puts it behind a tunnel and proves that its IP address answers nothing.

@@ -9,6 +9,8 @@ Development runs entirely in Docker Compose (`web`, the `css` Tailwind watcher, 
 The `Dockerfile`'s `development` target is what Compose runs, and its default target is the production image that Kamal deploys.
 Compose also has a `kamal` service, in the `deploy` profile, that the operator deploys with.
 
+`docs/architecture.md` is the reader-facing tour of the stack and every integration; `docs/development.md` and `docs/infrastructure.md` are the two setup guides. The Architecture section below is the working detail Claude needs, and the two shouldn't contradict each other — update both when one changes.
+
 ## Commands
 
 Use these exact spellings. They match `docs/development.md`, and this checkout's permission rules are written for them.
@@ -114,7 +116,7 @@ After a UI change:
 
 ## Tickets and product rules
 
-- Work is tracked as GitHub issues in `RobertG-H/budgie-src` titled `[NN] ...`, where the number is the build order. An issue's Decisions, Build and Done when sections are the spec, and they're more detailed than the plan linked from issue #1.
+- Work is tracked as GitHub issues in `RobertG-H/budgie-src` titled `[NN] ...`, where the number is the build order. An issue's Decisions, Build and Done when sections are the spec.
 - In a PR description, put "close", "fixes" or "resolves" next to `#N` only when merging should close `#N`. GitHub matches them mid-sentence ("would close #10" closed #10 on merge), and Dependabot treats its own PR closed that way as dismissed and deletes its branch.
 - User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spent, Refund, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Internal field names stay out of the UI.
 - Envelopes never reset at month end: leftover money and overspending both carry into the next month.

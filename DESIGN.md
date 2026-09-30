@@ -39,19 +39,19 @@ Colours section, which shows every role next to its content colour):
 | `info` | `primary-300` `#82d7ff` | `primary-950` `#002a3a` | 9.42:1 | |
 | `success` | `success-700` `#1e7329` | white | 5.93:1 | |
 | `warning` | `warning-400` `#ed9c0a` | `neutral-950` | 6.81:1 | never used as text on white (2.24:1) |
-| `error` | `danger-700` `#ac262a` | white | 6.85:1 | see Open question 2, below |
+| `error` | `danger-700` `#ac262a` | white | 6.85:1 | `-700`, not `-600`; see below |
 
-`primary-400` and `success-600` were the ticket's first proposals for `accent` and `error`'s companions; both
-miss AA as text (`primary-400` on white is 2.25:1, `success-600` with white content is 4.11:1), which is why
-`accent` is only ever a background here and `success` uses the `-700` shade.
+Two roles are deliberately darker, or deliberately background-only, than the scale suggests: `accent`
+(`primary-400`) and `warning` (`warning-400`) are never text, because on white they're 2.25:1 and 2.24:1,
+and `success` uses the `-700` shade because `success-600` with white content is only 4.11:1.
 
-**Open questions, resolved:**
+**Why these values:**
 
-1. **`secondary` (`neutral-600`) and `info` (`primary-300`)** — kept as proposed. Both clear 4.5:1
-   (4.85:1 and 9.42:1).
-2. **`error`** moved from the proposed `danger-600` to `danger-700`. `danger-600` passes on `base-100`
-   (4.79:1) but fails on `base-200` (4.49:1) and `base-300` (3.62:1); `danger-700` passes on all three
-   (6.85:1, 6.42:1, 5.18:1), so error text is safe anywhere in the app rather than only on white.
+1. **`error` is `danger-700`, not `danger-600`.** `danger-600` passes on `base-100` (4.79:1) but fails on
+   `base-200` (4.49:1) and `base-300` (3.62:1); `danger-700` passes on all three (6.85:1, 6.42:1, 5.18:1),
+   so error text is safe anywhere in the app rather than only on white.
+2. **`secondary` (`neutral-600`) and `info` (`primary-300`)** both clear 4.5:1 comfortably, at 4.85:1 and
+   9.42:1.
 3. **Field borders.** A plain daisyUI input's default border is `base-content` at 20% opacity, ~1.49:1
    against a white field — under the 3:1 WCAG 1.4.11 asks of a UI component's boundary.
    `app/views/components/_field` uses `border-base-content/55` instead (3.11:1) for text inputs, selects and
@@ -63,8 +63,7 @@ miss AA as text (`primary-400` on white is 2.25:1, `success-600` with white cont
    three base surfaces (5.70:1, 5.52:1, 4.97:1). The lighter `/60` daisyUI defaults to for table headers and
    `.stat-title`/`.stat-desc` does not (4.16:1 on `base-100`), so `application.css` overrides table headers to
    70%, and the partials that use stat text set it explicitly.
-5. **`max-w-3xl`** and the spacing steps (2/4/6/8) are kept as proposed — checked visually on `/styleguide`
-   at 1280px.
+5. **`max-w-3xl`** and the spacing steps (2/4/6/8) are checked visually on `/styleguide` at 1280px.
 
 ## Layout
 
@@ -91,7 +90,7 @@ columns fit without that. Tap targets stay comfortable at 375px (daisyUI's defau
 
 Prefer daisyUI components and semantic classes first. Reusable UI that needs more than a class goes in a
 partial under `app/views/components/`, and the same class string is never copy-pasted across views — the
-second use turns it into a partial. What's there so far:
+second use turns it into a partial. The partials:
 
 | Partial | For |
 | --- | --- |

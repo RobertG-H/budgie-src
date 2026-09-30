@@ -40,7 +40,7 @@ cp .env.example .env
 Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then restart the app with `docker compose up`.
 Compose loads `.env` into the `web` container. Git ignores the file, so the secret stays on your machine.
 
-Budgie is invite-only, so invite yourself before your first sign-in. See [Invites and users](invites.md).
+Budgie is invite-only, so invite yourself before your first sign-in. See [Operating Budgie](operations.md).
 
 ## Testing and production
 
@@ -55,7 +55,7 @@ Each deployed environment has its own client, so each one accepts only its own c
    | Budgie production | `https://budgiebuddie.com/auth/google_oauth2/callback` |
 
 3. Put each client's ID and secret in your password manager, in the deploy env files: `TESTING_GOOGLE_CLIENT_ID` and `TESTING_GOOGLE_CLIENT_SECRET` in `.env.testing`, and `PRODUCTION_GOOGLE_CLIENT_ID` and `PRODUCTION_GOOGLE_CLIENT_SECRET` in `.env.production`, and in the matching GitHub environment secret CI reads instead.
-   See [Deploying](deployment.md#the-secrets-1).
+   See [Deploying](deployment.md#the-secrets-on-your-laptop).
 
 Only a sign-in by someone who isn't the project's owner proves the publishing status, since the owner may be let in either way. [Deploying](deployment.md#verify) checks it on production with an invited account that isn't yours.
 
