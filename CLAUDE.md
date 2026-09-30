@@ -120,3 +120,13 @@ After a UI change:
 - In a PR description, put "close", "fixes" or "resolves" next to `#N` only when merging should close `#N`. GitHub matches them mid-sentence ("would close #10" closed #10 on merge), and Dependabot treats its own PR closed that way as dismissed and deletes its branch.
 - User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spent, Refund, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Internal field names stay out of the UI.
 - Envelopes never reset at month end: leftover money and overspending both carry into the next month.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub issues in `RobertG-H/budgie-src`, via the `gh` CLI — the same tracker described under "Tickets and product rules" above. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root, both created lazily by `/domain-modeling` rather than upfront. See `docs/agents/domain.md`.
