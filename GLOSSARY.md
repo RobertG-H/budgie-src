@@ -17,19 +17,20 @@ The amount already in an envelope before Budgie tracked it. It can be negative.
 ## Money moving
 
 **Deposit**:
-Money coming into the budget, such as a paycheck. It isn't in any envelope until it is assigned.
+New money coming into the budget, such as a paycheck. It lands in Ready to Assign, not in any envelope.
 _Avoid_: Income, inflow
 
 **Assigned**:
 Money moved from Ready to Assign into one envelope for one month.
 _Avoid_: Budgeted
 
-**Spent**:
-Money that left an envelope.
-_Avoid_: Expense, outflow
+**Spend**:
+Money paid out of the budget from one envelope, such as a grocery bill or the rent. An envelope's spends in a month add up to its Spent.
+_Avoid_: Spending, expense, purchase, payment, outflow
 
 **Refund**:
-Money returned to an envelope, such as a store refund. It goes back to the envelope, not to Ready to Assign.
+Money coming back for something spent from an envelope, such as a store refund or a friend paying you back. It lands in an envelope, not in Ready to Assign.
+_Avoid_: Reimbursement, repayment
 
 **Reallocation**:
 Money moved out of an envelope on a given day, into another envelope or back to Ready to Assign. Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
@@ -56,5 +57,5 @@ A real bank or card account that bank transactions come from. Budgie doesn't tra
 _Avoid_: Wallet
 
 **Bank transaction**:
-The bank's record of money moving in or out of an account, before Budgie has filed it as a Deposit, Spent or Refund, or ignored it.
+The bank's record of money moving in or out of an account, before Budgie has filed it as one or more Deposits, Spends or Refunds, or ignored it.
 _Avoid_: Transaction, statement line, import row

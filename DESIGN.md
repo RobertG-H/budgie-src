@@ -83,8 +83,9 @@ columns fit without that. Tap targets stay comfortable at 375px (daisyUI's defau
 - Amount columns and cells are right-aligned with `tabular-nums` (`text-right tabular-nums`).
 - Negatives always carry a sign (`-$30.00`); overspending also says so in words.
 - The currency code appears once, in the header (`Budget in USD`).
-- Budgeting copy uses only the terms `CLAUDE.md` lists: Budget, Envelope, Deposit, Assigned, Spent, Refund,
-  Available, Overspent, Ready to Assign, Carried over, Starting balance.
+- Budgeting copy uses only the terms `CLAUDE.md` lists: Budget, Envelope, Deposit, Assigned, Spend, Spent,
+  Refund, Available, Overspent, Ready to Assign, Carried over, Starting balance, and other forms of them
+  (Deposited, Refunded, Assign).
 
 ## Components
 
