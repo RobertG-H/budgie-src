@@ -1,0 +1,44 @@
+<%# locals: () %>
+<%# What a form shows when it fails validation. Never saved. %>
+<% invalid_envelope = Budget::Envelope.new.tap do |envelope|
+     envelope.errors.add(:name, "can't be blank")
+     envelope.errors.add(:starting_balance, "can't have more than 2 decimal places")
+   end %>
+<section id="fields" aria-labelledby="fields-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="fields-heading" class="text-xl font-semibold">Form fields</h2>
+  <p class="text-base-content/70">Each field is the components/field partial: a label, a control, and an optional hint and error.</p>
+
+  <%# Nothing here is submitted: there's no submit button, and several fields, so Enter doesn't submit either. %>
+  <%= form_with scope: :sample, url: "#", class: "space-y-6" do |form| %>
+    <%= render "components/field", form: form, attribute: :name, hint: "A hint sits under the field, in muted text." do |field| %>
+      <%= form.text_field :name, **field %>
+    <% end %>
+
+    <%= render "components/field", form: form, attribute: :starting_balance,
+          hint: "The amount already in this envelope. Leave it blank if it's empty." do |field| %>
+      <%= form.number_field :starting_balance, step: 0.01, **field %>
+    <% end %>
+
+    <%= render "components/field", form: form, attribute: :currency, control: :select do |field| %>
+      <%= form.select :currency, Budget.currency_options, { prompt: "Choose a currency" }, field %>
+    <% end %>
+
+    <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
+      <%= form.text_area :notes, rows: 3, **field %>
+    <% end %>
+
+    <%= render "components/field", form: form, attribute: :sample_checkbox, control: :checkbox,
+          label: "Sample checkbox", hint: "A checkbox has its label beside it." do |field| %>
+      <%= form.check_box :sample_checkbox, **field %>
+    <% end %>
+
+    <%= render "components/field", form: form, attribute: :name_with_error, label: "Name",
+          error: "Name can't be blank" do |field| %>
+      <%= form.text_field :name_with_error, **field %>
+    <% end %>
+  <% end %>
+
+  <h3 class="font-semibold">Error summary</h3>
+  <p class="text-base-content/70">The form's errors, listed together at the top of the form.</p>
+  <%= render "application/form_errors", record: invalid_envelope %>
+</section>

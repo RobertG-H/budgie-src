@@ -1,0 +1,101 @@
+require "rails_helper"
+
+RSpec.describe "components/_field", type: :view do
+  # Puts what the block is given onto a plain input, so the spec can look at it.
+  def render_field(record: Budget::Envelope.new, attribute: :name, **options)
+    render inline: <<~ERB, locals: { record: record, attribute: attribute, options: options }
+      <%= form_with model: record, url: "#" do |form| %>
+        <%= render "components/field", form: form, attribute: attribute, **options do |field| %>
+          <%= tag.input type: "text", id: form.field_id(attribute), **field %>
+        <% end %>
+      <% end %>
+    ERB
+  end
+
+  it "labels the control" do
+    render_field
+
+    assert_select "label[for=envelope_name]", text: "Name"
+    assert_select "input#envelope_name.input"
+  end
+
+  it "takes the label's text from the label local" do
+    render_field label: "Envelope name"
+
+    assert_select "label[for=envelope_name]", text: "Envelope name"
+  end
+
+  it "gives the control a border dark enough to see, and marks nothing invalid" do
+    render_field
+
+    assert_select "input[class~='border-base-content/55']"
+    assert_select "input[aria-invalid]", count: 0
+    assert_select "input[aria-describedby]", count: 0
+  end
+
+  it "ties a hint to the control" do
+    render_field hint: "Helpful"
+
+    assert_select "p#envelope_name_hint", text: "Helpful"
+    assert_select "input[aria-describedby=envelope_name_hint]"
+  end
+
+  it "marks the control invalid when its attribute has errors, without repeating the message" do
+    record = Budget::Envelope.new.tap { |envelope| envelope.errors.add(:name, "can't be blank") }
+
+    render_field record: record
+
+    assert_select "input.input-error[aria-invalid=true]"
+    assert_select "input[class~='border-base-content/55']", count: 0
+    assert_select "p", text: /can't be blank/, count: 0
+  end
+
+  it "doesn't mark a control invalid for another attribute's errors" do
+    record = Budget::Envelope.new.tap { |envelope| envelope.errors.add(:starting_balance, "is invalid") }
+
+    render_field record: record
+
+    assert_select "input[aria-invalid]", count: 0
+  end
+
+  it "shows an error under the control and ties it to the control, after the hint" do
+    render_field hint: "Helpful", error: "Name can't be blank"
+
+    assert_select "p#envelope_name_error", text: "Name can't be blank"
+    assert_select "input.input-error[aria-invalid=true][aria-describedby='envelope_name_hint envelope_name_error']"
+  end
+
+  it "works without a record, for a form with only a scope" do
+    render inline: <<~ERB
+      <%= form_with scope: :sample, url: "#" do |form| %>
+        <%= render "components/field", form: form, attribute: :name do |field| %>
+          <%= form.text_field :name, **field %>
+        <% end %>
+      <% end %>
+    ERB
+
+    assert_select "label[for=sample_name]", text: "Name"
+    assert_select "input#sample_name.input[name='sample[name]']"
+  end
+
+  {
+    input: "input",
+    select: "select",
+    textarea: "textarea",
+    checkbox: "checkbox"
+  }.each do |control, css_class|
+    it "gives a #{control} the #{css_class} class, and #{css_class}-error when invalid" do
+      render_field control: control
+      assert_select "input.#{css_class}"
+
+      render_field control: control, error: "Wrong"
+      assert_select "input.#{css_class}-error"
+    end
+  end
+
+  it "puts a checkbox's label beside it, not above" do
+    render_field control: :checkbox
+
+    assert_select "div.flex > input.checkbox + label", text: "Name"
+  end
+end

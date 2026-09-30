@@ -1,0 +1,12 @@
+<%# locals: (type:, message:) %>
+<%# One flash message. The layout renders one for each flash, and the styleguide shows all four types. %>
+<%# Class names are written out in full because Tailwind can't find one built from a variable. %>
+<% variant, role = {
+     "notice" => [ "alert-success", "status" ],
+     "alert" => [ "alert-error", "alert" ],
+     "info" => [ "alert-info", "status" ],
+     "warning" => [ "alert-warning", "alert" ]
+   }.fetch(type.to_s, [ "alert-info", "status" ]) %>
+<div role="<%= role %>" class="alert <%= variant %>">
+  <span><%= message %></span>
+</div>

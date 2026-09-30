@@ -1,0 +1,45 @@
+<%# locals: () %>
+<section id="buttons" aria-labelledby="buttons-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="buttons-heading" class="text-xl font-semibold">Buttons</h2>
+
+  <h3 class="font-semibold">Variants</h3>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" class="btn">Default</button>
+    <button type="button" class="btn btn-primary">Primary</button>
+    <button type="button" class="btn btn-secondary">Secondary</button>
+    <button type="button" class="btn btn-accent">Accent</button>
+    <button type="button" class="btn btn-neutral">Neutral</button>
+    <button type="button" class="btn btn-info">Info</button>
+    <button type="button" class="btn btn-success">Success</button>
+    <button type="button" class="btn btn-warning">Warning</button>
+    <button type="button" class="btn btn-error">Error</button>
+  </div>
+
+  <h3 class="font-semibold">Styles</h3>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" class="btn btn-primary btn-outline">Outline</button>
+    <button type="button" class="btn btn-ghost">Ghost</button>
+    <button type="button" class="btn btn-ghost text-error">Ghost, error text</button>
+    <button type="button" class="btn btn-link">Link</button>
+  </div>
+
+  <h3 class="font-semibold">Sizes</h3>
+  <div class="flex flex-wrap items-center gap-2">
+    <button type="button" class="btn btn-primary btn-xs">Extra small</button>
+    <button type="button" class="btn btn-primary btn-sm">Small</button>
+    <button type="button" class="btn btn-primary">Medium</button>
+    <button type="button" class="btn btn-primary btn-lg">Large</button>
+  </div>
+
+  <h3 class="font-semibold">States</h3>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" class="btn btn-primary" disabled>Disabled</button>
+    <button type="button" class="btn btn-primary" aria-busy="true">
+      <span class="loading loading-spinner" aria-hidden="true"></span>
+      Saving
+    </button>
+  </div>
+
+  <h3 class="font-semibold">Full width</h3>
+  <button type="button" class="btn btn-primary btn-block">Block</button>
+</section>

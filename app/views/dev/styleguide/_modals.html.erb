@@ -1,0 +1,9 @@
+<%# locals: () %>
+<section id="modals" aria-labelledby="modals-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="modals-heading" class="text-xl font-semibold">Modal</h2>
+  <p class="text-base-content/70">A native dialog, opened by a small Stimulus controller. Esc, the Close button and a click outside all close it.</p>
+
+  <%= render "components/modal", title: "Modal title", trigger: "Open modal" do %>
+    <p class="text-base-content/70">The modal's content goes here.</p>
+  <% end %>
+</section>

@@ -1,1 +1,78 @@
 @import "tailwindcss";
+
+/* daisyUI is vendored as two plugin files next to this one (docs/daisyui.md). They hold no markup to scan,
+   and neither do the docs, which only quote class names. */
+@source not "./daisyui{,*}.mjs";
+@source not "../../../docs";
+@source not "../../../*.md";
+
+/* Only the theme's roles exist as colours, so bg-gray-200 or text-red-700 produce nothing. See DESIGN.md. */
+@theme {
+  --color-*: initial;
+}
+
+/* `budgie` isn't one of daisyUI's built-in themes, so this only turns the built-in ones off. */
+@plugin "./daisyui.mjs" {
+  themes: budgie --default;
+}
+
+/* The one theme. Each value comes from budgie-colors.css; DESIGN.md has the mapping and the contrast ratios. */
+@plugin "./daisyui-theme.mjs" {
+  name: "budgie";
+  default: true;
+  color-scheme: light;
+
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f8fa; /* neutral-50 */
+  --color-base-300: #dae1e5; /* neutral-200 */
+  --color-base-content: #212629; /* neutral-950 */
+
+  --color-primary: #006a8d; /* primary-700 */
+  --color-primary-content: #ffffff;
+  --color-secondary: #697379; /* neutral-600 */
+  --color-secondary-content: #ffffff;
+  --color-accent: #00baf5; /* primary-400 */
+  --color-accent-content: #212629; /* neutral-950 */
+  --color-neutral: #353c3f; /* neutral-900 */
+  --color-neutral-content: #f5f8fa; /* neutral-50 */
+
+  --color-info: #82d7ff; /* primary-300 */
+  --color-info-content: #002a3a; /* primary-950 */
+  --color-success: #1e7329; /* success-700 */
+  --color-success-content: #ffffff;
+  --color-warning: #ed9c0a; /* warning-400 */
+  --color-warning-content: #212629; /* neutral-950 */
+  --color-error: #ac262a; /* danger-700 */
+  --color-error-content: #ffffff;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  /* No shadows and no texture. */
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Tables. daisyUI pads each cell 1rem either side, which leaves no room for three money columns at 375px, so
+   below sm they get half. It also mutes table headings to 60% of base-content (4.16:1, under AA) and won't let
+   them wrap; here they're 70% (5.70:1) and can. This sits in the utilities layer to beat daisyUI's own rules,
+   at zero specificity so that a utility on a table still beats it. See DESIGN.md. */
+@layer utilities {
+  :where(.table) :where(th, td) {
+    padding-inline: 0.5rem;
+  }
+
+  @media (width >= 40rem) {
+    :where(.table) :where(th, td) {
+      padding-inline: 1rem;
+    }
+  }
+
+  :where(.table) :where(thead, tfoot) {
+    color: color-mix(in oklab, currentColor 70%, transparent);
+    white-space: normal;
+  }
+}

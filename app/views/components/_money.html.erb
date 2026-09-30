@@ -1,0 +1,6 @@
+<%# locals: (amount:, budget:, overspent: false) %>
+<%# An amount in the budget's currency. Negatives carry their sign and turn red, and `overspent` also says so in words, so colour is never the only cue. %>
+<%= tag.span money(amount, budget: budget), class: ("text-error" if amount.negative?) %>
+<% if overspent %>
+  <span class="badge badge-error badge-sm">Overspent</span>
+<% end %>

@@ -1,0 +1,15 @@
+<% content_for :title, "Styleguide · Budgie" %>
+
+<%= render "components/page_header", title: "Styleguide",
+      description: "The Budgie theme and its base components, drawn from sample data. Local development only." %>
+
+<div class="mt-8 space-y-8">
+  <%= render "dev/styleguide/colours" %>
+  <%= render "dev/styleguide/buttons" %>
+  <%= render "dev/styleguide/fields" %>
+  <%= render "dev/styleguide/tables", budget: @budget %>
+  <%= render "dev/styleguide/cards", budget: @budget %>
+  <%= render "dev/styleguide/alerts" %>
+  <%= render "dev/styleguide/empty_states" %>
+  <%= render "dev/styleguide/modals" %>
+</div>

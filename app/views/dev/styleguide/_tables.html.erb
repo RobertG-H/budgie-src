@@ -1,0 +1,35 @@
+<%# locals: (budget:) %>
+<%# Assigned and Spent for each envelope. Available is what's left, and Overspent when that's below zero. %>
+<% rows = [
+     { name: "Groceries", assigned: 400, spent: 250 },
+     { name: "Rent", assigned: 1200, spent: 1200 },
+     { name: "Dining out", assigned: 100, spent: 130 }
+   ] %>
+<section id="tables" aria-labelledby="tables-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="tables-heading" class="text-xl font-semibold">Tables</h2>
+  <p class="text-base-content/70">Amount columns are right-aligned with tabular figures. A negative keeps its sign, and Overspent says so in words.</p>
+
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Envelope</th>
+          <th scope="col" class="text-right">Assigned</th>
+          <th scope="col" class="text-right">Spent</th>
+          <th scope="col" class="text-right">Available</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% rows.each do |row| %>
+          <% available = row[:assigned] - row[:spent] %>
+          <tr>
+            <td><%= row[:name] %></td>
+            <td class="text-right tabular-nums"><%= render "components/money", amount: row[:assigned], budget: budget %></td>
+            <td class="text-right tabular-nums"><%= render "components/money", amount: row[:spent], budget: budget %></td>
+            <td class="text-right tabular-nums"><%= render "components/money", amount: available, budget: budget, overspent: available.negative? %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</section>

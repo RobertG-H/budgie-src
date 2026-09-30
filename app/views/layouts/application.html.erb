@@ -24,32 +24,34 @@
   </head>
 
   <body>
-    <header class="border-b border-gray-200">
-      <div class="container mx-auto px-5 py-4 flex items-center justify-between gap-6">
-        <div class="flex items-baseline gap-4">
+    <header class="border-b border-base-300">
+      <div class="navbar mx-auto max-w-3xl px-4 sm:px-6">
+        <%# The currency sits under the name on a phone, and beside it from sm up. %>
+        <div class="flex flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-4">
           <%= link_to "Budgie", root_path, class: "text-xl font-semibold" %>
           <% if authenticated? && (budget = Current.user.budget) %>
-            <span class="text-sm text-gray-600">Budget in <%= budget.currency %></span>
+            <span class="text-sm text-base-content/70">Budget in <%= budget.currency %></span>
           <% end %>
         </div>
 
-        <nav aria-label="Main" class="flex items-center gap-6">
-          <% if authenticated? %>
+        <% if authenticated? %>
+          <nav aria-label="Main" class="flex flex-none items-center gap-2">
             <% if Current.user.budget %>
-              <%= link_to "Envelopes", envelopes_path, class: "text-sm text-gray-600 hover:text-gray-900" %>
+              <%= link_to "Envelopes", envelopes_path, class: "btn btn-ghost btn-sm" %>
             <% end %>
-            <%= button_to "Sign out", session_path, method: :delete, class: "text-sm text-gray-600 hover:text-gray-900" %>
-          <% end %>
-        </nav>
+            <%= button_to "Sign out", session_path, method: :delete, class: "btn btn-ghost btn-sm" %>
+          </nav>
+        <% end %>
       </div>
     </header>
 
-    <main class="container mx-auto px-5 py-10">
-      <% if notice %>
-        <p class="mb-6 rounded-md bg-green-50 px-4 py-3 text-green-800" role="status"><%= notice %></p>
-      <% end %>
-      <% if alert %>
-        <p class="mb-6 rounded-md bg-red-50 px-4 py-3 text-red-800" role="alert"><%= alert %></p>
+    <main class="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <% if flash.any? %>
+        <div class="mb-6 space-y-2">
+          <% flash.each do |type, message| %>
+            <%= render "components/flash", type: type, message: message %>
+          <% end %>
+        </div>
       <% end %>
 
       <%= yield %>
