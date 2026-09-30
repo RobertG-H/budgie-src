@@ -1,0 +1,3 @@
+# Budget records are source-agnostic
+
+A Deposit, Spent or Refund looks the same whether someone typed it in or it came from outside Budgie. Records from outside, such as bank transactions from a CSV or bank sync and later Splitwise expenses, live in their own tables. Filing one creates an ordinary budget record, which is linked back to the external record it came from, or marks the external record as ignored (for example, a card payment between the user's own accounts). This keeps the core tables free of import columns, so they can be built before any importer exists. Undoing an import deletes the budget records it created, then its bank transactions.
