@@ -94,6 +94,24 @@ Request, model and service specs use FactoryBot and shoulda-matchers; there are 
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
 In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
 
+### Frontend
+
+`DESIGN.md` has the UI rules — colour, layout, money formatting, components and a "Don't" list — and is short enough to read before changing a view. `docs/daisyui.md` is daisyUI's own reference, saved verbatim from its `llms.txt`; read it (by path — it's too big to `@`-import into every session) when adding or changing a daisyUI component.
+
+daisyUI is vendored as two plugin files, `app/assets/tailwind/daisyui.mjs` and `daisyui-theme.mjs`, pinned to a release rather than fetched live; `docs/daisyui.md` has the pinned version and the bump procedure. They define the one theme, `budgie`; `@theme { --color-*: initial; }` in `app/assets/tailwind/application.css` makes Tailwind's raw palette classes (`bg-gray-200`, `text-red-700`, …) produce nothing, so a stray one fails loudly rather than drifting in unnoticed.
+
+> **Local development only.** `/styleguide`, `/dev/sign_in`, the seeded dev user (`db/seeds/development.rb`), `.mcp.json` and Playwright MCP exist to help *view* or *build* the UI on a developer's own machine, and must never be reachable in `test`, on the testing host or on the production host. Testing and production both run `RAILS_ENV=production`, so every guard checks `Rails.env.development?`, never `!Rails.env.production?`. `config/routes.rb` only draws `/styleguide` and `/dev/sign_in` inside `if Rails.env.development?`, and their controllers (`Dev::StyleguideController`, `Dev::SessionsController`, both under `app/controllers/dev/`) refuse outside development too, so a routing mistake alone can't expose them. `spec/requests/development_only_spec.rb` and `spec/controllers/dev/` prove both; `spec/db/seeds_spec.rb` proves `db:prepare` creates no dev user outside development.
+
+#### Visual review
+
+After a UI change:
+
+1. Start the app with `docker compose up` (`web`, `css`, `db`) and use `http://localhost:3000` — not `bin/dev`, which needs host Ruby this checkout doesn't have.
+2. Sign in with the dev shortcut, `GET /dev/sign_in` (it needs the seed loaded once: `docker compose run --rm web bin/rails db:seed`), or open `/styleguide`, which doesn't need it.
+3. Open each affected page with Playwright MCP and screenshot it at **375px** (mobile) and **1280px** (desktop). Playwright MCP is configured in `.mcp.json`, project-scoped and `npx`-based — Node is needed on the developer's machine only, for that — and restricted to `http://localhost:3000`. Never point it at the testing or production hosts, and never use the `/styleguide` or `/dev/sign_in` shortcuts anywhere else.
+4. Compare against `DESIGN.md`, fix what doesn't match, and screenshot again.
+5. Only then report the work done. If Docker or Playwright MCP isn't available, say the visual review wasn't done rather than skipping it silently.
+
 ## Tickets and product rules
 
 - Work is tracked as GitHub issues in `RobertG-H/budgie-src` titled `[NN] ...`, where the number is the build order. An issue's Decisions, Build and Done when sections are the spec, and they're more detailed than the plan linked from issue #1.

@@ -50,3 +50,6 @@
 /.dockerignore
 /Dockerfile*
 /compose.yaml
+
+# Ignore Playwright MCP config: developer-machine tooling only, not used by the app at runtime.
+/.mcp.json

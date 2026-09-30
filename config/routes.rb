@@ -16,6 +16,16 @@ Rails.application.routes.draw do
   resource :budget, only: [ :new, :create ]
   resources :envelopes, except: :show
 
+  # Local development only: the styleguide, and a shortcut that signs in as the seeded user. Testing and
+  # production both run RAILS_ENV=production, so this is checked against development, never against
+  # not-production. The controllers refuse outside development too. See DESIGN.md.
+  if Rails.env.development?
+    scope module: :dev do
+      get "styleguide" => "styleguide#show"
+      get "dev/sign_in" => "sessions#create", as: :dev_sign_in
+    end
+  end
+
   # Sent emails, such as invites, land here instead of being delivered.
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?
 

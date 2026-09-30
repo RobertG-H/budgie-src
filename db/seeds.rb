@@ -7,3 +7,7 @@
 #   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
+
+# Sample data for local development. db:prepare seeds a new database in every environment, including the
+# testing and production hosts, so this only runs in development. See db/seeds/development.rb.
+load Rails.root.join("db/seeds/development.rb") if Rails.env.development?

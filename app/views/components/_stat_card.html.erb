@@ -1,0 +1,11 @@
+<%# locals: (title:, value:, description: nil) %>
+<%# One headline number, such as Ready to Assign. daisyUI mutes stat text to 60%, which is under AA here, so it's set back to 70%. %>
+<div class="stats w-full border border-base-300">
+  <div class="stat">
+    <div class="stat-title text-base-content/70"><%= title %></div>
+    <div class="stat-value"><%= value %></div>
+    <% if description %>
+      <div class="stat-desc text-base-content/70"><%= description %></div>
+    <% end %>
+  </div>
+</div>

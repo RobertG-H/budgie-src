@@ -16,6 +16,7 @@ Everything runs in Docker Compose. See the [README](../README.md#getting-started
 | Attach to the debugger | `docker compose attach web` |
 | Lint | `docker compose run --rm web bin/rubocop` |
 | Build the production image | `docker build .` |
+| Load the sample development data (dev user, budget, envelopes) | `docker compose run --rm web bin/rails db:seed` |
 
 Other Rails commands work the same way: `docker compose run --rm web bin/rails <command>`.
 Inside a shell, the repo is at `/app` and you can run `bin/rails`, `bin/rspec` and the rest directly. Leave with `exit`.
@@ -37,6 +38,17 @@ Detach with `Ctrl-P` `Ctrl-Q`. `Ctrl-C` can stop the server.
 Add it to the `Gemfile` and restart the containers.
 Missing gems are installed into the `bundle` volume when a container starts, so the image never needs rebuilding.
 Commit the updated `Gemfile.lock`.
+
+## Frontend and Playwright MCP
+
+Node on your machine is only for Playwright MCP's `npx`, and only there — it's not in the `Gemfile`, in
+Compose, in the `Dockerfile` or in CI, and there's no `package.json`. `.mcp.json` at the repo root configures
+it, pinned to a version and restricted to `http://localhost:3000`; Claude Code asks you to approve the
+project-scoped server the first time you use it.
+
+`/styleguide` shows the theme and base components without signing in. `GET /dev/sign_in` starts a session for
+the seeded development user, once the seed above is loaded. Both exist only when `RAILS_ENV` is
+`development` — see `CLAUDE.md`'s Frontend section and `DESIGN.md` for the rules they're checked against.
 
 ## Editor tooling (optional)
 

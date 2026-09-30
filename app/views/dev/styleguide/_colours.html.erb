@@ -1,0 +1,40 @@
+<%# locals: () %>
+<%# Class names are written out in full because Tailwind can't find one built from a variable. %>
+<%
+  roles = [
+    { role: "base-100", content: "base-content", classes: "bg-base-100 text-base-content border border-base-300" },
+    { role: "base-200", content: "base-content", classes: "bg-base-200 text-base-content" },
+    { role: "base-300", content: "base-content", classes: "bg-base-300 text-base-content" },
+    { role: "primary", content: "primary-content", classes: "bg-primary text-primary-content" },
+    { role: "secondary", content: "secondary-content", classes: "bg-secondary text-secondary-content" },
+    { role: "accent", content: "accent-content", classes: "bg-accent text-accent-content" },
+    { role: "neutral", content: "neutral-content", classes: "bg-neutral text-neutral-content" },
+    { role: "info", content: "info-content", classes: "bg-info text-info-content" },
+    { role: "success", content: "success-content", classes: "bg-success text-success-content" },
+    { role: "warning", content: "warning-content", classes: "bg-warning text-warning-content" },
+    { role: "error", content: "error-content", classes: "bg-error text-error-content" }
+  ]
+%>
+<section id="colours" aria-labelledby="colours-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="colours-heading" class="text-xl font-semibold">Colours</h2>
+  <p class="text-base-content/70">Each theme role with its content colour. Views use only these, through daisyUI's semantic classes.</p>
+
+  <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    <% roles.each do |swatch| %>
+      <div class="rounded-box p-4 <%= swatch[:classes] %>">
+        <p class="font-semibold"><%= swatch[:role] %></p>
+        <p class="text-sm"><%= swatch[:content] %></p>
+      </div>
+    <% end %>
+  </div>
+
+  <h3 class="font-semibold">Text on the page</h3>
+  <div class="space-y-2">
+    <p>Body text, base-content</p>
+    <p class="text-base-content/70">Muted text, base-content at 70%</p>
+    <p class="text-primary">Primary text</p>
+    <p class="text-secondary">Secondary text</p>
+    <p class="text-success">Success text</p>
+    <p class="text-error">Error text</p>
+  </div>
+</section>

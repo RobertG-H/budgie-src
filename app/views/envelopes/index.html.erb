@@ -1,36 +1,39 @@
 <% content_for :title, "Envelopes · Budgie" %>
 
-<div class="flex items-center justify-between gap-6">
-  <h1 class="text-2xl font-semibold">Envelopes</h1>
-  <%= link_to "New envelope", new_envelope_path, class: "rounded-md bg-gray-900 px-4 py-2 font-medium text-white hover:bg-gray-700" %>
-</div>
-
-<% if @envelopes.any? %>
-  <table class="mt-8 w-full">
-    <thead>
-      <tr class="border-b border-gray-200 text-left text-sm text-gray-600">
-        <th scope="col" class="py-2 font-medium">Envelope</th>
-        <th scope="col" class="py-2 text-right font-medium">Starting balance</th>
-        <th scope="col" class="py-2"><span class="sr-only">Actions</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      <% @envelopes.each do |envelope| %>
-        <tr id="<%= dom_id(envelope) %>" class="border-b border-gray-200">
-          <td class="py-3"><%= envelope.name %></td>
-          <td class="py-3 text-right tabular-nums"><%= money(envelope.starting_balance, budget: envelope.budget) %></td>
-          <td class="py-3">
-            <div class="flex justify-end gap-4 text-sm">
-              <%= link_to "Edit", edit_envelope_path(envelope), class: "text-gray-600 hover:text-gray-900" %>
-              <%= button_to "Delete", envelope_path(envelope), method: :delete,
-                    form: { data: { turbo_confirm: "Delete the #{envelope.name} envelope?" } },
-                    class: "text-red-700 hover:text-red-900" %>
-            </div>
-          </td>
-        </tr>
-      <% end %>
-    </tbody>
-  </table>
-<% else %>
-  <p class="mt-8 text-gray-600">You don't have any envelopes yet.</p>
+<%= render "components/page_header", title: "Envelopes" do %>
+  <%= link_to "New envelope", new_envelope_path, class: "btn btn-primary" %>
 <% end %>
+
+<div class="mt-8">
+  <% if @envelopes.any? %>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Envelope</th>
+            <th scope="col" class="text-right">Starting balance</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @envelopes.each do |envelope| %>
+            <tr id="<%= dom_id(envelope) %>">
+              <td><%= envelope.name %></td>
+              <td class="text-right tabular-nums"><%= render "components/money", amount: envelope.starting_balance, budget: envelope.budget %></td>
+              <td>
+                <div class="flex justify-end gap-2">
+                  <%= link_to "Edit", edit_envelope_path(envelope), class: "btn btn-ghost btn-sm" %>
+                  <%= button_to "Delete", envelope_path(envelope), method: :delete,
+                        form: { data: { turbo_confirm: "Delete the #{envelope.name} envelope?" } },
+                        class: "btn btn-ghost btn-sm text-error" %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <%= render "components/empty_state", message: "You don't have any envelopes yet." %>
+  <% end %>
+</div>

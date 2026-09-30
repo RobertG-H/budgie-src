@@ -1,0 +1,18 @@
+<%# locals: (title:, trigger:) %>
+<%# A button that opens a native <dialog>. The block is the dialog's content. The modal Stimulus controller opens it; Esc and the Close button close it natively, and a click on the backdrop closes it through the controller. %>
+<% title_id = "modal-title-#{SecureRandom.hex(4)}" %>
+<div data-controller="modal">
+  <button type="button" class="btn" data-action="modal#open"><%= trigger %></button>
+
+  <dialog class="modal" aria-labelledby="<%= title_id %>" data-modal-target="dialog" data-action="click->modal#closeOnBackdrop">
+    <div class="modal-box">
+      <h2 id="<%= title_id %>" class="text-lg font-semibold"><%= title %></h2>
+      <div class="mt-4"><%= yield %></div>
+      <div class="modal-action">
+        <form method="dialog">
+          <button class="btn">Close</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+</div>

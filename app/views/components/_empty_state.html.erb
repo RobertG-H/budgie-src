@@ -1,0 +1,12 @@
+<%# locals: (message:, title: nil) %>
+<%# What a list shows when it has nothing in it. The block, if there is one, holds what to do next. %>
+<% actions = yield %>
+<div class="rounded-box border border-dashed border-base-300 p-8 text-center">
+  <% if title %>
+    <p class="font-semibold"><%= title %></p>
+  <% end %>
+  <p class="text-base-content/70"><%= message %></p>
+  <% if actions.present? %>
+    <div class="mt-4"><%= actions %></div>
+  <% end %>
+</div>
