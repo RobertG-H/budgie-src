@@ -80,10 +80,10 @@ No diff means the check passes. Otherwise the rebuilt `schema.rb` is what the mi
 
 ## The ruleset
 
-A repository ruleset on `main` enforces the checks. The operator creates or updates it by hand, and only once the pull request that adds a new required check has merged: until the check is on `main`, no pull request can report it, so requiring it would block them all.
-That's why `build` joins the ruleset only after the pull request that added it merges, the same way `test` did.
+A repository ruleset on `main` enforces the checks. The operator creates and updates it by hand.
+A new check can only be required once it's already on `main`: until then no pull request can report it, so requiring it would block them all.
 
-In GitHub, go to the repo's **Settings → Rules → Rulesets → New ruleset → New branch ruleset** (or open the existing `main` ruleset to add `build` to it):
+In GitHub, go to the repo's **Settings → Rules → Rulesets → New ruleset → New branch ruleset**, or open the existing `main` ruleset to change it:
 
 - **Ruleset name:** `main`
 - **Enforcement status:** **Active**
@@ -107,7 +107,7 @@ The admin bypass, or a direct push, can still land a commit on `main` that never
 
 ## Dependabot
 
-Dependabot's pull requests run the same checks — the four required from the start, plus `build` once it joins the ruleset — and the ruleset blocks them the same way, so a bump that breaks the app can't merge.
+Dependabot's pull requests run the same checks as any other, and the ruleset blocks them the same way, so a bump that breaks the app can't merge.
 `build`'s registry-cache login is best-effort, so a Dependabot pull request builds without the cache: see [How the jobs run](#how-the-jobs-run).
 
 ## Verify

@@ -17,9 +17,9 @@ Both hosts run the same image with `RAILS_ENV=production`, from the same `config
 What differs between them comes from each destination's config file and secrets, so testing proves production's configuration rather than a lookalike.
 
 **CI deploys, not your laptop.** A merge to `main` deploys to testing on its own, once CI has passed on that commit on `main` itself. Production only deploys when the operator dispatches **Deploy production**, in GitHub's Actions tab, and only for a commit that testing has already run, using the very image testing built. See [CI deploys](#ci-deploys).
-Deploying from your laptop, covered from [Deploying by hand](#deploying-by-hand-break-glass) onward, still works, but it's break-glass only: for the first setup of a destination, for a deploy when Actions itself is down, and for the operator tasks in `docs/invites.md` that run through the same `kamal` Compose service.
+Deploying from your laptop, covered from [Deploying by hand](#deploying-by-hand-break-glass) onward, still works, but it's break-glass only: for the first setup of a destination, for a deploy when Actions itself is down, and for the operator tasks in [Operating Budgie](operations.md), which run through the same `kamal` Compose service.
 
-> **Production holds no real budget data until backups exist.** Its database is only on the VPS's own disk until ticket 16 copies it somewhere else and proves a restore. Until then, use production for invites, sign-ins and envelopes you can afford to lose.
+> **Production holds no real budget data until backups exist.** Its database is on the VPS's own disk and nowhere else, and no restore has been rehearsed, so use production for invites, sign-ins and envelopes you can afford to lose.
 
 ## What lives where
 
@@ -68,9 +68,9 @@ ssh-add - <<< "$SSH_PRIVATE_KEY"
 
 A fresh runner's `~/.ssh/known_hosts` is empty, so without pinning the host key, Kamal would accept whatever key answers at that IP address the first time. `TESTING_SSH_KNOWN_HOSTS` and `PRODUCTION_SSH_KNOWN_HOSTS` each hold that host's `known_hosts` lines, keyed by its IP address the way [the laptop already records them](#each-hosts-key-under-its-ip-address), from `ssh-keygen -F <ip>`. A step appends the secret to `~/.ssh/known_hosts` before Kamal runs. Running `ssh-keyscan` at run time was rejected on purpose: it trusts whatever answers, which is the exact check this is meant to prevent.
 
-### The secrets
+### The environment secrets
 
-Each environment has nine secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's version](#the-secrets-1) for what each one is:
+Each environment has nine secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's copy](#the-secrets-on-your-laptop) for what each one is:
 
 | Secret | What it is |
 | --- | --- |
@@ -118,7 +118,7 @@ Two things on your Mac, once: an SSH key for Kamal, and each host's key recorded
 
 #### Kamal's SSH key
 
-You log in to the hosts with the 1Password key from [Provisioning the hosts](provisioning.md#before-you-start-the-ssh-key-in-1password), but Kamal can't use it.
+You log in to the hosts with the 1Password key from [Provisioning the hosts](provisioning.md#the-ssh-key-in-1password), but Kamal can't use it.
 The `kamal` container only gets the SSH agent that Docker Desktop forwards, which is the macOS one, and neither `~/.ssh/config` nor 1Password's agent can reach the container.
 So Kamal gets a key of its own, kept in the macOS agent and authorised for `deploy` on both hosts.
 Without it, `kamal setup` fails with `Net::SSH::AuthenticationFailed` for `deploy@<ip>`, because the container offers the hosts only keys they don't accept.
@@ -168,7 +168,7 @@ ssh budgie-production 'sed -i "/ kamal-laptop$/d" ~/.ssh/authorized_keys'
 
 #### Each host's key, under its IP address
 
-Kamal connects to each host's IP address, from [`TESTING_HOST_IP` and `PRODUCTION_HOST_IP`](#the-secrets-1), and the container checks each host's key against your `~/.ssh/known_hosts`, mounted read-only.
+Kamal connects to each host's IP address, from [`TESTING_HOST_IP` and `PRODUCTION_HOST_IP`](#the-secrets-on-your-laptop), and the container checks each host's key against your `~/.ssh/known_hosts`, mounted read-only.
 If your `~/.ssh/config` uses the IP addresses as `HostName`, as [Provisioning the hosts](provisioning.md) sets it up, logging in as `budgie-testing` and `budgie-production` has already recorded them.
 Check with each host's address from the OVH panel or your `~/.ssh/config`:
 
@@ -189,9 +189,9 @@ If it says the key has *changed*, stop and find out why: refusing that connectio
 
 Because the file is read-only, a host the container has never seen isn't refused, just not remembered. Recording each IP address is what turns the check into a real one.
 
-## The secrets
+## The secrets on your laptop
 
-This is the laptop's break-glass copy of the secrets. [CI's own copy](#the-secrets) lives in the `testing` and `production` GitHub environments instead, under the same names.
+This is the break-glass copy. [CI's own copy](#the-environment-secrets) lives in the `testing` and `production` GitHub environments instead, under the same names.
 
 Deploys read their secrets from three files in the repo root, next to your development `.env`:
 
@@ -289,7 +289,7 @@ Testing first. Deploy production only once testing passes [the checks](#verify).
 - The host is [provisioned](provisioning.md) and behind its [tunnel](cloudflare.md), with the throwaway origin torn down, so nothing holds port 80.
 - The destination's [Google OAuth client](google-oauth.md#testing-and-production) exists.
 - [Zedmail](email.md#setting-it-up) has verified `budgiebuddie.com`, and the host passes the check that it can reach Zedmail's relay.
-- [The secrets](#the-secrets-1) are in place, with nothing empty.
+- [The secrets](#the-secrets-on-your-laptop) are in place, with nothing empty.
 - [Kamal's SSH key](#kamals-ssh-key) is authorised on the host and loaded into the agent, and the host's key is recorded under its IP address.
 
 **2. Set it up.**
@@ -369,27 +369,8 @@ CI never releases a stale lock itself: a killed job can't tell whether something
 
 ## Operator tasks
 
-The `task` alias runs `bin/rails` in the running app container, so the rake tasks from [Invites and users](invites.md) work unchanged:
-
-| Task | Command |
-| --- | --- |
-| Invite someone and email them | `docker compose run --rm kamal task invite:create EMAIL=someone@example.com -d production` |
-| Send a pending invite again | `docker compose run --rm kamal task invite:resend EMAIL=someone@example.com -d production` |
-| Revoke a pending invite | `docker compose run --rm kamal task invite:revoke EMAIL=someone@example.com -d production` |
-| List invites | `docker compose run --rm kamal task invite:list -d production`, optionally with `STATUS=pending`, `accepted` or `revoked` |
-| Delete a user | `docker compose run --rm kamal task user:delete EMAIL=someone@example.com -d production` |
-| Change a budget's currency | `docker compose run --rm kamal task budget:currency EMAIL=someone@example.com CURRENCY=USD -d production` |
-
-`user:delete` and `budget:currency` ask you to type the email to confirm, which is why the alias is interactive. Use `-d testing` for testing.
-
-The other aliases work the same way, for example `docker compose run --rm kamal console -d production`:
-
-| Alias | What it does |
-| --- | --- |
-| `console` | Opens a Rails console in the running app container |
-| `logs` | Follows the app's logs |
-| `dbc` | Opens `psql` on the primary database. It asks for that destination's database password instead of printing it |
-| `shell` | Opens `bash` in the running app container |
+Invites, deleting a user and changing a budget's currency all run on a host through Kamal's `task` alias,
+as do the `console`, `logs`, `dbc` and `shell` aliases. See [Operating Budgie](operations.md).
 
 ## Rollback
 
@@ -567,4 +548,4 @@ A rebuilt host has a new IP address and a new host key:
 4. `docker compose run --rm kamal setup -d <destination>`, with `--skip-push` for production.
 5. Record the new host's key under its new IP address, the way [the laptop already does](#each-hosts-key-under-its-ip-address), and update that destination's `_SSH_KNOWN_HOSTS` GitHub environment secret with `ssh-keygen -F <new ip>`'s output.
 
-Its database starts empty: until ticket 16, there's no backup to restore.
+Its database starts empty: there's no backup to restore.

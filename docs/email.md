@@ -1,7 +1,7 @@
 # Email
 
 Budgie sends email immediately rather than through a background job, so whoever triggered it sees whether sending worked.
-The only email so far is the [invite](invites.md#the-invite-email).
+The only email Budgie sends is the [invite](operations.md#the-invite-email).
 
 ## Development
 
@@ -44,7 +44,7 @@ The username is only your login address, but it's personal, so it stays out of g
 3. Generate an API key per environment, one for testing and one for production. Each starts with `ses_`, and it's that environment's SMTP password.
    Separate keys mean a leaked testing key can be revoked without breaking production's mail.
    If Zedmail only allows one key per account, both environments use it, and revoking it stops both.
-4. Add the username and keys to the env files, and to your password manager. See [Deploying](deployment.md#the-secrets-1) for the files, and the same section for the matching GitHub environment secret CI reads instead.
+4. Add the username and keys to the env files, and to your password manager. See [Deploying](deployment.md#the-secrets-on-your-laptop) for the files, and the same section for the matching GitHub environment secret CI reads instead.
 
    ```
    # .env.testing
