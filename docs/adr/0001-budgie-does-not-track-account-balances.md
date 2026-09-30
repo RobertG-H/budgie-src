@@ -1,6 +1,6 @@
 # Budgie doesn't track account balances
 
-Budgie is an envelope budget: it cares about all the money a person has and which envelope it's allocated to, not what sits in each bank account. So an Account exists only as the source of bank transactions (for CSV import, deduplication and, later, bank sync), with no balance, no reconciliation, and no link from a Deposit, Spent or Refund to an account. Keeping each account's balance right is the user's business.
+Budgie is an envelope budget: it cares about all the money a person has and which envelope it's allocated to, not what sits in each bank account. So an Account exists only as the source of bank transactions (for CSV import, deduplication and, later, bank sync), with no balance, no reconciliation, and no link from a Deposit, Spend or Refund to an account. Keeping each account's balance right is the user's business.
 
 ## Considered Options
 
