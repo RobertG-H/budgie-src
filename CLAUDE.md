@@ -120,6 +120,8 @@ After a UI change:
 - In a PR description, put "close", "fixes" or "resolves" next to `#N` only when merging should close `#N`. GitHub matches them mid-sentence ("would close #10" closed #10 on merge), and Dependabot treats its own PR closed that way as dismissed and deletes its branch.
 - User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spend, Spent, Refund, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Other forms of a listed term count as that term, such as Deposited, Refunded or Assign. Internal field names stay out of the UI.
 - Envelopes never reset at month end: leftover money and overspending both carry into the next month.
+- A Deposit counts toward Ready to Assign in the month of its date or the month after, so a user can live on last month's money (`docs/adr/0005-a-deposit-can-count-toward-next-month.md`).
+- Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 
 ## Agent skills
 

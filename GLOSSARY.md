@@ -17,11 +17,11 @@ The amount already in an envelope before Budgie tracked it. It can be negative.
 ## Money moving
 
 **Deposit**:
-New money coming into the budget, such as a paycheck. It lands in Ready to Assign, not in any envelope.
+New money coming into the budget, such as a paycheck. It lands in Ready to Assign, not in any envelope, in the month it arrives or the month after.
 _Avoid_: Income, inflow
 
 **Assigned**:
-Money moved from Ready to Assign into one envelope for one month.
+Money moved from Ready to Assign into one envelope for one month. A new month starts with the previous month's amounts.
 _Avoid_: Budgeted
 
 **Spend**:
