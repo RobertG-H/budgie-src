@@ -5,9 +5,22 @@
 <%= link_to "Back to #{@account.name}", account_path(@account), class: "link" %>
 
 <div class="mt-4">
+  <%# Undo sits beside the figures it takes back. It's only there while the Import can be undone; otherwise the reason is under the title. %>
   <%= render "components/page_header", title: "Import",
-        description: "#{@import.file_name}, into #{@account.name}, #{@import.created_at.strftime("%b %-d, %Y at %-l:%M %p")}" %>
+        description: "#{@import.file_name}, into #{@account.name}, #{@import.created_at.strftime("%b %-d, %Y at %-l:%M %p")}" do %>
+    <% if @undo_refusal.nil? %>
+      <%= render "components/delete_button", path: import_path(@import), label: "Undo", confirm: undo_confirmation(@import, summary.count) %>
+    <% end %>
+  <% end %>
 </div>
+
+<p class="mt-4 text-base-content/70">
+  <% if @undo_refusal %>
+    <%= @undo_refusal %>
+  <% else %>
+    You can undo this Import until <%= @import.undo_window_ends_at.strftime("%b %-d, %Y at %-l:%M %p") %>, while it's the latest in this account.
+  <% end %>
+</p>
 
 <%# What the Import brought in, so a wrong sign or a swapped day and month, which both read without error, is seen here, straight away. %>
 <% if summary.count.zero? %>

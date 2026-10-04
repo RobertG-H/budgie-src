@@ -276,6 +276,60 @@ RSpec.describe "Imports", type: :request do
       expect(visible_text).not_to include("Money in")
     end
 
+    describe "Undo" do
+      it "is offered, with a confirmation that lists what it deletes, while it's the Account's latest Import and within 24 hours" do
+        get import_path(import)
+
+        assert_select "main form[action='#{import_path(import)}'][data-turbo-confirm='Undo the Import of september.csv? This deletes its 5 bank transactions.']" do
+          assert_select "input[name=_method][value=delete]"
+          assert_select "button.btn", text: "Undo"
+        end
+        expect(visible_text).to include("You can undo this Import until Oct 16, 2026 at 12:00 PM, while it's the latest in this account.")
+      end
+
+      it "counts one bank transaction in the singular, and says when there are none" do
+        one = account.imports.build(csv_format: csv_format, file_name: "one.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-03,Hydro,-65.50\n") }
+        get import_path(one)
+        assert_select "form[data-turbo-confirm='Undo the Import of one.csv? This deletes its 1 bank transaction.']"
+
+        none = account.imports.build(csv_format: csv_format, file_name: "none.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-02,Interest,0.00\n") }
+        get import_path(none)
+        assert_select "form[data-turbo-confirm='Undo the Import of none.csv? It added no bank transactions, so this only takes the Import away.']"
+      end
+
+      it "isn't offered once 24 hours are up, and says why" do
+        import
+
+        travel_to Time.utc(2026, 10, 16, 16, 1) do
+          get import_path(import)
+        end
+
+        assert_select "main form[data-turbo-confirm]", count: 0
+        assert_select "main button", text: "Undo", count: 0
+        expect(visible_text).to include("This Import ran more than 24 hours ago, so it can't be undone.")
+      end
+
+      it "isn't offered for an Import that isn't the Account's latest, and says why" do
+        import
+        travel_to(1.hour.from_now) { account.imports.build(csv_format: csv_format, file_name: "newer.csv").run("Date,Description,Amount\n2026-09-30,Gym,-30.00\n") }
+
+        get import_path(import)
+
+        assert_select "main button", text: "Undo", count: 0
+        expect(visible_text).to include("This Import can't be undone while a newer Import is in this account. Undo that one first.")
+      end
+
+      it "is offered for another Account's Import that is its latest, whatever this Account has" do
+        other = create(:budget_account, budget: budget, name: "Visa")
+        theirs = other.imports.build(csv_format: csv_format, file_name: "visa.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-30,Gym,-30.00\n") }
+        import
+
+        get import_path(theirs)
+
+        assert_select "main button", text: "Undo"
+      end
+    end
+
     it "links back to the Account" do
       get import_path(import)
 
@@ -306,6 +360,91 @@ RSpec.describe "Imports", type: :request do
       get import_path(import)
 
       expect(response).to redirect_to(sign_in_path)
+    end
+  end
+
+  describe "DELETE /imports/:id, undoing it" do
+    before { travel_to Time.utc(2026, 10, 15, 16) }
+
+    let!(:import) { account.imports.build(csv_format: csv_format, file_name: "september.csv").tap { |i| i.run(File.read(file_fixture("signed-sample.csv"))) } }
+
+    it "deletes the Import and its bank transactions, and goes back to the Account with a notice" do
+      expect { delete import_path(import) }.to change(account.imports, :count).by(-1).and change(account.bank_transactions, :count).by(-5)
+
+      expect(response).to have_http_status(:see_other)
+      expect(response).to redirect_to(account_path(account))
+      follow_redirect!
+      assert_select "[role=status]", text: "Import undone."
+      assert_select "main", text: /No bank transactions yet/
+    end
+
+    it "brings the file's rows back when it's imported again" do
+      delete import_path(import)
+
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format.id, file: upload } }
+
+      expect(account.bank_transactions.count).to eq(5)
+      expect(account.imports.sole).to have_attributes(duplicates_skipped: 0)
+    end
+
+    it "is refused after 24 hours, with the alert on the Import's summary, and changes nothing" do
+      travel_to(Time.utc(2026, 10, 16, 16, 1)) do
+        expect { delete import_path(import) }.not_to change { [ Budget::Import.count, Budget::BankTransaction.count ] }
+      end
+
+      expect(response).to have_http_status(:see_other)
+      expect(response).to redirect_to(import_path(import))
+      follow_redirect!
+      assert_select "[role=alert]", text: "This Import ran more than 24 hours ago, so it can't be undone."
+      assert_select "h1", text: "Import"
+    end
+
+    it "is refused for an Import that has a newer Import after it, and changes nothing" do
+      travel_to(1.hour.from_now) { account.imports.build(csv_format: csv_format, file_name: "newer.csv").run("Date,Description,Amount\n2026-09-30,Gym,-30.00\n") }
+
+      expect { delete import_path(import) }.not_to change { [ Budget::Import.count, Budget::BankTransaction.count ] }
+
+      expect(response).to redirect_to(import_path(import))
+      follow_redirect!
+      assert_select "[role=alert]", text: "This Import can't be undone while a newer Import is in this account. Undo that one first."
+    end
+
+    it "undoes the one before once the latest has been, in turn" do
+      newer = nil
+      travel_to(1.hour.from_now) { newer = account.imports.build(csv_format: csv_format, file_name: "newer.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-30,Gym,-30.00\n") } }
+
+      delete import_path(newer)
+      delete import_path(import)
+
+      expect(account.imports).to be_empty
+      expect(account.bank_transactions).to be_empty
+    end
+
+    it "is not found for another user's Import, which it doesn't undo" do
+      others = create(:budget_import)
+
+      expect { delete import_path(others) }.not_to change(Budget::Import, :count)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "leaves another Account's Imports and bank transactions alone" do
+      other = create(:budget_account, budget: budget, name: "Visa")
+      theirs = other.imports.build(csv_format: csv_format, file_name: "visa.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-30,Gym,-30.00\n") }
+
+      delete import_path(import)
+
+      expect(Budget::Import.exists?(theirs.id)).to be(true)
+      expect(other.bank_transactions.count).to eq(1)
+    end
+
+    it "requires sign-in" do
+      delete session_path
+
+      delete import_path(import)
+
+      expect(response).to redirect_to(sign_in_path)
+      expect(Budget::Import.exists?(import.id)).to be(true)
     end
   end
 end

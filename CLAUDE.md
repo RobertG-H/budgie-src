@@ -112,7 +112,7 @@ Every form carries `from` (`home`, `month`, `deposits` or `envelope`) and `month
 
 A person imports the CSV their bank lets them download into an Account (see the `roadmap` issue #67 for the whole model and its
 sliced build tickets); each row becomes a bank transaction that they file as Deposits, Spends and Refunds, or ignore. The tables
-are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions.
+are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions, then Undo.
 
 #### CSV formats and the reader
 
@@ -187,6 +187,19 @@ background job. An Import that adds no bank transactions, such as the same file 
 an earlier Import can't be undone from under the rows it skipped, and its summary says what it skipped. The CSV format is only ever
 looked up in the budget's own, so another budget's is "CSV format can't be blank", and anything sent as the file that isn't an upload is no file.
 
+**Undo (ADR 0011).** `Budget::Import#undo` takes back an Import: it deletes the Import's bank transactions, straight from the table
+(`bank_transactions.delete_all` would only nullify them), then the Import, in one transaction that holds the Account's row lock,
+as running one does. It reaches only the Account's latest Import (`created_at` then `id`, which is `latest?`) and only within 24
+hours of it running (`undo_window_open?`, so 24 hours of time and not calendar days), and is judged after the lock is held. It raises
+`Budget::Import::Refused` with a message otherwise, and `undo_refusal` is the same message, or nil, for a page that wants to say
+so: the 24 hours being up comes first, since it's the one that won't change, then a newer Import being there. Once the latest is
+undone the one before it is the latest, and can be undone in turn if it's still in time. Importing the same file after an Undo
+brings its rows back, since undone rows no longer count as there. `DELETE /imports/:id` (`ImportsController#destroy`) goes back to
+the Account with "Import undone."; a refusal is the alert on the Import's summary, where Undo was asked for, with nothing changed.
+Undo is offered on the summary, in its header actions, with the reason it can't be shown in its place, and on the Account's page
+beside its latest Import; both ask first with `undo_confirmation`, which lists what it deletes ("Undo the Import of sept.csv?
+This deletes its 2 bank transactions."). It applies to Imports only: rows bank sync brings in later aren't one.
+
 An Import's summary is a page of its own, `/imports/:id` (`ImportsController#show`), which Importing redirects to and the Account's
 page links to for its latest. It's worked out from the Import's own bank transactions in two queries, plus `zero_rows_skipped`, so it
 needs nothing else stored: the dates, the count and total of money in and of money out, the first row as it was read (its date
@@ -239,7 +252,7 @@ After a UI change:
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
-- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports and bank transactions exist so far, and the rest of its model is the `roadmap` issue #67.
+- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions and Undo exist so far, and the rest of its model is the `roadmap` issue #67.
 - A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Neither is built yet: their models are the `roadmap` issues #69 (Filing rules) and #70 (Filing guesses).
 
 ## Agent skills

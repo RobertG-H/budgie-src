@@ -5,6 +5,12 @@
 # the same file imported twice, is still an Import: it's the Account's latest, so an earlier one can't be undone from under the
 # rows it skipped.
 class Budget::Import < ApplicationRecord
+  # Raised when an Import can't be undone; the message says why, for the person who asked.
+  class Refused < StandardError; end
+
+  # How long after it ran an Import can be undone, so that one click can't wipe out weeks of filing.
+  UNDO_WINDOW = 24.hours
+
   belongs_to :account
   belongs_to :csv_format
   has_many :bank_transactions, dependent: :restrict_with_error
@@ -57,6 +63,48 @@ class Budget::Import < ApplicationRecord
     end
 
     true
+  end
+
+  # Takes back the Import: deletes its bank transactions, then the Import, so the Account is as it was before it ran (ADR 0011).
+  # It reaches only the Account's latest Import, and only within 24 hours of it running, and is refused with a message
+  # otherwise. Once the latest is undone, the one before it is the latest, and can be undone in turn if it's still in time.
+  #
+  # It holds the Account's row lock, as running an Import does, so an Import can't land while it's undoing, and it's judged
+  # once the lock is held, since another may have landed since the Import was looked at. It's all or nothing.
+  def undo
+    account.with_lock do
+      reason = undo_refusal
+      raise Refused, reason if reason
+
+      # Straight from the table: `bank_transactions.delete_all` would only take them out of this Import, leaving them with none.
+      Budget::BankTransaction.where(import: self).delete_all
+      destroy!
+    end
+
+    self
+  end
+
+  # Why the Import can't be undone, or nothing when it can. Out of time is said first, since it's the one that won't change.
+  def undo_refusal
+    if !undo_window_open?
+      "This Import ran more than 24 hours ago, so it can't be undone."
+    elsif !latest?
+      "This Import can't be undone while a newer Import is in this account. Undo that one first."
+    end
+  end
+
+  # Whether it's still within 24 hours of the Import running, which is all that undoing it is waiting on, once it's the latest.
+  def undo_window_open?
+    Time.current <= undo_window_ends_at
+  end
+
+  def undo_window_ends_at
+    created_at + UNDO_WINDOW
+  end
+
+  # Whether it's the Account's most recent Import, which is the only one that can be undone.
+  def latest?
+    account.latest_import&.id == id
   end
 
   private

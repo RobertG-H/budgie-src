@@ -12,10 +12,17 @@
 
 <%# The Import that ran last, which is the one whose summary can still be looked at here. %>
 <% if @latest_import %>
-  <p class="mt-4 text-base-content/70">
-    Latest Import: <%= link_to @latest_import.file_name, import_path(@latest_import), class: "link" %>,
-    <%= @latest_import.created_at.strftime("%b %-d, %Y") %>.
-  </p>
+  <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <p class="text-base-content/70">
+      Latest Import: <%= link_to @latest_import.file_name, import_path(@latest_import), class: "link" %>,
+      <%= @latest_import.created_at.strftime("%b %-d, %Y") %>.
+    </p>
+    <%# The latest is the only one that can be undone, and only for 24 hours. %>
+    <% if @latest_import.undo_window_open? %>
+      <%= render "components/delete_button", path: import_path(@latest_import), label: "Undo",
+            confirm: undo_confirmation(@latest_import, @latest_import.bank_transactions.count) %>
+    <% end %>
+  </div>
 <% end %>
 
 <div class="mt-8">

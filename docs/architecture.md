@@ -239,7 +239,7 @@ month viewed. An archived envelope's page has Unarchive in place of Archive and 
 A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
 Refunds it was, or ignore it. The model is the `roadmap` issue
 [#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
-formats, then Accounts, Imports and bank transactions.
+formats, then Accounts, Imports and bank transactions, then Undo.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
 columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
@@ -279,6 +279,15 @@ number of queries for 10 rows as for 1,000, a double submit imports once, and th
 its own, worked out from the rows it added: the dates, the money in and money out, and the first row as it was read, so a wrong
 sign or a swapped day and month, which both read without error, is noticed straight away. An Account's page lists its bank
 transactions a page at a time, since one Import can bring in 5,000.
+
+**Undo.** An Import commits as soon as its file has been checked, with no preview, so Undo is its safety net
+([ADR 0011](adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md)). It deletes an Import's bank transactions and then the
+Import, after a confirmation that lists what it will delete, but only for the Account's latest Import and only for 24 hours, because
+a later Import's skipped duplicates point at rows from earlier ones, and so that one click can't wipe out weeks of work. Once the
+latest is undone, the one before it can be, if it's still in time. It holds the Account's lock, as an Import does, so one can't land
+while another is being undone, and an Import that added nothing, such as the same file twice, still counts as the latest, so it
+protects the rows its file skipped. It's offered on the Import's summary and beside the latest Import on the Account's page, and when
+it can't be, the page says why.
 
 The header has a second row of links to the pages that aren't a month's: the budget, Accounts and CSV formats so far.
 

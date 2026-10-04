@@ -1,5 +1,6 @@
 class ImportsController < ApplicationController
   before_action :set_account, only: %i[ new create ]
+  before_action :set_import, only: %i[ show destroy ]
 
   # The CSV format of the Account's most recent Import is chosen to start with, since it's most likely the same bank's.
   def new
@@ -18,17 +19,31 @@ class ImportsController < ApplicationController
     end
   end
 
-  # What the Import did. Found through the user's budget, by way of its Account, so another user's is a 404.
+  # What the Import did, and whether it can still be undone, and if it can't, why.
   def show
-    @import = Current.budget.imports.find(params[:id])
     @account = @import.account
     @summary = @import.summary
+    @undo_refusal = @import.undo_refusal
+  end
+
+  # Takes back the Account's latest Import, within 24 hours of it running (ADR 0011). When it can't be, the reason is the alert
+  # on its summary, which is where Undo was asked for, and nothing changes.
+  def destroy
+    @import.undo
+    redirect_to account_path(@import.account), status: :see_other, notice: "Import undone."
+  rescue Budget::Import::Refused => refusal
+    redirect_to import_path(@import), status: :see_other, alert: refusal.message
   end
 
   private
     # Found through the user's budget, so another user's Account is a 404.
     def set_account
       @account = Current.budget.accounts.find(params[:account_id])
+    end
+
+    # Found through the user's budget, by way of its Account, so another user's Import is a 404.
+    def set_import
+      @import = Current.budget.imports.find(params[:id])
     end
 
     def import_params

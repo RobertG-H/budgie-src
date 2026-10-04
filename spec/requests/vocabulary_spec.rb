@@ -129,6 +129,54 @@ RSpec.describe "The words on the pages", type: :request do
       expect(response.body).not_to match(/budget_|zero_rows|duplicates_skipped|content_key|occurrence/)
     end
 
+    describe "Undo" do
+      def confirmation
+        css_select("main form[data-turbo-confirm]").map { |form| form["data-turbo-confirm"] }.sole
+      end
+
+      it "says Undo on the summary and on the Account's page, with a confirmation that lists what it deletes in the same words" do
+        [ import_path(import), account_path(account) ].each do |path|
+          get path
+
+          assert_select "main button", text: "Undo"
+          expect(confirmation).to eq("Undo the Import of sept.csv? This deletes its 2 bank transactions.")
+          expect(confirmation).not_to match(retired_terms)
+        end
+
+        get import_path(import)
+
+        expect(visible_text).to include("You can undo this Import until")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "uses the same words when it's refused, because the 24 hours are up or a newer Import is there" do
+        travel_to(25.hours.from_now) do
+          delete import_path(import)
+          follow_redirect!
+
+          expect(visible_text).to include("This Import ran more than 24 hours ago, so it can't be undone.")
+          expect(visible_text).not_to match(retired_terms)
+        end
+
+        newer = nil
+        travel_to(1.hour.from_now) { newer = account.imports.build(csv_format: import.csv_format, file_name: "newer.csv").tap { |i| i.run("2026-10-04,Gym,-30.00\n") } }
+        delete import_path(import)
+        follow_redirect!
+
+        expect(visible_text).to include("This Import can't be undone while a newer Import is in this account. Undo that one first.")
+        expect(visible_text).not_to match(retired_terms)
+        expect(newer).to be_persisted
+      end
+
+      it "says Import undone when it works" do
+        delete import_path(import)
+        follow_redirect!
+
+        expect(visible_text).to include("Import undone.")
+      end
+    end
+
     it "uses the same words for what went wrong when a file is refused" do
       post account_imports_path(account), params: { import: { csv_format_id: "", file: Rack::Test::UploadedFile.new(StringIO.new("2026-13-45,Paycheck,2800.00\n"), "text/csv", original_filename: "bad.csv") } }
 

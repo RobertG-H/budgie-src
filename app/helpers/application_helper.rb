@@ -23,4 +23,13 @@ module ApplicationHelper
   def section_link(name, path, current:)
     link_to name, path, class: [ "link link-hover py-1", ("font-semibold" if current) ], aria: { current: ("page" if current) }
   end
+
+  # What's asked before an Import is undone, which lists what it deletes: the bank transactions it brought in.
+  def undo_confirmation(import, bank_transaction_count)
+    if bank_transaction_count.zero?
+      "Undo the Import of #{import.file_name}? It added no bank transactions, so this only takes the Import away."
+    else
+      "Undo the Import of #{import.file_name}? This deletes its #{pluralize(bank_transaction_count, "bank transaction")}."
+    end
+  end
 end

@@ -193,6 +193,38 @@ RSpec.describe "Accounts", type: :request do
       expect(response.body).not_to include("older.csv")
     end
 
+    describe "Undo of the latest Import" do
+      it "is offered beside it, with a confirmation listing what it deletes, within 24 hours" do
+        import = create(:budget_import, account: account, file_name: "newest.csv", created_at: 1.hour.ago)
+        create_list(:budget_bank_transaction, 2, account: account, import: import)
+
+        get account_path(account)
+
+        assert_select "main form[action='#{import_path(import)}'][data-turbo-confirm='Undo the Import of newest.csv? This deletes its 2 bank transactions.']" do
+          assert_select "input[name=_method][value=delete]"
+          assert_select "button", text: "Undo"
+        end
+      end
+
+      it "isn't offered after 24 hours" do
+        create(:budget_import, account: account, file_name: "old.csv", created_at: 25.hours.ago)
+
+        get account_path(account)
+
+        assert_select "main button", text: "Undo", count: 0
+        assert_select "main a", text: "old.csv"
+      end
+
+      it "is offered only for the latest, which is the only one the page shows" do
+        create(:budget_import, account: account, file_name: "older.csv", created_at: 3.hours.ago)
+        create(:budget_import, account: account, file_name: "newest.csv", created_at: 1.hour.ago)
+
+        get account_path(account)
+
+        assert_select "main form[data-turbo-confirm]", count: 1
+      end
+    end
+
     it "has no latest Import to link to until there is one" do
       get account_path(account)
 

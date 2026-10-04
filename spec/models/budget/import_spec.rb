@@ -323,4 +323,165 @@ RSpec.describe Budget::Import, type: :model do
       end
     end
   end
+
+  describe "undoing (ADR 0011)" do
+    let(:account) { create(:budget_account) }
+    let(:csv_format) { create(:budget_csv_format, budget: account.budget) }
+    let(:file) { "2026-09-01,Paycheck,2800.00\n2026-09-02,Loblaws,-82.45\n" }
+
+    def import_of(text, created_at: Time.current)
+      travel_to(created_at) { account.imports.build(csv_format: csv_format, file_name: "sept.csv").tap { |import| import.run(text) } }
+    end
+
+    it "deletes the Account's latest Import and its bank transactions, which is all it deletes" do
+      earlier = import_of("2026-08-01,Rent,-1500.00\n", created_at: 3.days.ago)
+      import = import_of(file)
+      others = create(:budget_bank_transaction)
+
+      expect { import.undo }.to change(Budget::Import, :count).by(-1).and change(Budget::BankTransaction, :count).by(-2)
+
+      expect(Budget::Import.exists?(import.id)).to be(false)
+      expect(account.imports).to contain_exactly(earlier)
+      expect(account.bank_transactions.pluck(:description)).to eq([ "Rent" ])
+      expect(Budget::BankTransaction.where(id: others.id)).to exist
+      expect(Budget::Import.where(id: others.import_id)).to exist
+    end
+
+    it "takes the Account's row lock, so an Import can't land while it's running" do
+      import = import_of(file)
+      statements = []
+      collector = ->(*, payload) { statements << payload[:sql] }
+
+      ActiveSupport::Notifications.subscribed(collector, "sql.active_record") { import.undo }
+
+      expect(statements.grep(/FROM "budget_accounts".*FOR UPDATE/m)).not_to be_empty
+    end
+
+    it "deletes everything or nothing" do
+      import = import_of(file)
+      allow(import).to receive(:destroy!).and_raise(ActiveRecord::StatementInvalid, "the database went away")
+
+      expect { import.undo }.to raise_error(ActiveRecord::StatementInvalid)
+
+      expect(import.bank_transactions.count).to eq(2)
+      expect(Budget::Import.exists?(import.id)).to be(true)
+    end
+
+    describe "within 24 hours of it running" do
+      it "is allowed right up to 24 hours" do
+        import = import_of(file, created_at: Time.zone.local(2026, 9, 15, 10))
+
+        travel_to(import.created_at + 24.hours) { expect(import.undo_refusal).to be_nil }
+      end
+
+      it "is refused a minute after 24 hours, saying so, and changes nothing" do
+        import = import_of(file, created_at: Time.zone.local(2026, 9, 15, 10))
+
+        travel_to(import.created_at + 24.hours + 1.minute) do
+          expect { import.undo }.to raise_error(Budget::Import::Refused, "This Import ran more than 24 hours ago, so it can't be undone.")
+        end
+
+        expect(import.bank_transactions.count).to eq(2)
+        expect(Budget::Import.exists?(import.id)).to be(true)
+      end
+
+      it "counts 24 hours as time, not calendar days, across a change of clocks" do
+        # Clocks go back at 2:00 on November 1, 2026, so a day later is 25 hours on.
+        import = import_of(file, created_at: Time.zone.local(2026, 10, 31, 12))
+
+        travel_to(import.created_at + 24.hours + 1.minute) { expect(import.undo_refusal).to be_present }
+        travel_to(import.created_at + 24.hours) { expect(import.undo_refusal).to be_nil }
+      end
+    end
+
+    describe "only the Account's latest Import" do
+      it "is refused for one that has a newer Import after it, which says to undo that one first" do
+        older = import_of("2026-08-01,Rent,-1500.00\n", created_at: 2.hours.ago)
+        import_of(file, created_at: 1.hour.ago)
+
+        expect { older.undo }.to raise_error(Budget::Import::Refused, "This Import can't be undone while a newer Import is in this account. Undo that one first.")
+
+        expect(older.bank_transactions.count).to eq(1)
+      end
+
+      it "says the 24 hours are up first, for one that's both too old and not the latest, since waiting won't help" do
+        older = import_of("2026-08-01,Rent,-1500.00\n", created_at: 3.days.ago)
+        import_of(file, created_at: 1.hour.ago)
+
+        expect(older.undo_refusal).to eq("This Import ran more than 24 hours ago, so it can't be undone.")
+      end
+
+      it "lets the one before be undone once the latest has been, if it ran within 24 hours" do
+        older = import_of("2026-08-01,Rent,-1500.00\n", created_at: 5.hours.ago)
+        newer = import_of(file, created_at: 1.hour.ago)
+
+        newer.undo
+        expect(older.reload.undo_refusal).to be_nil
+
+        expect { older.undo }.to change(Budget::Import, :count).by(-1)
+        expect(account.bank_transactions).to be_empty
+      end
+
+      it "doesn't let the one before be undone once the latest has been, if it's too old" do
+        older = import_of("2026-08-01,Rent,-1500.00\n", created_at: 3.days.ago)
+        newer = import_of(file, created_at: 1.hour.ago)
+
+        newer.undo
+
+        expect(older.reload.undo_refusal).to eq("This Import ran more than 24 hours ago, so it can't be undone.")
+      end
+
+      it "is judged by the Account's own Imports, not another Account's" do
+        import = import_of(file, created_at: 2.hours.ago)
+        create(:budget_import, created_at: 1.hour.ago) # Another Account's, which is newer.
+
+        expect(import.undo_refusal).to be_nil
+      end
+
+      it "is judged by when they ran, and by the order they were made in at the same moment" do
+        moment = Time.zone.local(2026, 9, 15, 10)
+        first = import_of("2026-08-01,Rent,-1500.00\n", created_at: moment)
+        second = import_of(file, created_at: moment)
+
+        travel_to(moment + 1.minute) do
+          expect(first.undo_refusal).to be_present
+          expect(second.undo_refusal).to be_nil
+        end
+      end
+
+      it "is judged when it's undone, after the Account is locked, since another Import may have landed since it was looked at" do
+        import = import_of(file, created_at: 2.hours.ago)
+        stale = Budget::Import.find(import.id) # What a page looked at.
+        import_of("2026-09-03,Hydro,-65.50\n") # Lands afterwards.
+
+        expect { stale.undo }.to raise_error(Budget::Import::Refused, /newer Import/)
+      end
+    end
+
+    it "brings a file's rows back when it's imported again after being undone, since undone rows no longer count as there" do
+      import = import_of(file)
+      import.undo
+
+      again = import_of(file)
+
+      expect(again).to have_attributes(duplicates_skipped: 0)
+      expect(again.bank_transactions.count).to eq(2)
+      expect(account.bank_transactions.pluck(:occurrence)).to all(eq(1))
+    end
+
+    it "leaves the CSV format and the Account alone" do
+      import = import_of(file)
+
+      import.undo
+
+      expect(Budget::CsvFormat.exists?(csv_format.id)).to be(true)
+      expect(Budget::Account.exists?(account.id)).to be(true)
+    end
+
+    it "is an Import of nothing but rows of 0 too, which has no bank transactions to delete" do
+      import = import_of("2026-09-02,Interest,0.00\n")
+
+      expect { import.undo }.to change(Budget::Import, :count).by(-1).and not_change(Budget::BankTransaction, :count)
+    end
+  end
 end
