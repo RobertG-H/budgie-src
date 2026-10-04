@@ -182,7 +182,7 @@ of the month view is complete, and every balance on it, in a fixed number of gro
 A Reallocation moves money that's already in an envelope into another envelope, such as covering an Overspent envelope
 or shifting what's left of one purpose to another, and is recorded with a date. An envelope's Reallocated in a month is
 what was moved into it less what was moved out of it, dated in the month, and Available adds every Reallocation into the
-envelope and takes off every one out of it, dated on or before the end of the month. It's two more grouped queries, out
+envelope and takes off every one out of it, dated on or before the end of the month. It's two more grouped queries (a third, for Reallocations to Ready to Assign, is below), out
 by the From envelope and in by the To envelope, so the number of queries still doesn't grow. Ready to Assign doesn't change,
 since money moved between envelopes nets to zero, and nothing checks that the From envelope has enough: like a Spend, a
 Reallocation can leave it Overspent. Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.

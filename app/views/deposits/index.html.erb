@@ -39,7 +39,7 @@
     <div class="mt-4">
       <%= render "components/record_list" do %>
         <% @reallocations.each do |reallocation| %>
-          <%= render "components/record_row", href: edit_reallocation_path(reallocation, month: @month, from: "deposits"),
+          <%= render "components/record_row", href: edit_polymorphic_path(reallocation, month: @month, from: "deposits"),
                 date: reallocation.date, description: reallocation.description, counterpart: "From #{reallocation.envelope.name}",
                 notes: reallocation.notes, amount: reallocation.amount, budget: budget %>
         <% end %>

@@ -46,7 +46,7 @@
 <%# Reallocations are rarer still, and each is on both its envelopes' pages, so it's read from this envelope's side: where the money went or came from, and negative when it left. %>
 <% if @reallocations.any? %>
   <%= render "record_section", title: "Reallocations", records: @reallocations, budget: budget,
-        edit_path: ->(reallocation) { edit_reallocation_path(reallocation, month: @month, from: "envelope", envelope: @envelope.id) },
+        edit_path: ->(reallocation) { edit_polymorphic_path(reallocation, month: @month, from: "envelope", envelope: @envelope.id) },
         counterpart: ->(reallocation) { reallocation.counterpart_for(@envelope) },
         amount: ->(reallocation) { reallocation.amount_for(@envelope) } %>
 <% end %>
