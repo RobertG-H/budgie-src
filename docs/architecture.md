@@ -99,7 +99,7 @@ Each user has at most one `Budget`, in a currency chosen during first-run setup;
 default currency. The `RequireBudget` concern redirects a signed-in user without one to budget setup.
 
 Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb`
-with the table `budget_envelopes`, and `Budget::Deposit` has `budget_deposits`. `Budget.use_relative_model_naming?`
+with the table `budget_envelopes`, and `Budget::Deposit` and `Budget::Spend` have `budget_deposits` and `budget_spends`. `Budget.use_relative_model_naming?`
 drops the prefix from routes, params and DOM ids, so it's `envelopes_path` and `EnvelopesController`.
 `Current.budget` is the one way controllers and views find the budget — for now the signed-in user's — and
 controllers look records up through it, so another user's record is a 404.
@@ -109,9 +109,9 @@ Constraints live in the database as well as in the models — check constraints,
 is validated as a number under 10¹³ with at most two decimal places, and more places is an error rather than
 being rounded.
 
-An envelope with records can't be deleted. The model refuses and its page says why, with `ON DELETE RESTRICT` as the
-backstop, and destroying a whole budget (which is what `user:delete` does) deletes its envelopes' records first so the
-envelopes can follow.
+An envelope with records, such as Assigned amounts or Spends, can't be deleted. The model refuses and its page says why,
+with `ON DELETE RESTRICT` as the backstop, and destroying a whole budget (which is what `user:delete` does) deletes its
+envelopes' records first so the envelopes can follow.
 
 ### The month view and balances
 
@@ -134,7 +134,7 @@ cancelled.
 
 Assigned is money moved from Ready to Assign into one envelope for one month, one figure per envelope per month. It is
 worked into the same calculator: an envelope's Available is its Starting balance plus everything assigned up to the
-month, and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
+month (less everything spent, below), and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
 number of grouped queries. Changing an earlier month's Assigned therefore changes every later month. It's set in place on
 the month view: each envelope's Assigned cell is a Turbo Frame that swaps between the amount and an input, and saving
 refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's
@@ -158,6 +158,15 @@ that can't be started doesn't hold up the others: the job logs it with its id, c
 the end so the run shows as failed. Its month rolls back whole, so the next run tries it again. Testing and production
 both run it, as both are `RAILS_ENV=production`. [Operating Budgie](operations.md#starting-new-months) has
 `budget:start_months`, which runs it on demand.
+
+Spent is money paid out of one envelope, recorded as a Spend with a date, and an envelope's Spends in a month add up to
+its Spent. It's worked into the same calculator: Available is the Starting balance plus everything assigned up to the
+month, less every Spend dated on or before the end of it, in one more grouped query. Ready to Assign doesn't change,
+since money spent was already assigned. Like an Assigned amount, a Spend belongs to its budget through its envelope and
+has no budget of its own, so it's found through the budget's envelopes and another user's Spend is a 404. The envelope a
+Spend is saved against is looked up in the budget's own envelopes rather than taken from the form, so choosing another
+budget's envelope is a validation error and nothing is saved. A Spend is listed on its envelope's page for the month of
+its date, and an envelope's page starts a new Spend with that envelope chosen.
 
 ### Frontend
 

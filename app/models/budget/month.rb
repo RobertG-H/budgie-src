@@ -9,7 +9,8 @@
 # of history or with the number of envelopes. Amounts are BigDecimal throughout.
 #
 # Changing what's assigned in an earlier month changes Carried over, Available and Ready to Assign in every month
-# after it, since none of them is stored. That can leave a later month's Ready to Assign negative.
+# after it, since none of them is stored. That can leave a later month's Ready to Assign negative. Changing a Spend
+# does the same to Carried over and Available, though never to Ready to Assign: money spent was already assigned.
 class Budget::Month
   ZERO = BigDecimal(0)
 
@@ -27,9 +28,14 @@ class Budget::Month
   AssignedTotals = Data.define(:before, :in_month)
   NOTHING_ASSIGNED = AssignedTotals.new(before: ZERO, in_month: ZERO)
 
+  # What's spent from one envelope in the months before this one, and in this one.
+  SpentTotals = Data.define(:before, :in_month)
+  NOTHING_SPENT = SpentTotals.new(before: ZERO, in_month: ZERO)
+
   # One envelope's figures for this month: what it carries over (its Starting balance and everything assigned to it
-  # in the months before), what's assigned to it this month, and the two together, which is what's Available.
-  EnvelopeLine = Data.define(:envelope, :carried_over, :assigned, :available) do
+  # in the months before, less everything spent from it), what's assigned to it and spent from it this month, and
+  # what's left, which is what's Available.
+  EnvelopeLine = Data.define(:envelope, :carried_over, :assigned, :spent, :available) do
     # Overspent: the envelope's Available is below zero.
     def overspent?
       available.negative?
@@ -90,10 +96,14 @@ class Budget::Month
   # The budget's envelopes, alphabetically.
   def envelopes
     @envelopes ||= budget.envelopes.alphabetical.map do |envelope|
-      totals = assignment_totals.fetch(envelope.id, NOTHING_ASSIGNED)
-      carried_over = envelope.starting_balance + totals.before
+      assigned = assignment_totals.fetch(envelope.id, NOTHING_ASSIGNED)
+      spent = spend_totals.fetch(envelope.id, NOTHING_SPENT)
+      carried_over = envelope.starting_balance + assigned.before - spent.before
 
-      EnvelopeLine.new(envelope: envelope, carried_over: carried_over, assigned: totals.in_month, available: carried_over + totals.in_month)
+      EnvelopeLine.new(
+        envelope: envelope, carried_over: carried_over, assigned: assigned.in_month, spent: spent.in_month,
+        available: carried_over + assigned.in_month - spent.in_month
+      )
     end
   end
 
@@ -116,6 +126,14 @@ class Budget::Month
       @assignment_totals ||= budget.assignments.where(month: ..date).group(:envelope_id)
         .pluck(:envelope_id, sum_where("month < ?"), sum_where("month = ?"))
         .to_h { |envelope_id, before, in_month| [ envelope_id, AssignedTotals.new(before: before, in_month: in_month) ] }
+    end
+
+    # What's spent from each envelope, from a single query: { envelope id => SpentTotals }. An envelope with nothing spent
+    # up to the end of this month isn't in it. A Spend is dated, so it counts in the month its date is in.
+    def spend_totals
+      @spend_totals ||= budget.spends.where(date: ..date.end_of_month).group(:envelope_id)
+        .pluck(:envelope_id, sum_where("date < ?"), sum_where("date >= ?"))
+        .to_h { |envelope_id, before, in_month| [ envelope_id, SpentTotals.new(before: before, in_month: in_month) ] }
     end
 
     # One column of a query: the total amount where `condition` holds, given this month. Only for the literal

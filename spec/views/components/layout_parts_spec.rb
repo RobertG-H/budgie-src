@@ -25,6 +25,17 @@ RSpec.describe "components", type: :view do
       assert_select "h1", text: "Envelopes"
       assert_select "a[href='/new']", text: "New envelope"
     end
+
+    # Three actions side by side are wider than a phone, so they go onto a second line instead of off the page.
+    it "lets the actions wrap onto another line" do
+      render inline: <<~ERB
+        <%= render "components/page_header", title: "Envelopes" do %><a href="/new">New envelope</a><% end %>
+      ERB
+
+      assert_select "a[href='/new']" do |links|
+        expect(links.first.parent["class"].split).to include("flex", "flex-wrap")
+      end
+    end
   end
 
   describe "_empty_state" do

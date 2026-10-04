@@ -5,6 +5,7 @@ RSpec.describe Budget::Envelope, type: :model do
 
   it { is_expected.to belong_to(:budget) }
   it { is_expected.to have_many(:assignments).class_name("Budget::Assignment").dependent(:restrict_with_error) }
+  it { is_expected.to have_many(:spends).class_name("Budget::Spend").dependent(:restrict_with_error) }
   it { is_expected.to validate_presence_of(:name) }
 
   it "uses the budget_envelopes table" do
@@ -209,12 +210,31 @@ RSpec.describe Budget::Envelope, type: :model do
       expect(Budget::Assignment.exists?(assignment.id)).to be(true)
     end
 
+    it "is refused while the envelope has Spends, with the same reason, and keeps both" do
+      spend = create(:budget_spend)
+      envelope = spend.envelope
+
+      expect(envelope.destroy).to be(false)
+
+      expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
+      expect(Budget::Envelope.exists?(envelope.id)).to be(true)
+      expect(Budget::Spend.exists?(spend.id)).to be(true)
+    end
+
     it "is allowed once the records are gone" do
       assignment = create(:budget_assignment)
       assignment.destroy!
 
       expect(assignment.envelope.destroy).to be_truthy
       expect(Budget::Envelope.exists?(assignment.envelope_id)).to be(false)
+    end
+
+    it "is allowed once its Spends are gone" do
+      spend = create(:budget_spend)
+      spend.destroy!
+
+      expect(spend.envelope.destroy).to be_truthy
+      expect(Budget::Envelope.exists?(spend.envelope_id)).to be(false)
     end
 
     it "is allowed for an envelope with nothing recorded against it, whatever its Starting balance" do

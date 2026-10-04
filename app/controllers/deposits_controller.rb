@@ -45,11 +45,6 @@ class DepositsController < ApplicationController
       @deposit = Current.budget.deposits.find(params[:id])
     end
 
-    # Today if it's in the month the form was opened from, and otherwise the 1st of that month.
-    def default_date
-      @month.current? ? Date.current : @month.date
-    end
-
     # A Deposit goes back to the page for the month it counts toward, since that's where it's listed.
     def month_of(deposit)
       Budget::Month.new(Current.budget, deposit.month)
