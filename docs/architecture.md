@@ -28,8 +28,9 @@ as ES modules through importmap, and there's no `package.json` and no bundler st
 needed on a developer's own machine, for Playwright MCP's `npx`.
 
 **There is no separate worker process on the hosts.** `SOLID_QUEUE_IN_PUMA` runs the Solid Queue
-supervisor inside Puma, because invite mail is sent with `deliver_now` and the only recurring job is an
-hourly clear-out of finished jobs.
+supervisor inside Puma, because invite mail is sent with `deliver_now` and the only recurring jobs are hourly: a
+clear-out of finished jobs and the start of each new month's Assigned (see
+[The month view and balances](#the-month-view-and-balances)).
 
 ## The request path
 
@@ -139,6 +140,22 @@ the month view: each envelope's Assigned cell is a Turbo Frame that swaps betwee
 refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's
 already at, and the current month is at `/` as well as `/months/YYYY-MM`, so the home page is a page name of its own, and
 saving goes back to whichever one the form was opened from.
+
+Each month starts with the previous month's Assigned, so most envelopes need no entry at all: when a month begins, every
+envelope with an Assigned amount the month before and none yet in the new month gets the same amount, and the user changes
+only what differs. A copy is an ordinary Assigned amount that nothing marks as copied, and it ignores Ready to Assign, so
+if the month's Deposits fall short the card says more was assigned than deposited. Each month keeps its own Assigned:
+changing a month that has already begun changes only that month, and the balances after it follow. A month that hasn't
+begun shows only what was entered ahead for it, and that is kept when it does.
+
+`budgets.assignments_copied_through` is the latest month copied into. A new budget starts at its first month, which gets no
+copy, and `Budget#start_new_months` copies into each month after it, up to the current one, in order. It holds the budget's
+row lock and inserts with `unique_by` on `(envelope_id, month)`, so a month is copied into once, an amount the user clears or
+changes afterwards stays as they left it, and the number of queries doesn't grow with the number of envelopes. A month
+begins at midnight Eastern on the 1st. `StartNewMonthsJob` runs every hour in production through `config/recurring.yml`, so
+a month begins within an hour of that and a month missed while the host was down is caught up by the next run. Testing and
+production both run it, as both are `RAILS_ENV=production`. [Operating Budgie](operations.md#starting-new-months) has
+`budget:start_months`, which runs it on demand.
 
 ### Frontend
 

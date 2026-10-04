@@ -45,6 +45,140 @@ RSpec.describe Budget, type: :model do
     end
   end
 
+  describe "#assignments_copied_through" do
+    it "is a new budget's first month, which gets no copy, by the app's time zone" do
+      # Still September 30 in Eastern Time.
+      travel_to Time.utc(2026, 10, 1, 0, 30) do
+        expect(create(:budget).assignments_copied_through).to eq(Date.new(2026, 9, 1))
+      end
+    end
+  end
+
+  describe "#start_new_months" do
+    let(:september) { Date.new(2026, 9, 1) }
+    let(:october) { Date.new(2026, 10, 1) }
+
+    # A budget that began in September, with a few envelopes.
+    let!(:budget) { travel_to(Time.zone.local(2026, 9, 5)) { create(:budget) } }
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+    let!(:rent) { create(:budget_envelope, budget: budget, name: "Rent") }
+    let!(:fun) { create(:budget_envelope, budget: budget, name: "Fun") }
+
+    def assign(envelope, amount, month)
+      create(:budget_assignment, envelope: envelope, amount: amount, month: month)
+    end
+
+    # What each envelope has assigned in `month`, as the month view shows it.
+    def assigned_in(month)
+      Budget::Month.new(budget, month).envelopes.to_h { |line| [ line.envelope.name, line.assigned ] }
+    end
+
+    # Midnight in Eastern Time has just passed on the 1st of `month`.
+    def travel_to_start_of(month)
+      travel_to month.in_time_zone + 1.minute
+    end
+
+    it "gives each envelope the month before's Assigned when a month begins" do
+      assign groceries, 400, september
+      assign rent, 1500, september
+
+      travel_to_start_of october
+      budget.start_new_months
+
+      expect(assigned_in(october)).to eq("Fun" => 0, "Groceries" => 400, "Rent" => 1500)
+    end
+
+    it "keeps an amount entered ahead for the new month, and still copies the other envelopes" do
+      assign groceries, 400, september
+      assign rent, 1500, september
+      assign groceries, 450, october
+
+      travel_to_start_of october
+      budget.start_new_months
+
+      expect(assigned_in(october)).to eq("Fun" => 0, "Groceries" => 450, "Rent" => 1500)
+    end
+
+    it "gives nothing to an envelope that had nothing assigned the month before" do
+      assign groceries, 400, september
+
+      travel_to_start_of october
+      budget.start_new_months
+
+      expect(assigned_in(october)).to eq("Fun" => 0, "Groceries" => 400, "Rent" => 0)
+    end
+
+    it "leaves an amount the user cleared or changed after the month began as they left it" do
+      assign groceries, 400, september
+      assign rent, 1500, september
+      travel_to_start_of october
+      budget.start_new_months
+
+      groceries.assign(october, "")
+      rent.assign(october, "1400")
+      budget.start_new_months
+
+      expect(assigned_in(october)).to eq("Fun" => 0, "Groceries" => 0, "Rent" => 1400)
+    end
+
+    it "catches up on the months it missed, in order, each copied from the month before" do
+      assign groceries, 400, september
+      assign rent, 1500, september
+      assign groceries, 450, october
+
+      # Nothing ran when October began.
+      travel_to_start_of Date.new(2026, 11, 1)
+      budget.start_new_months
+
+      expect(assigned_in(october)).to eq("Fun" => 0, "Groceries" => 450, "Rent" => 1500)
+      expect(assigned_in(Date.new(2026, 11, 1))).to eq("Fun" => 0, "Groceries" => 450, "Rent" => 1500)
+    end
+
+    it "gives a new budget's first month no copy, even when the month before has amounts" do
+      assign groceries, 400, Date.new(2026, 8, 1)
+
+      travel_to Time.zone.local(2026, 9, 20)
+      budget.start_new_months
+
+      expect(assigned_in(september)).to eq("Fun" => 0, "Groceries" => 0, "Rent" => 0)
+    end
+
+    it "doesn't change the new month when a month that has already begun is changed" do
+      assign groceries, 400, september
+      travel_to_start_of october
+      budget.start_new_months
+
+      groceries.assign(september, "300")
+      budget.start_new_months
+
+      expect(assigned_in(september)).to include("Groceries" => 300)
+      expect(assigned_in(october)).to include("Groceries" => 400)
+    end
+
+    it "gives the same result when it runs twice as when it runs once" do
+      assign groceries, 400, september
+      assign rent, 1500, september
+      travel_to_start_of october
+      budget.start_new_months
+
+      expect { budget.start_new_months }.not_to change { assigned_in(october) }
+    end
+
+    it "takes as many queries for 20 envelopes as for 1" do
+      budgets = [ 1, 20 ].map do |count|
+        travel_to(Time.zone.local(2026, 9, 5)) { create(:budget) }.tap do |budget|
+          create_list(:budget_envelope, count, budget: budget).each { |envelope| assign envelope, 100, september }
+        end
+      end
+
+      travel_to_start_of october
+      counts = budgets.map { |budget| count_queries { budget.start_new_months } }
+
+      expect(budgets.map { |budget| budget.assignments.where(month: october).count }).to eq([ 1, 20 ])
+      expect(counts.first).to eq(counts.last)
+    end
+  end
+
   describe "being destroyed" do
     let(:budget) { create(:budget) }
 
@@ -90,6 +224,13 @@ RSpec.describe Budget, type: :model do
 
         expect { budget.update_column(:currency, currency) }.to raise_error(ActiveRecord::CheckViolation)
       end
+    end
+
+    it "rejects an assignments_copied_through that isn't the first of a month" do
+      budget = create(:budget)
+
+      expect { budget.update_column(:assignments_copied_through, Date.new(2026, 9, 15)) }
+        .to raise_error(ActiveRecord::CheckViolation, /budgets_assignments_copied_through_first_of_month/)
     end
 
     it "keeps a user with a budget from being deleted without it" do

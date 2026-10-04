@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_011257) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_021620) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -57,7 +57,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_011257) do
     t.string "currency", limit: 3, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.date "assignments_copied_through", null: false
     t.index ["user_id"], name: "index_budgets_on_user_id", unique: true
+    t.check_constraint "EXTRACT(day FROM assignments_copied_through) = 1::numeric", name: "budgets_assignments_copied_through_first_of_month"
     t.check_constraint "currency::text ~ '^[A-Z]{3}$'::text", name: "budgets_currency_format"
   end
 

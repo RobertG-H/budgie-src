@@ -66,7 +66,7 @@ env:
     - SMTP_PASSWORD
   clear:
     # Run the Solid Queue supervisor inside Puma. There's one server per destination, and invites are
-    # sent with deliver_now, so the only job is the hourly cleanup.
+    # sent with deliver_now, so the only jobs are the hourly ones in config/recurring.yml.
     SOLID_QUEUE_IN_PUMA: true
 
     # The db accessory, on Kamal's Docker network.
