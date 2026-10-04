@@ -4,4 +4,5 @@ class Budget::Spend < ApplicationRecord
   include DatedEnvelopeRecord
 
   belongs_to :envelope
+  refuse_archived_envelopes :envelope
 end

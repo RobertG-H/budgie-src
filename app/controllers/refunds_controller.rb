@@ -7,9 +7,10 @@ class RefundsController < ApplicationController
   helper_method :origin_envelope
 
   # A Refund is started for an envelope, named by its id in `envelope`, which an envelope's page does. An envelope that
-  # isn't the budget's is none, and neither is anything but a plain id, so the form starts on a prompt to choose one.
+  # isn't the budget's is none, and so is an archived one, which takes no new records, and anything but a plain id, so the
+  # form starts on a prompt to choose one.
   def new
-    @refund = Budget::Refund.new(date: default_date, envelope: Current.budget.envelopes.find_by(id: params[:envelope].to_s))
+    @refund = Budget::Refund.new(date: default_date, envelope: Current.budget.envelopes.active.find_by(id: params[:envelope].to_s))
   end
 
   def create

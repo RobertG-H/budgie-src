@@ -76,9 +76,10 @@ class Budget < ApplicationRecord
     end
 
     # In one query to read the month before and one to insert, however many envelopes there are. An envelope that already
-    # has an amount for the month is skipped by the unique index, so what was entered ahead is kept.
+    # has an amount for the month is skipped by the unique index, so what was entered ahead is kept. An archived envelope's
+    # Assigned isn't copied, so it never gets an amount without the person putting it there.
     def copy_assignments(from:, to:)
-      copies = assignments.where(month: from).pluck(:envelope_id, :amount).map do |envelope_id, amount|
+      copies = assignments.merge(Budget::Envelope.active).where(month: from).pluck(:envelope_id, :amount).map do |envelope_id, amount|
         { envelope_id: envelope_id, month: to, amount: amount }
       end
 

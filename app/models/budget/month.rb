@@ -42,6 +42,17 @@ class Budget::Month
     def overspent?
       available.negative?
     end
+
+    # Whether every figure on the line is zero. Available is the sum of the others, so it is too.
+    def empty?
+      [ carried_over, assigned, spent, refunded, reallocated ].all?(&:zero?)
+    end
+
+    # An archived envelope's line is only shown in a month where it has figures, which is hiding by figures and not by
+    # date: nothing can hide in an archived envelope. An envelope in use always shows.
+    def shown?
+      !envelope.archived? || !empty?
+    end
   end
 
   attr_reader :budget, :date
@@ -100,30 +111,41 @@ class Budget::Month
     end
   end
 
-  # The budget's envelopes, alphabetically.
+  # The lines to show for the month, alphabetically: every envelope in use, and the archived ones that have a figure in
+  # this month. Every envelope's figures are worked out whether it's shown or not, so the number of queries is the same.
   def envelopes
-    @envelopes ||= budget.envelopes.alphabetical.map do |envelope|
-      assigned = assignment_totals.fetch(envelope.id, NOTHING)
-      spent = spend_totals.fetch(envelope.id, NOTHING)
-      refunded = refund_totals.fetch(envelope.id, NOTHING)
-      reallocated = reallocation_totals.fetch(envelope.id, NOTHING)
-      carried_over = envelope.starting_balance + assigned.before - spent.before + refunded.before + reallocated.before
-
-      EnvelopeLine.new(
-        envelope: envelope, carried_over: carried_over, assigned: assigned.in_month, spent: spent.in_month,
-        refunded: refunded.in_month, reallocated: reallocated.in_month,
-        available: carried_over + assigned.in_month - spent.in_month + refunded.in_month + reallocated.in_month
-      )
-    end
+    @envelopes ||= all_envelope_lines.select(&:shown?)
   end
 
-  # One envelope's line, found by its id like any other record of the budget: another budget's envelope, or one that
-  # doesn't exist, is ActiveRecord::RecordNotFound.
+  # The budget's archived envelopes, alphabetically, whether the month shows them or not.
+  def archived_envelopes
+    @archived_envelopes ||= all_envelope_lines.map(&:envelope).select(&:archived?)
+  end
+
+  # One envelope's line, found by its id like any other record of the budget, archived or not, shown or not: another
+  # budget's envelope, or one that doesn't exist, is ActiveRecord::RecordNotFound.
   def envelope_line(id)
-    envelopes.find { |line| line.envelope.id == id.to_i } or raise ActiveRecord::RecordNotFound
+    all_envelope_lines.find { |line| line.envelope.id == id.to_i } or raise ActiveRecord::RecordNotFound
   end
 
   private
+    # Every envelope of the budget, alphabetically.
+    def all_envelope_lines
+      @all_envelope_lines ||= budget.envelopes.alphabetical.map do |envelope|
+        assigned = assignment_totals.fetch(envelope.id, NOTHING)
+        spent = spend_totals.fetch(envelope.id, NOTHING)
+        refunded = refund_totals.fetch(envelope.id, NOTHING)
+        reallocated = reallocation_totals.fetch(envelope.id, NOTHING)
+        carried_over = envelope.starting_balance + assigned.before - spent.before + refunded.before + reallocated.before
+
+        EnvelopeLine.new(
+          envelope: envelope, carried_over: carried_over, assigned: assigned.in_month, spent: spent.in_month,
+          refunded: refunded.in_month, reallocated: reallocated.in_month,
+          available: carried_over + assigned.in_month - spent.in_month + refunded.in_month + reallocated.in_month
+        )
+      end
+    end
+
     # Deposits for the months before this one, and for this one, from a single query.
     def deposit_totals
       budget.deposits.where(month: ..date).pick(sum_where("month < ?"), sum_where("month = ?"))

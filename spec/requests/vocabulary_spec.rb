@@ -228,4 +228,94 @@ RSpec.describe "The words on the pages", type: :request do
     expect(visible_text).not_to match(/\w+_\w+/)
     expect(visible_text).not_to match(retired_terms)
   end
+
+  describe "archived envelopes" do
+    let!(:old_gym) { create(:budget_envelope, budget: budget, name: "Old gym") }
+
+    before do
+      travel_to Time.utc(2026, 10, 15, 16)
+      create(:budget_assignment, envelope: old_gym, month: Date.new(2026, 9, 1), amount: 40)
+      create(:budget_spend, envelope: old_gym, date: Date.new(2026, 9, 14), amount: 40)
+      old_gym.update_column(:archived_at, Time.current)
+    end
+
+    # What went wrong, as the alert on the envelope's page says it.
+    def alert_after_archiving(envelope)
+      post envelope_archive_path(envelope), params: { month: "2026-10" }
+      follow_redirect!
+      css_select("[role=alert]").map { |alert| alert.text.squish }.sole
+    end
+
+    it "says Archived on the badge, Archived envelopes on the section, and Unarchive on the envelope's page, with no snake_case or retired terms" do
+      [ month_path("2026-09"), month_path("2026-10"), month_envelope_path("2026-09", old_gym) ].each do |path|
+        get path
+
+        expect(response).to have_http_status(:ok)
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+        expect(response.body).not_to match(/archived_at/)
+      end
+
+      get month_path("2026-09")
+      expect(visible_text).to include("Old gym Archived", "Archived envelopes")
+
+      get month_envelope_path("2026-09", old_gym)
+      expect(visible_text).to include("Old gym Archived", "Unarchive")
+    end
+
+    it "says All your envelopes are archived when none is in use and none has figures this month" do
+      # Everything but the archived envelope's own history is cleared, and its figures are all last month's.
+      envelopes = budget.envelopes
+      Budget::Assignment.where(envelope: envelopes).where.not(envelope: old_gym).delete_all
+      Budget::Spend.where(envelope: envelopes).where.not(envelope: old_gym).delete_all
+      Budget::Refund.where(envelope: envelopes).delete_all
+      Budget::EnvelopeReallocation.involving(envelopes).delete_all
+      Budget::ReadyToAssignReallocation.where(envelope: envelopes).delete_all
+      envelopes.update_all(archived_at: Time.current, starting_balance: 0)
+
+      get month_path("2026-12")
+
+      expect(visible_text).to include("All your envelopes are archived.", "New envelope", "Archived envelopes")
+      expect(visible_text).not_to include("You don't have any envelopes yet.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+    end
+
+    it "uses the same words for the three reasons archiving is refused" do
+      trip = create(:budget_envelope, budget: budget, name: "Trip")
+      assignment = create(:budget_assignment, envelope: trip, month: Date.new(2026, 10, 1), amount: 100)
+      expect(alert_after_archiving(trip)).to eq("Available is $100.00 in October 2026. Lower this month's Assigned, spend it or reallocate it first.")
+
+      assignment.destroy!
+      create(:budget_spend, envelope: trip, date: Date.new(2026, 10, 3), amount: 25)
+      expect(alert_after_archiving(trip)).to eq("Available is -$25.00 in October 2026. Assign more to it or reallocate money to it first.")
+
+      Budget::Spend.where(envelope: trip).delete_all
+      create(:budget_assignment, envelope: trip, month: Date.new(2026, 11, 1), amount: 5)
+      expect(alert_after_archiving(trip)).to eq("It has Assigned, Spends, Refunds or Reallocations after October 2026. Clear them first.")
+    end
+
+    it "uses the same words for what went wrong when a Spend is put in an archived envelope" do
+      post spends_path, params: { spend: { envelope_id: old_gym.id, description: "Towels", date: "2026-10-15", amount: "5" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("Envelope is archived")
+    end
+
+    it "uses the same words for what went wrong when an archived envelope's Assigned is changed" do
+      patch month_envelope_assignment_path("2026-09", old_gym), params: { assignment: { amount: "5" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("Old gym is archived, so its Assigned can't be changed. Unarchive it first.")
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "uses the same words for what went wrong when an archived envelope's name is used again" do
+      post envelopes_path, params: { envelope: { name: "Old gym" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("Name is already used by an archived envelope. Unarchive it or choose another name.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+  end
 end

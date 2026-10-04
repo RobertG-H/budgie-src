@@ -97,7 +97,8 @@ second use turns it into a partial. The partials:
 | Partial | For |
 | --- | --- |
 | `_flash` | One flash message (`notice`/`alert`/`info`/`warning`), used by the layout and shown for every type on `/styleguide`. |
-| `_page_header` | A page's `h1`, optional description, and actions block (e.g. the "New envelope" button). |
+| `_page_header` | A page's `h1`, optional `badge` beside it, optional description, and actions block (e.g. the "New envelope" button). |
+| `_archived_badge` | The "Archived" badge beside an archived envelope's name, on the month view's row and by the title on its page (`_page_header`'s `badge`). A `badge-neutral badge-sm` word, never only a colour, as Overspent isn't. |
 | `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent. |
 | `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. `hide_label` takes the label out of sight but not away from assistive technology, for a control whose place makes its purpose clear, such as an amount inside a table cell. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
@@ -108,6 +109,8 @@ second use turns it into a partial. The partials:
 | `_form_actions` | What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. |
 | `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. A form of its own, so it goes in a page's header actions. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |
+
+An envelope's archived state is a word and not a colour: the badge beside its name, and its Assigned as plain text where an envelope in use has the button that opens the input, since it's read-only. The month view lists every archived envelope in a native `<details>` ("Archived envelopes") below the table, bordered like a record list (`rounded-box border border-base-300`), each name a `link` filling a row, and only when the budget has some.
 
 ## Interactivity
 

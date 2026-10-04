@@ -6,4 +6,5 @@ class Budget::Refund < ApplicationRecord
   include DatedEnvelopeRecord
 
   belongs_to :envelope
+  refuse_archived_envelopes :envelope
 end

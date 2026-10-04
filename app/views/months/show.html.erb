@@ -51,9 +51,19 @@
         <tbody>
           <% @month.envelopes.each do |line| %>
             <tr id="<%= dom_id(line.envelope) %>">
-              <td><%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %></td>
+              <td>
+                <%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %>
+                <% if line.envelope.archived? %><%= render "components/archived_badge" %><% end %>
+              </td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
-              <td class="text-right tabular-nums"><%= render "assignments/cell", line: line, month: @month, from: origin_page %></td>
+              <%# An archived envelope's Assigned is read-only, so it's plain text and not the input's button. %>
+              <td class="text-right tabular-nums">
+                <% if line.envelope.archived? %>
+                  <%= render "components/money", amount: line.assigned, budget: budget %>
+                <% else %>
+                  <%= render "assignments/cell", line: line, month: @month, from: origin_page %>
+                <% end %>
+              </td>
               <td class="text-right tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.refunded, budget: budget %></td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.reallocated, budget: budget %></td>
@@ -64,8 +74,21 @@
       </table>
     </div>
   <% else %>
-    <%= render "components/empty_state", message: "You don't have any envelopes yet." do %>
+    <%# Envelopes in use always show, so a table with none is the budget with none at all, or with all of them archived and none of them with a figure this month. %>
+    <%= render "components/empty_state", message: (@month.archived_envelopes.any? ? "All your envelopes are archived." : "You don't have any envelopes yet.") do %>
       <%= link_to "New envelope", new_envelope_path(month: @month, from: "month"), class: "btn btn-primary" %>
     <% end %>
   <% end %>
 </div>
+
+<%# Every archived envelope, whether this month shows it or not, so one can be found to unarchive it. Each links to its page for the month being viewed. Only there when the budget has some. %>
+<% if @month.archived_envelopes.any? %>
+  <details class="mt-8 rounded-box border border-base-300">
+    <summary class="cursor-pointer p-4 font-semibold">Archived envelopes</summary>
+    <ul class="divide-y divide-base-300 border-t border-base-300">
+      <% @month.archived_envelopes.each do |envelope| %>
+        <li><%= link_to envelope.name, month_envelope_path(@month, envelope), class: "link block p-4" %></li>
+      <% end %>
+    </ul>
+  </details>
+<% end %>

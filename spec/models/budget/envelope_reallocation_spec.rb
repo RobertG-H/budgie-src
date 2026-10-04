@@ -205,4 +205,16 @@ RSpec.describe Budget::EnvelopeReallocation, type: :model do
         .to raise_error(ActiveRecord::StatementInvalid, /PG::RestrictViolation/)
     end
   end
+
+  describe "an archived envelope" do
+    describe "as From" do
+      include_examples "a record that refuses an archived envelope", association: :from_envelope, label: "From",
+        build: ->(envelope, budget) { build(:budget_envelope_reallocation, from_envelope: envelope, to_envelope: create(:budget_envelope, budget: budget)) }
+    end
+
+    describe "as To" do
+      include_examples "a record that refuses an archived envelope", association: :to_envelope, label: "To",
+        build: ->(envelope, budget) { build(:budget_envelope_reallocation, from_envelope: create(:budget_envelope, budget: budget), to_envelope: envelope) }
+    end
+  end
 end

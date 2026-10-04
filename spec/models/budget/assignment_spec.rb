@@ -178,4 +178,48 @@ RSpec.describe Budget::Assignment, type: :model do
         .to raise_error(ActiveRecord::StatementInvalid, /PG::RestrictViolation/)
     end
   end
+
+  describe "an archived envelope" do
+    let(:envelope) { create(:budget_envelope) }
+    let(:message) { "Gym is archived, so its Assigned can't be changed. Unarchive it first." }
+
+    before { envelope.update!(name: "Gym") }
+
+    it "can't be given an Assignment" do
+      envelope.update!(archived_at: Time.current)
+      assignment = build(:budget_assignment, envelope: envelope)
+
+      expect(assignment).not_to be_valid
+      expect(assignment.errors.full_messages).to eq([ message ])
+    end
+
+    it "can't have its Assignment changed, directly or through assign" do
+      assignment = create(:budget_assignment, envelope: envelope, amount: 40)
+      envelope.update!(archived_at: Time.current)
+      assignment.reload
+
+      expect(assignment.update(amount: 75)).to be(false)
+      expect(assignment.errors.full_messages).to eq([ message ])
+      expect(assignment.reload.amount).to eq(40)
+    end
+
+    it "can't have its Assignment cleared through assign" do
+      assignment = create(:budget_assignment, envelope: envelope, amount: 40)
+      envelope.update!(archived_at: Time.current)
+      assignment.reload
+
+      expect(assignment.assign("")).to be(false)
+      expect(assignment.errors.full_messages).to eq([ message ])
+      expect(assignment).to be_persisted
+      expect(Budget::Assignment.exists?(assignment.id)).to be(true)
+    end
+
+    it "is saved again once the envelope is unarchived" do
+      assignment = create(:budget_assignment, envelope: envelope, amount: 40)
+      envelope.update!(archived_at: Time.current)
+      envelope.unarchive
+
+      expect(assignment.reload.update(amount: 75)).to be(true)
+    end
+  end
 end

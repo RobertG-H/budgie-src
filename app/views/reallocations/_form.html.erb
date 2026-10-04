@@ -1,7 +1,8 @@
 <%# locals: (record:) %>
-<%# The form for a Reallocation, new or saved, to an envelope or to Ready to Assign: To decides which. From can be any of the budget's envelopes, alphabetically, and so can To, below Ready to Assign, on a prompt to choose one until they are chosen, and the first one still to choose has the focus. Once saved, To is shown as text and can't change. %>
+<%# The form for a Reallocation, new or saved, to an envelope or to Ready to Assign: To decides which. From can be any of the budget's envelopes in use, alphabetically, and the one a saved Reallocation is already from, even when it's archived, and so can To, with only those in use, below Ready to Assign, on a prompt to choose one until they are chosen, and the first one still to choose has the focus. Once saved, To is shown as text and can't change. %>
 <%# The errors on From are on `envelope` for a Reallocation to Ready to Assign, which has one envelope, and on `from_envelope` for the other kind. %>
-<% envelopes = Current.budget.envelopes.alphabetical.pluck(:name, :id) %>
+<% from_envelopes = envelope_options(keeping: record.envelope_ids_in_database.first(1)) %>
+<% envelopes = envelope_options %>
 <% to_ready_to_assign = record.is_a?(Budget::ReadyToAssignReallocation) %>
 <% from_attribute = to_ready_to_assign ? :envelope : :from_envelope %>
 <% to_options = [ [ "Ready to Assign", Reallocating::READY_TO_ASSIGN ] ] + envelopes %>
@@ -16,7 +17,7 @@
   <%# The errors are on the envelope, which is what the select sets through its id. %>
   <%= render "components/field", form: form, attribute: :from_envelope_id, label: "From", control: :select,
         error: record.errors.full_messages_for(from_attribute).to_sentence.presence do |field| %>
-    <%= form.select :from_envelope_id, envelopes, { prompt: "Choose an envelope" }, required: true, autofocus: record.from_envelope_id.nil?, **field %>
+    <%= form.select :from_envelope_id, from_envelopes, { prompt: "Choose an envelope" }, required: true, autofocus: record.from_envelope_id.nil?, **field %>
   <% end %>
 
   <% if record.persisted? %>

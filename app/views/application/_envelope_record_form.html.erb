@@ -1,7 +1,7 @@
 <%# locals: (record:, hint:, cancel_path:) %>
 <%# The form for a Spend or a Refund, which are the same but for what the description is hinted to be. %>
-<%# The envelope can be any of the budget's, alphabetically. Without one chosen the select starts on a prompt, so the form can't be sent by accident with the first envelope, and has the focus. With one chosen, as from an envelope's page, the description does. %>
-<% envelopes = Current.budget.envelopes.alphabetical.pluck(:name, :id) %>
+<%# The envelope can be any of the budget's in use, alphabetically, and the one a saved record is already in, even when it's archived. Without one chosen the select starts on a prompt, so the form can't be sent by accident with the first envelope, and has the focus. With one chosen, as from an envelope's page, the description does. %>
+<% envelopes = envelope_options(keeping: [ record.envelope_id_in_database ]) %>
 
 <%= form_with model: record, class: "mt-8 space-y-6" do |form| %>
   <%= render "form_errors", record: record %>

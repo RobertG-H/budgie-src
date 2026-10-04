@@ -18,4 +18,19 @@ module DatedEnvelopeRecord
     scope :dated_in, ->(month) { where(date: month.beginning_of_month..month.end_of_month) }
     scope :newest_first, -> { order(date: :desc, created_at: :desc, id: :desc) }
   end
+
+  class_methods do
+    # An archived envelope takes no new records, so one can't be added to it, and a record can't be moved into one. A
+    # record that's already in an archived envelope stays as it is, and can still be changed and deleted. Each of
+    # `associations` is an envelope the record belongs to.
+    def refuse_archived_envelopes(*associations)
+      validate do
+        associations.each do |association|
+          next unless public_send(association)&.archived?
+
+          errors.add(association, "is archived") if new_record? || public_send(:"#{association}_id_changed?")
+        end
+      end
+    end
+  end
 end

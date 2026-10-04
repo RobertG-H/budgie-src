@@ -211,6 +211,68 @@ RSpec.describe Budget, type: :model do
       expect { budget.start_new_months }.not_to change { assigned_in(october) }
     end
 
+    describe "with an archived envelope" do
+      let(:april) { Date.new(2026, 4, 1) }
+      let(:march) { Date.new(2026, 3, 1) }
+
+      # What an envelope has assigned, as [ month, amount ] pairs. It reads the Assignments themselves, since the month view
+      # doesn't show an archived envelope in a month where it has nothing.
+      def assigned(envelope)
+        Budget::Assignment.where(envelope: envelope).order(:month).pluck(:month, :amount)
+      end
+
+      before do
+        budget.update!(assignments_copied_through: march)
+        assign fun, 40, march
+        assign groceries, 400, march
+        fun.update_column(:archived_at, Time.current)
+      end
+
+      it "doesn't copy its Assigned into the month that begins, and copies an envelope in use's" do
+        travel_to_start_of april
+        budget.start_new_months
+
+        expect(assigned(fun)).to eq([ [ march, 40 ] ])
+        expect(assigned(groceries)).to eq([ [ march, 400 ], [ april, 400 ] ])
+      end
+
+      it "gives an envelope unarchived later no copy for the months it missed" do
+        travel_to_start_of april
+        budget.start_new_months
+        travel_to_start_of Date.new(2026, 5, 1)
+        budget.start_new_months
+
+        fun.unarchive
+        travel_to_start_of Date.new(2026, 6, 1)
+        budget.start_new_months
+
+        expect(assigned(fun)).to eq([ [ march, 40 ] ])
+        expect(assigned(groceries).map(&:first)).to eq([ march, april, Date.new(2026, 5, 1), Date.new(2026, 6, 1) ])
+      end
+
+      it "doesn't touch the Assigned entered ahead for it" do
+        fun.update_column(:archived_at, nil)
+        assign fun, 15, april
+        fun.update_column(:archived_at, Time.current)
+        travel_to_start_of april
+
+        expect { budget.start_new_months }.not_to change { assigned(fun) }
+      end
+
+      it "takes as many queries as with no archived envelope" do
+        travel_to_start_of april
+        with_it = count_queries { budget.start_new_months }
+
+        other = travel_to(Time.zone.local(2026, 3, 5)) { create(:budget) }
+        create(:budget_assignment, envelope: create(:budget_envelope, budget: other, name: "Groceries"), month: march, amount: 400)
+        create(:budget_assignment, envelope: create(:budget_envelope, budget: other, name: "Fun"), month: march, amount: 40)
+        travel_to_start_of april
+        without_it = count_queries { other.start_new_months }
+
+        expect(with_it).to eq(without_it)
+      end
+    end
+
     it "takes as many queries for 20 envelopes as for 1" do
       budgets = [ 1, 20 ].map do |count|
         travel_to(Time.zone.local(2026, 9, 5)) { create(:budget) }.tap do |budget|
