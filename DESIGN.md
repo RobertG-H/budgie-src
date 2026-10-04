@@ -98,9 +98,13 @@ second use turns it into a partial. The partials:
 | `_flash` | One flash message (`notice`/`alert`/`info`/`warning`), used by the layout and shown for every type on `/styleguide`. |
 | `_page_header` | A page's `h1`, optional description, and actions block (e.g. the "New envelope" button). |
 | `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent. |
-| `_field` | A labelled form control (`:input`, `:select`, `:textarea` or `:checkbox`) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. |
+| `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
-| `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. |
+| `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. |
+| `_month_links` | Links to the months either side of the one being viewed, named for them, and back to the current month when viewing another. Each page passes a `path` that turns a month into its own address, so the links stay on that page. |
+| `_record_list` | The bordered list that holds record rows. |
+| `_record_row` | One record in a `_record_list`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. The whole row links to the record's edit page, where it's also deleted. |
+| `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. A form of its own, so it goes in a page's header actions. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |
 
 ## Interactivity

@@ -20,9 +20,33 @@ RSpec.describe Dev::StyleguideController, type: :controller do
       it "has a section for each part of the design" do
         with_development_routes { get :show }
 
-        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
+        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
           assert_select "section > h2", text: heading
         end
+      end
+
+      it "shows month links for the current month and for another, which can go back to this month" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links nav[aria-label=Months]", count: 2
+        assert_select "#month-links a[rel=prev]", count: 2
+        assert_select "#month-links a[rel=next]", count: 2
+        assert_select "#month-links a", text: "This month", count: 1
+      end
+
+      it "shows record rows with and without notes, each a link" do
+        with_development_routes { get :show }
+
+        assert_select "#record-rows ul.list > li", minimum: 3
+        assert_select "#record-rows ul.list li a.list-row", minimum: 3
+        assert_select "#record-rows span.block[class~='text-base-content/70']", minimum: 1
+        assert_select "#record-rows span.text-right.tabular-nums", text: "$3,000.00"
+      end
+
+      it "shows a stat card that links to the records behind its number" do
+        with_development_routes { get :show }
+
+        assert_select "#cards a.stats[href] .stat-title", text: "Ready to Assign"
       end
 
       it "shows every theme role next to its content colour" do
@@ -48,6 +72,20 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#fields p[id$=_hint]"
         assert_select "#fields input[aria-invalid=true][aria-describedby$=_error]"
         assert_select "#fields [role=alert] li", text: "Name can't be blank"
+      end
+
+      it "shows a group of radio buttons under a legend, with a hint" do
+        with_development_routes { get :show }
+
+        assert_select "#fields fieldset > legend", text: "Favourite colour"
+        assert_select "#fields fieldset input.radio[type=radio]", minimum: 2
+        assert_select "#fields fieldset p[id$=_hint]"
+      end
+
+      it "shows the delete button, which asks first" do
+        with_development_routes { get :show }
+
+        assert_select "#buttons form[data-turbo-confirm] button.btn-ghost.text-error", text: "Delete"
       end
 
       it "shows money columns, with a negative Available that says Overspent" do

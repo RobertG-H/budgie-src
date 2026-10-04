@@ -3,5 +3,5 @@
 <div class="mx-auto max-w-md">
   <%= render "components/page_header", title: "Edit envelope" %>
 
-  <%= render "form", envelope: @envelope %>
+  <%= render "form", envelope: @envelope, cancel_path: return_path(@month, envelope: @envelope) %>
 </div>

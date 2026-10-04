@@ -98,4 +98,68 @@ RSpec.describe "components/_field", type: :view do
 
     assert_select "div.flex > input.checkbox + label", text: "Name"
   end
+
+  describe "a group of radio buttons" do
+    # The block renders each choice, as a field's block renders its one control.
+    def render_radios(record: Budget::Deposit.new, **options)
+      render inline: <<~ERB, locals: { record: record, options: options }
+        <%= form_with model: record, url: "#" do |form| %>
+          <%= render "components/field", form: form, attribute: :month, control: :radios, **options do |field| %>
+            <% [ "2026-09-01", "2026-10-01" ].each do |value| %>
+              <label><%= form.radio_button :month, value, **field %> <%= value %></label>
+            <% end %>
+          <% end %>
+        <% end %>
+      ERB
+    end
+
+    it "is a fieldset with a legend, named for the attribute the way the model names it, not a label" do
+      render_radios
+
+      assert_select "fieldset > legend", text: "Ready to Assign in"
+      assert_select "fieldset input[type=radio]", count: 2
+      assert_select "label[for=deposit_month]", count: 0
+    end
+
+    it "takes the legend's text from the label local" do
+      render_radios label: "Counts toward"
+
+      assert_select "fieldset > legend", text: "Counts toward"
+    end
+
+    it "makes up a legend without a record, for a form with only a scope" do
+      render inline: <<~ERB
+        <%= form_with scope: :sample, url: "#" do |form| %>
+          <%= render "components/field", form: form, attribute: :favourite_colour, control: :radios do |field| %>
+            <%= form.radio_button :favourite_colour, "blue", **field %>
+          <% end %>
+        <% end %>
+      ERB
+
+      assert_select "fieldset > legend", text: "Favourite colour"
+    end
+
+    it "gives each radio button the radio class, and marks nothing invalid" do
+      render_radios
+
+      assert_select "input.radio.radio-primary", count: 2
+      assert_select "input[aria-invalid]", count: 0
+    end
+
+    it "marks every radio button invalid when the attribute has errors" do
+      record = Budget::Deposit.new.tap { |deposit| deposit.errors.add(:month, "must be September 2026 or October 2026") }
+
+      render_radios record: record
+
+      assert_select "input.radio.radio-error[aria-invalid=true]", count: 2
+      assert_select "input.radio-primary", count: 0
+    end
+
+    it "ties a hint to every radio button" do
+      render_radios hint: "Choose the month after to save it for next month."
+
+      assert_select "p#deposit_month_hint", text: "Choose the month after to save it for next month."
+      assert_select "input[type=radio][aria-describedby=deposit_month_hint]", count: 2
+    end
+  end
 end

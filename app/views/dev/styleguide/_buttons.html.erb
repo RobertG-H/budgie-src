@@ -42,4 +42,10 @@
 
   <h3 class="font-semibold">Full width</h3>
   <button type="button" class="btn btn-primary btn-block">Block</button>
+
+  <h3 class="font-semibold">Delete</h3>
+  <p class="text-base-content/70">Asks before it deletes. It's a form of its own, so it goes in a page's header actions. Nothing is deleted here: the styleguide has no route that does.</p>
+  <div class="flex flex-wrap gap-2">
+    <%= render "components/delete_button", path: "#", confirm: "Delete the sample envelope?" %>
+  </div>
 </section>

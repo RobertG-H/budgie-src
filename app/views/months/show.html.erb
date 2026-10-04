@@ -1,0 +1,53 @@
+<% content_for :title, "#{@month.name} · Budgie" %>
+<% budget = @month.budget %>
+<% ready_to_assign = @month.ready_to_assign %>
+<%# Amounts are shown through the money partial wherever they are, so a negative one is signed and red here too. %>
+<% ready_to_assign_description = safe_join([
+     "Carried over", render("components/money", amount: ready_to_assign.carried_over, budget: budget),
+     "·",
+     "Deposited", render("components/money", amount: ready_to_assign.deposited, budget: budget)
+   ], " ") %>
+
+<%= render "components/page_header", title: @month.name do %>
+  <%= link_to "New deposit", new_deposit_path(month: @month, from: "month"), class: "btn btn-primary" %>
+  <%= link_to "New envelope", new_envelope_path(month: @month, from: "month"), class: "btn" %>
+<% end %>
+
+<div class="mt-4">
+  <%= render "components/month_links", month: @month, path: ->(month) { month_path(month) } %>
+</div>
+
+<div class="mt-8">
+  <%= render "components/stat_card", title: "Ready to Assign",
+        value: render("components/money", amount: ready_to_assign.amount, budget: budget),
+        description: ready_to_assign_description, href: month_deposits_path(@month) %>
+</div>
+
+<div class="mt-8">
+  <% if @month.envelopes.any? %>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Envelope</th>
+            <th scope="col" class="hidden text-right sm:table-cell">Carried over</th>
+            <th scope="col" class="text-right">Available</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @month.envelopes.each do |line| %>
+            <tr id="<%= dom_id(line.envelope) %>">
+              <td><%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %></td>
+              <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
+              <td class="text-right tabular-nums"><%= render "components/money", amount: line.available, budget: budget, overspent: line.overspent? %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <%= render "components/empty_state", message: "You don't have any envelopes yet." do %>
+      <%= link_to "New envelope", new_envelope_path(month: @month, from: "month"), class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+</div>

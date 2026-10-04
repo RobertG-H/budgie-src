@@ -10,9 +10,25 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_000311) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "budget_deposits", force: :cascade do |t|
+    t.bigint "budget_id", null: false
+    t.string "description", null: false
+    t.date "date", null: false
+    t.date "month", null: false
+    t.decimal "amount", precision: 15, scale: 2, null: false
+    t.text "notes", default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["budget_id", "month"], name: "index_budget_deposits_on_budget_id_and_month"
+    t.check_constraint "EXTRACT(day FROM month) = 1::numeric", name: "budget_deposits_month_first_of_month"
+    t.check_constraint "amount > 0::numeric", name: "budget_deposits_amount_positive"
+    t.check_constraint "btrim(description::text) <> ''::text", name: "budget_deposits_description_not_blank"
+    t.check_constraint "month = date_trunc('month'::text, date::timestamp without time zone)::date OR month = (date_trunc('month'::text, date::timestamp without time zone) + 'P1M'::interval)::date", name: "budget_deposits_month_of_date_or_next"
+  end
 
   create_table "budget_envelopes", force: :cascade do |t|
     t.bigint "budget_id", null: false
@@ -75,6 +91,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_200000) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "budget_deposits", "budgets", on_delete: :restrict
   add_foreign_key "budget_envelopes", "budgets", on_delete: :restrict
   add_foreign_key "budgets", "users", on_delete: :restrict
   add_foreign_key "identities", "users"

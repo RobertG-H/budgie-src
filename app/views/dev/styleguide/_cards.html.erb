@@ -15,4 +15,11 @@
 
   <h3 class="font-semibold">Stat card</h3>
   <%= render "components/stat_card", title: "Ready to Assign", value: money(1250, budget: budget), description: "Across 3 envelopes" %>
+
+  <h3 class="font-semibold">Stat card that links</h3>
+  <p class="text-base-content/70">Given an href, the whole card links to the records behind its number.</p>
+  <%= render "components/stat_card", title: "Ready to Assign", value: money(1250, budget: budget),
+        description: safe_join([ "Carried over", render("components/money", amount: -30, budget: budget), "·",
+                                 "Deposited", render("components/money", amount: 1280, budget: budget) ], " "),
+        href: "#" %>
 </section>

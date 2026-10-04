@@ -1,0 +1,32 @@
+<% content_for :title, "Deposits · #{@month.name} · Budgie" %>
+<% budget = @month.budget %>
+
+<%= link_to "Back to #{@month.name}", month_path(@month), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: "Deposits", description: @month.name do %>
+    <%= link_to "New deposit", new_deposit_path(month: @month, from: "deposits"), class: "btn btn-primary" %>
+  <% end %>
+</div>
+
+<div class="mt-4">
+  <%= render "components/month_links", month: @month, path: ->(month) { month_deposits_path(month) } %>
+</div>
+
+<div class="mt-8">
+  <%= render "components/stat_card", title: "Deposited",
+        value: render("components/money", amount: @month.ready_to_assign.deposited, budget: budget) %>
+</div>
+
+<div class="mt-8">
+  <% if @deposits.any? %>
+    <%= render "components/record_list" do %>
+      <% @deposits.each do |deposit| %>
+        <%= render "components/record_row", href: edit_deposit_path(deposit, month: @month, from: "deposits"),
+              date: deposit.date, description: deposit.description, notes: deposit.notes, amount: deposit.amount, budget: budget %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "No deposits in #{@month.name}." %>
+  <% end %>
+</div>

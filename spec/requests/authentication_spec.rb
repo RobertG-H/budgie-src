@@ -57,9 +57,12 @@ RSpec.describe "Authentication", type: :request do
   end
 
   describe "session expiry" do
+    # 30.days counts calendar days in the app's time zone, which is 23 or 25 hours long when daylight saving
+    # changes. `travel` adds to the system clock's UTC instead, so these travel from Time.current, to count
+    # the way Session does and to stay a minute either side of the limit whatever day the specs run.
     it "keeps a session used within the last 30 days" do
       sign_in_as user
-      travel 30.days - 1.minute
+      travel_to Time.current + 30.days - 1.minute
 
       get root_path
 
@@ -68,7 +71,7 @@ RSpec.describe "Authentication", type: :request do
 
     it "rejects and deletes a session unused for more than 30 days" do
       user_session = sign_in_as user
-      travel 30.days + 1.minute
+      travel_to Time.current + 30.days + 1.minute
 
       get root_path
 

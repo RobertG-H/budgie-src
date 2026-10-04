@@ -1,0 +1,10 @@
+<%# locals: (month:, path:) %>
+<%# Links to the months either side of `month`, named for them, and back to the current month when viewing another. `path` turns a month into the path of the same page for it, so the links stay on the page they're on. %>
+<%# The negative margin offsets the buttons' own padding, so the first and last names line up with the page's edges. %>
+<nav aria-label="Months" class="-mx-2 flex flex-wrap items-center justify-between gap-2">
+  <%= link_to month.previous.name, path.call(month.previous), rel: "prev", class: "btn btn-ghost btn-sm px-2" %>
+  <% unless month.current? %>
+    <%= link_to "This month", path.call(month.current), class: "btn btn-ghost btn-sm px-2" %>
+  <% end %>
+  <%= link_to month.next.name, path.call(month.next), rel: "next", class: "btn btn-ghost btn-sm px-2" %>
+</nav>

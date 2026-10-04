@@ -57,7 +57,7 @@ The invite email isn't sent — it appears at http://localhost:3000/letter_opene
 open it to sign in.
 
 **5. Sign in** at http://localhost:3000 with Google, as the address you invited. The first time, you choose
-your budget's currency before reaching your envelopes.
+your budget's currency, and then you land on the month view.
 
 **6. Optionally, load the sample data.**
 
@@ -65,7 +65,7 @@ your budget's currency before reaching your envelopes.
 docker compose run --rm web bin/rails db:seed
 ```
 
-This creates a development user with a budget and a few envelopes. It's what [`/dev/sign_in`](#working-on-the-ui)
+This creates a development user with a budget, a few envelopes and two Paycheck Deposits. It's what [`/dev/sign_in`](#working-on-the-ui)
 signs in as, and it only ever runs in development.
 
 ## Everyday commands

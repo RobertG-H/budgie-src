@@ -33,7 +33,9 @@ module Budgie
     # These settings can be overridden in specific environments using the files
     # in config/environments, which are processed later.
     #
-    # config.time_zone = "Central Time (US & Canada)"
+    # Records store dates, not times, so this only decides what "today" is: which month the home page opens on and
+    # what a date field starts as. It's the same for everyone until budgets get time zones of their own.
+    config.time_zone = "Eastern Time (US & Canada)"
     # config.eager_load_paths << Rails.root.join("extras")
 
     # Don't generate system test files.

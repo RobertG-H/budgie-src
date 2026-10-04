@@ -32,7 +32,7 @@ RSpec.describe "Budget setup", type: :request do
     end
   end
 
-  it "sends a newly signed-in user to setup, then to the envelope list" do
+  it "sends a newly signed-in user to setup, then to the month view" do
     create(:invite, email: "robin@example.com")
 
     sign_in_with_google(email: "robin@example.com")
@@ -40,7 +40,7 @@ RSpec.describe "Budget setup", type: :request do
     expect(response).to redirect_to(new_budget_path)
 
     post budget_path, params: { budget: { currency: "USD" } }
-    expect(response).to redirect_to(envelopes_path)
+    expect(response).to redirect_to(root_path)
 
     follow_redirect!
     expect(response).to have_http_status(:ok)
@@ -63,12 +63,12 @@ RSpec.describe "Budget setup", type: :request do
       assert_select "input[type=submit][value='Create budget']"
     end
 
-    it "sends a user who already has a budget to the envelope list" do
+    it "sends a user who already has a budget to the month view" do
       create(:budget, user: user)
 
       get new_budget_path
 
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(root_path)
     end
 
     it "requires sign-in" do
@@ -87,7 +87,7 @@ RSpec.describe "Budget setup", type: :request do
       expect { post budget_path, params: { budget: { currency: "EUR" } } }.to change(Budget, :count).by(1)
 
       expect(user.reload.budget.currency).to eq("EUR")
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(root_path)
     end
 
     it "shows an error when no currency is chosen" do
@@ -104,23 +104,23 @@ RSpec.describe "Budget setup", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
-    it "sends a user who already has a budget to the envelope list without changing it" do
+    it "sends a user who already has a budget to the month view without changing it" do
       budget = create(:budget, user: user, currency: "CAD")
 
       expect { post budget_path, params: { budget: { currency: "USD" } } }.not_to change(Budget, :count)
 
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(root_path)
       expect(budget.reload.currency).to eq("CAD")
     end
 
-    it "sends a double submit to the envelope list when the database refuses a second budget" do
+    it "sends a double submit to the month view when the database refuses a second budget" do
       create(:budget, user: user)
       # Both submissions got past the check for an existing budget before either was saved.
       allow_any_instance_of(User).to receive(:budget).and_return(nil)
 
       expect { post budget_path, params: { budget: { currency: "USD" } } }.not_to change(Budget, :count)
 
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(root_path)
     end
   end
 end

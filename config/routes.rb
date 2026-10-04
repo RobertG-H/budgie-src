@@ -14,7 +14,14 @@ Rails.application.routes.draw do
   get "auth/failure" => "sessions#failure", as: :auth_failure
 
   resource :budget, only: [ :new, :create ]
-  resources :envelopes, except: :show
+
+  # The month view is the home page: root is the current month, and any other is /months/YYYY-MM.
+  get "months/:month" => "months#show", as: :month
+  get "months/:month/deposits" => "deposits#index", as: :month_deposits
+  get "months/:month/envelopes/:id" => "envelopes#show", as: :month_envelope
+
+  resources :deposits, except: [ :index, :show ]
+  resources :envelopes, except: [ :index, :show ]
 
   # Local development only: the styleguide, and a shortcut that signs in as the seeded user. Testing and
   # production both run RAILS_ENV=production, so this is checked against development, never against
@@ -34,5 +41,5 @@ Rails.application.routes.draw do
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
   # Defines the root path route ("/")
-  root "envelopes#index"
+  root "months#show"
 end

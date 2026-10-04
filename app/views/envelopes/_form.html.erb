@@ -1,5 +1,7 @@
+<%# locals: (envelope:, cancel_path:) %>
 <%= form_with model: envelope, class: "mt-8 space-y-6" do |form| %>
   <%= render "form_errors", record: envelope %>
+  <%= render "origin_fields", month: @month %>
 
   <%= render "components/field", form: form, attribute: :name do |field| %>
     <%= form.text_field :name, required: true, autofocus: true, **field %>
@@ -12,6 +14,6 @@
 
   <div class="flex items-center gap-4">
     <%= form.submit class: "btn btn-primary" %>
-    <%= link_to "Cancel", envelopes_path, class: "btn btn-ghost" %>
+    <%= link_to "Cancel", cancel_path, class: "btn btn-ghost" %>
   </div>
 <% end %>
