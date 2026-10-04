@@ -24,7 +24,7 @@ class FilingRulesController < ApplicationController
   def create
     @filing_rule = Current.budget.filing_rules.new(filing_rule_params)
 
-    if save_with_sweep
+    if @filing_rule.save_and_sweep(sweep: sweep?)
       redirect_to filing_rules_path, notice: notice_with_sweep("Filing rule added.")
     else
       render :new, status: :unprocessable_content
@@ -39,7 +39,7 @@ class FilingRulesController < ApplicationController
   def update
     @filing_rule.assign_attributes(filing_rule_params)
 
-    if save_with_sweep
+    if @filing_rule.save_and_sweep(sweep: sweep?)
       redirect_to filing_rules_path, notice: notice_with_sweep("Filing rule updated.")
     else
       render :edit, status: :unprocessable_content
@@ -60,28 +60,25 @@ class FilingRulesController < ApplicationController
 
     # Never the budget it belongs to. The Account and the envelope are looked up by the model, which refuses another budget's.
     def filing_rule_params
-      params.expect(filing_rule: [ :text, :account_id, :amount, :outcome, :envelope_id ])
+      entered_filing_rule.except(:sweep)
     end
 
+    # Whether the box that files or ignores the unfiled bank transactions the rule fits was ticked.
     def sweep?
-      params.permit(filing_rule: :sweep).dig(:filing_rule, :sweep) == "1"
+      entered_filing_rule[:sweep] == "1"
     end
 
-    def save_with_sweep
-      Budget::FilingRule.transaction do
-        saved = @filing_rule.save
-        @swept = Budget::FilingRule::Sweep.new(@filing_rule).run if saved && sweep?
-        saved
-      end
+    def entered_filing_rule
+      @entered_filing_rule ||= params.expect(filing_rule: [ :text, :account_id, :amount, :outcome, :envelope_id, :sweep ])
     end
 
     # What's said once it's saved, with what the sweep did, if it did anything: "Filing rule added. It also filed 2 bank transactions." A rule
     # has one outcome, so a sweep files or ignores, and never both.
     def notice_with_sweep(notice)
-      return notice if @swept.nil? || (@swept.filed + @swept.ignored).zero?
+      swept = @filing_rule.swept
+      return notice if swept.nil? || swept.none?
 
-      verb, count = @swept.filed.positive? ? [ "filed", @swept.filed ] : [ "ignored", @swept.ignored ]
-      "#{notice} It also #{verb} #{helpers.pluralize(count, "bank transaction")}."
+      "#{notice} It also #{swept.describe("bank transaction")}."
     end
 
     # One section for each envelope that has a rule, alphabetically as in the month view, then Deposit, then Ignore, each only if it has any.

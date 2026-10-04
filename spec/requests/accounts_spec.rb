@@ -476,6 +476,14 @@ RSpec.describe "Accounts", type: :request do
       assert_select "a.btn[href='#{account_path(account)}']", text: "Cancel"
     end
 
+    it "says in the question before deleting it that the Filing rules for it are deleted with it, since they'd go without a word" do
+      create(:budget_filing_rule, :ignore, budget: budget, account: account, text: "payment thank you")
+
+      get edit_account_path(account)
+
+      assert_select "form[data-turbo-confirm='Delete the Chequing account? Its 1 Filing rule is deleted with it.']"
+    end
+
     it "is not found for another user's Account" do
       get edit_account_path(others_account)
 

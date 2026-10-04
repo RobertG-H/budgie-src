@@ -11,20 +11,20 @@
 # transaction that a more specific rule fits is that rule's, as it would have been in an Import. The rule can be new, or changed and not yet
 # saved, which is how a form counts what saving it would do: it replaces its saved self, and counts as edited now.
 #
-# `like` is the bank transaction a rule is being made from by hand: it's left out, being the one that's just been done, and only bank
+# `made_from` is the bank transaction a rule is being made from by hand: it's left out, being the one that's just been done, and only bank
 # transactions that went the same way (money in, or money out) are swept, so that an Ignore rule that fits either doesn't act on the other
 # way's bank transactions, which the person wasn't looking at.
 #
 # It makes the same number of queries however many bank transactions it files.
 class Budget::FilingRule::Sweep
-  def initialize(rule, like: nil)
+  def initialize(rule, made_from: nil)
     @rule = rule
-    @like = like
+    @made_from = made_from
   end
 
   # The bank transactions it would file or ignore.
   def bank_transactions
-    @bank_transactions ||= applier.claims(candidates, only: @rule).map(&:first)
+    @bank_transactions ||= applier.claims(candidates, only: @rule).map(&:bank_transaction)
   end
 
   def count
@@ -55,7 +55,10 @@ class Budget::FilingRule::Sweep
     def candidates
       @candidates ||= begin
         unfiled = budget.bank_transactions.unfiled
-        unfiled = unfiled.where.not(id: @like.id).where(@like.amount.positive? ? "budget_bank_transactions.amount > 0" : "budget_bank_transactions.amount < 0") if @like
+        if @made_from
+          same_way = @made_from.amount.positive? ? Budget::BankTransaction.money_in : Budget::BankTransaction.money_out
+          unfiled = unfiled.where.not(id: @made_from.id).merge(same_way)
+        end
         unfiled.to_a
       end
     end

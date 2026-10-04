@@ -278,6 +278,15 @@ RSpec.describe "Filing rules", type: :request do
       expect(existing.reload.envelope).to eq(groceries)
     end
 
+    it "says so, and not with an error page, when a rule with the same text was saved a moment ago, which only the unique index sees" do
+      allow_any_instance_of(Budget::FilingRule).to receive(:save).and_raise(ActiveRecord::RecordNotUnique)
+
+      post filing_rules_path, params: rule_params
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert]", text: /Another Filing rule with the same text, Account and amount was saved a moment ago. Try again./
+    end
+
     it "allows the same text with another Account or amount, which are other conditions" do
       create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
 

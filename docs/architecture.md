@@ -345,7 +345,8 @@ filing as one record and when ignoring, and never for a split, since a split has
 run on un-filing, un-ignoring or editing; this is the one time they look back, and only at bank transactions that are unfiled, never at one that's been filed or ignored. The form
 says how many fit, and keeps that up to date as the text is edited, because a rule that's too broad is what ADR 0012 warns about, and the text is where it's trimmed. It
 sweeps the bank transactions where the new rule is the most specific one that fits, so the order rules run in doesn't change, and when a rule is made from a bank transaction it only sweeps
-the ones that went the same way, so an Ignore rule that fits money in and out doesn't act on the other way's. The rule, the filing and the sweep are one database transaction.
+the ones that went the same way, so an Ignore rule that fits money in and out doesn't act on the other way's. The rule, the filing and the sweep are one database transaction. A bank transaction that a rule fits but a more specific rule files isn't counted, and the form says so, since "no other
+bank transactions fit" would be untrue.
 
 **Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each says how
 many bank transactions it filed or ignored, counting only those that still are. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact

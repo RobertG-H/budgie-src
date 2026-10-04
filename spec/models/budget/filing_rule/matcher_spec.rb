@@ -36,6 +36,14 @@ RSpec.describe Budget::FilingRule::Matcher do
       expect(winner(bank_transaction, rule("loblaws toronto"))).to be_nil
     end
 
+    it "is read the same way as the description is, so an unusual space or case fold can't make them disagree" do
+      row = bank_transaction("B\u00E4ckerei\u00A0Stra\u00DFe 12")
+
+      expect(winner(row, rule("stra\u00DFe"))).to be_present
+      expect(winner(row, rule("STRASSE 12"))).to be_present
+      expect(winner(row, rule("b\u00E4ckerei strasse"))).to be_present
+    end
+
     it "is only text, never a pattern, so a wildcard or a regular expression is read as what it says" do
       row = bank_transaction("LOBLAWS 100% ORGANIC (TORONTO)")
 

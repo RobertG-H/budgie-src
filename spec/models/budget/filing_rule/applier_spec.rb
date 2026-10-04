@@ -200,7 +200,7 @@ RSpec.describe Budget::FilingRule::Applier do
     second = bank_transaction("PAYMENT THANK YOU")
     rule("loblaws")
     rule("payment thank you", :ignore)
-    allow(Budget::BankTransaction).to receive(:record_filing_rules).and_wrap_original do |original, *args, **options|
+    allow(Budget::BankTransaction).to receive(:note_filing_rules).and_wrap_original do |original, *args, **options|
       options[:ignored_at] ? raise(ActiveRecord::StatementInvalid, "the database went away") : original.call(*args, **options)
     end
 

@@ -115,7 +115,7 @@ class Budget::Filing
         Budget::BankTransaction.links_by_record.fetch(record_class).insert_all!(kind_pairs.zip(ids).map { |(bank_transaction, _), id| { bank_transaction_id: bank_transaction.id, column => id } })
       end
 
-      Budget::BankTransaction.record_filing_rules(entries.to_h { |entry| [ entry.bank_transaction.id, entry.filing_rule&.id ] })
+      Budget::BankTransaction.note_filing_rules(entries.to_h { |entry| [ entry.bank_transaction.id, entry.filing_rule&.id ] })
     end
 
     def money(amount)

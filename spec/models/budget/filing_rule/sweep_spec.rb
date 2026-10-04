@@ -98,7 +98,7 @@ RSpec.describe Budget::FilingRule::Sweep do
       first = bank_transaction("LOBLAWS #1")
       second = bank_transaction("LOBLAWS #2")
       loblaws = rule("loblaws")
-      allow(Budget::BankTransaction).to receive(:record_filing_rules).and_raise(ActiveRecord::StatementInvalid, "the database went away")
+      allow(Budget::BankTransaction).to receive(:note_filing_rules).and_raise(ActiveRecord::StatementInvalid, "the database went away")
 
       expect { described_class.new(loblaws).run }.to raise_error(ActiveRecord::StatementInvalid)
 
@@ -203,8 +203,8 @@ RSpec.describe Budget::FilingRule::Sweep do
       payment = rule("payment thank you", :ignore)
 
       expect(described_class.new(payment).bank_transactions).to match_array([ this_one, same_way, other_way ])
-      expect(described_class.new(payment, like: this_one).bank_transactions).to eq([ same_way ])
-      expect(described_class.new(payment, like: other_way).bank_transactions).to eq([])
+      expect(described_class.new(payment, made_from: this_one).bank_transactions).to eq([ same_way ])
+      expect(described_class.new(payment, made_from: other_way).bank_transactions).to eq([])
     end
 
     it "with `like`, run only files what it counts" do
@@ -213,7 +213,7 @@ RSpec.describe Budget::FilingRule::Sweep do
       other_way = bank_transaction("PAYMENT THANK YOU", amount: 250, date: Date.new(2026, 9, 13))
       payment = rule("payment thank you", :ignore)
 
-      expect(described_class.new(payment, like: this_one).run).to have_attributes(ignored: 1)
+      expect(described_class.new(payment, made_from: this_one).run).to have_attributes(ignored: 1)
 
       expect(same_way.reload).to be_ignored
       expect([ this_one.reload, other_way.reload ]).to all(be_unfiled)

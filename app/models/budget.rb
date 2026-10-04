@@ -100,8 +100,9 @@ class Budget < ApplicationRecord
 
     # In the order that each one's foreign keys allow: the records that bank transactions were filed as, with their links, then
     # the bank transactions, then the Imports they came from and the Filing rules that filed them, then the Accounts and CSV formats
-    # those were in, and the rules' envelopes are only reached afterwards. Deleted straight from the tables in one statement each. The records go here, with their links, because a link keeps its record from being
-    # deleted, which `delete_envelope_records` and the Deposits would run into.
+    # those were in, and the rules' envelopes are only reached afterwards. Deleted straight from the tables in one statement each. The
+    # records go here, with their links, because a link keeps its record from being deleted, which `delete_envelope_records` and the
+    # Deposits would run into.
     def delete_importer_records
       Budget::BankTransaction.delete_filed_records(Budget::BankTransaction.where(account: accounts))
       Budget::BankTransaction.where(account: accounts).delete_all

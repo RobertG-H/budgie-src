@@ -48,7 +48,7 @@ class Budget::FilingRule::Offer
 
   # The bank's whole description, as it's matched.
   def default_text
-    bank_transaction.normalized_description
+    bank_transaction.description_for_matching
   end
 
   # The rule with these conditions, which is only the text, since there's no Account or amount, if there is one. Saving updates it.
@@ -58,7 +58,7 @@ class Budget::FilingRule::Offer
 
   # Whether the text is one a rule can have, and part of the bank's description, so that there's a rule to say anything about.
   def valid_text?
-    normalized_text.length >= Budget::FilingRule::MIN_TEXT_LENGTH && bank_transaction.normalized_description.include?(normalized_text)
+    normalized_text.length >= Budget::FilingRule::MIN_TEXT_LENGTH && bank_transaction.description_for_matching.include?(normalized_text)
   end
 
   # What the rule would do to the other unfiled bank transactions if it were made as the text stands, as the form says before it's saved: how many it
@@ -70,7 +70,7 @@ class Budget::FilingRule::Offer
       rule = existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)
       rule.assign_attributes(outcome: "ignore", envelope: nil)
 
-      Budget::FilingRule::Sweep.new(rule, like: bank_transaction)
+      Budget::FilingRule::Sweep.new(rule, made_from: bank_transaction)
     end
   end
 
@@ -103,10 +103,13 @@ class Budget::FilingRule::Offer
         done = yield && rule.save!
         raise ActiveRecord::Rollback unless done
 
-        @swept = Budget::FilingRule::Sweep.new(rule, like: bank_transaction).run if sweep
+        @swept = Budget::FilingRule::Sweep.new(rule, made_from: bank_transaction).run if sweep
       end
 
       done
+    rescue ActiveRecord::RecordNotUnique
+      errors.add(:base, Budget::FilingRule::SAVED_A_MOMENT_AGO)
+      false
     end
 
     # The rule that already has these conditions, changed to what's been done, or a new one.
@@ -119,7 +122,7 @@ class Budget::FilingRule::Offer
     def acceptable?(rule)
       rule.valid?
       rule.errors[:text].each { |message| errors.add(:text, message) }
-      errors.add(:text, "must be part of the bank transaction's description, so that the rule fits it") unless bank_transaction.normalized_description.include?(normalized_text)
+      errors.add(:text, "must be part of the bank transaction's description, so that the rule fits it") unless bank_transaction.description_for_matching.include?(normalized_text)
 
       errors.empty?
     end

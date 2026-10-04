@@ -37,6 +37,17 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect(visible_text).to include("Capital letters and extra spaces don't matter. At least 3 characters.")
     end
 
+    it "starts with text that passes its own check, however unusual the description's spaces and letters, since both are read the same way" do
+      unusual = create(:budget_bank_transaction, account: account, description: "B\u00E4ckerei\u00A0Stra\u00DFe 12", amount: -9)
+
+      get new_bank_transaction_filing_path(unusual)
+      assert_select "input[name='filing[rule][text]'][value='b\u00E4ckerei strasse 12']"
+
+      expect { post bank_transaction_filing_path(unusual), params: file_params(rule: { make: "1", text: "b\u00E4ckerei strasse 12" }, amount: "9") }
+        .to change(budget.filing_rules, :count).by(1)
+      expect(response).to redirect_to(unfiled_bank_transactions_path)
+    end
+
     it "has no Account or amount to choose, which is for the Filing rules page" do
       get new_bank_transaction_filing_path(money_out)
 
@@ -64,7 +75,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123', which files these as Spend from Groceries now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123', which files them as Spend from Groceries now.")
     end
 
     it "says it of an Ignore rule in its own words" do
@@ -72,7 +83,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123', which ignores these now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123', which ignores them now.")
     end
 
     it "says nothing of another budget's rule, or of one with an Account or amount condition, which are other rules" do
@@ -176,6 +187,16 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
       assert_select "[role=alert]", text: /Text must be part of the bank transaction's description/
+    end
+
+    it "says so, and files nothing, when a rule with the same text was saved a moment ago, which only the unique index sees" do
+      allow_any_instance_of(Budget::FilingRule).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique)
+
+      expect { post bank_transaction_filing_path(money_out), params: file_params }.not_to change(Budget::Spend, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert]", text: /Another Filing rule with the same text, Account and amount was saved a moment ago. Try again./
+      expect(money_out.reload).to be_unfiled
     end
 
     it "makes no rule when the filing is refused, which says why, as it does without a rule" do
@@ -399,7 +420,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
         preview(text: "costco")
 
-        expect(response.body).to include("Updates the Filing rule for 'costco', which files these as Spend from Groceries now.")
+        expect(response.body).to include("Updates the Filing rule for 'costco', which files them as Spend from Groceries now.")
       end
 
       it "is not found for another user's bank transaction, and needs sign-in" do

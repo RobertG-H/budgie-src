@@ -179,7 +179,7 @@ RSpec.describe "The words on the pages", type: :request do
 
         get new_bank_transaction_filing_path(loblaws_row, from: "account")
 
-        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files these as Spend from Groceries now.",
+        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files them as Spend from Groceries now.",
           "1 other unfiled bank transaction fits.", "File or ignore them the same way now", "Only the ones that went the same way as this one.")
 
         get bank_transaction_rule_preview_path(loblaws_row), params: { filing: { rule: { text: "loblaws", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }

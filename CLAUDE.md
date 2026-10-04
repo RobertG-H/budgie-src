@@ -180,9 +180,9 @@ Import adds `max(0, rows in the file - rows already in the Account)`, whatever h
 file's later rows as the new ones and numbering them on from the last occurrence; the rest are `duplicates_skipped`. The
 normalised description is also stored, as a generated column (`normalized_description`, `lower(regexp_replace(btrim(description),
 '\s+', ' ', 'g'))`, stored), so it follows `description` when bank sync updates it in place and needs no backfill: a Filing rule
-(#69) matches it and a Guess (#70) can index it, and the key, which records how a row first looked, is what stays put. Ruby's `squish` and
-`downcase(:fold)` (the key's) and SQL's `\s+` and `lower` (the column's) can differ on an unusual space or case fold; nothing compares
-one to the other.
+(#69) used to match it and a Guess (#70) can index it, and the key, which records how a row first looked, is what stays put. Ruby's `squish` and
+`downcase(:fold)` (the key's) and SQL's `\s+` and `lower` (the column's) can differ on an unusual space or case fold, so nothing compares one to the other: a
+Filing rule matches `BankTransaction#description_for_matching`, which is Ruby's, as the rule's own text is.
 
 `Budget::Import#run(file)` does an Import, and is true when it worked: `file` is read with the CSV format's reader, a refusal creates
 nothing and is the first error (by line), and otherwise, holding the Account's row lock so that a double submit imports once and the
@@ -290,14 +290,16 @@ which loads the envelopes) while its envelope is archived, and active again once
 so filing never writes to a rule.
 
 **Matching.** `Budget::FilingRule#fits?(bank_transaction)` is the one definition of fit: the text is contained in the bank transaction's
-`normalized_description`, in Ruby with `include?`, so it's text and never a pattern, the Account is the rule's if it has one, the amount is the rule's if it
-has one, and the sign suits the outcome (a Spend fits money out, a Refund and a Deposit money in, Ignore either). Read the bank transaction back from the
-database for it, since the description is normalised there. `Budget::FilingRule::Matcher.new(rules).rule_for(bank_transaction)` picks the winner, skipping
+`description_for_matching`, in Ruby with `include?`, so it's text and never a pattern, the Account is the rule's if it has one, the amount is the rule's if it
+has one, and the sign suits the outcome (a Spend fits money out, a Refund and a Deposit money in, Ignore either). The description is read the way the text is, by
+`BankTransaction.normalize_description` in Ruby (kept for as long as the description is the same, since an Import matches every row against every rule), and not
+the database's `normalized_description`, so an unusual space or case fold, such as "ß", can't make the two disagree: the form's untouched default text always fits its own bank
+transaction. `Budget::FilingRule::Matcher.new(rules).rule_for(bank_transaction)` picks the winner, skipping
 inactive rules: `#specificity` is `[ an exact amount, a pinned Account, the text's length, updated_at, id ]`, greater wins, and `id` makes the order total, so the
 newer rule wins a tie. There's no ordering screen.
 
 **Applying them.** `Budget::FilingRule::Applier.new(budget, rules: nil)` loads the active rules once (or takes them), and `#claims(bank_transactions, only: nil)`
-is each bank transaction with the rule that wins, changing nothing. `#apply(bank_transactions, only: nil)` is one database transaction: it locks the claimed rows,
+is each bank transaction with the rule that wins, as `Claim`s, changing nothing. `#apply(bank_transactions, only: nil)` is one database transaction: it locks the claimed rows,
 keeps the ones that are still unfiled (judged once the locks are held, so one filed since it was looked at is left alone), files the Spend, Refund and Deposit
 rules through `Budget::Filing` (a `Budget::Filing::Entry` takes the `filing_rule` that's filing it, and a Deposit is filed with its date's month, never "the
 month after"), and ignores the rest, and returns `Result(filed:, ignored:)`. A rule never fails the rows that came in with it: if filing one is refused, such as
@@ -305,7 +307,7 @@ for an envelope archived since the rules were loaded, it stays unfiled and the o
 ignoring are each one statement, so the query count is the same for 10 rows as for 1,000 and for 1 rule as for 100 (specs check both).
 
 **Which rule did it.** `budget_bank_transactions.filing_rule_id` (nullable) is the rule that filed or ignored it, written by `Filing#insert` and by the Applier
-through `BankTransaction.record_filing_rules` (one `UPDATE`, a `CASE` cast to bigint), null when a person did it, cleared by `unfile` and `unignore`, and only
+through `BankTransaction.note_filing_rules` (one `UPDATE`, a `CASE` cast to bigint), null when a person did it, cleared by `unfile` and `unignore`, and only
 read through `BankTransaction#filed_by_rule`, which is the rule while the bank transaction is filed or ignored: deleting its last record by hand leaves the value
 stale but inert, until the next filing or ignoring writes it again. `FilingRule has_many :bank_transactions, dependent: :nullify`. An Account's page names the
 rule on a filed or ignored row, "Filing rule: loblaws → Spend from Groceries" (preload `filing_rule: :envelope`), and the filed record is an ordinary one: no
@@ -316,28 +318,34 @@ ignored in `filed_by_rules` and `ignored_by_rules` (as it did then: un-filing a 
 "Ignored by Filing rules". Undo deletes what the rules filed like any other filed records. It loads the rows afresh, and not through `bank_transactions`, whose
 loaded target `restrict_with_error` would find after Undo deletes them.
 
-**Making a rule from the filing form.** "Always file like this" is `Budget::FilingRule::Offer`: the text starts as the bank transaction's `normalized_description`,
+**Making a rule from the filing form.** "Always file like this" is `Budget::FilingRule::Offer`: the text starts as the bank transaction's `description_for_matching`,
 editable right there, with no Account or amount condition, ticked by default, and not offered for a split (the `filing-split` controller hides and disables its
 fieldset while there's more than one record, and the server makes none for more than one record whatever it was sent) or for a description under 3 characters,
 which says so instead. The text has to be part of the bank transaction's own description, so the rule fits it. `Offer#file(entry)` and `#ignore` do the filing or
 ignoring and save the rule in one database transaction, and neither is done without the other; a rule with identical conditions is updated in place (an Ignore turns a
-Spend rule into Ignore and drops its envelope) and the form says "Updates the Filing rule for 'loblaws', which files these as Spend from Groceries now." The rule made from a
+Spend rule into Ignore and drops its envelope) and the form says "Updates the Filing rule for 'loblaws', which files them as Spend from Groceries now." (`FilingRule#effect`, which the
+duplicate-conditions error uses too) The rule made from a
 bank transaction doesn't record itself on it: a person filed it. A form that doesn't send the box makes no rule. Ignore is a button on the same form, so a rule that's
-refused comes back as the whole filing form, as it was. `FilingFormParams` reads the form for both controllers.
+refused comes back as the whole filing form, as it was. Two saves of the same conditions can race past the validation, which only the unique index sees:
+the loser is told so like any other refusal (`FilingRule::SAVED_A_MOMENT_AGO`), and not with an error page. `FilingFormParams` reads the form for both controllers, looking at one key
+of it at a time so the form's others aren't reported as unpermitted.
 
 **Sweeping.** Saving a rule can also file the unfiled bank transactions that are already there, so a rule made after an Import tidies that Import up too.
-`Budget::FilingRule::Sweep.new(rule, like: nil)` works it out: `#bank_transactions` and `#count` are what it would file or ignore, changing nothing, and `#run`
+`Budget::FilingRule::Sweep.new(rule, made_from: nil)` works it out: `#bank_transactions` and `#count` are what it would file or ignore, changing nothing, and `#run`
 files and ignores them through the Applier (`only: rule`), in one database transaction and a fixed number of queries. It reads the budget's unfiled bank
 transactions (never a filed or ignored one, whatever fits it) and the budget's active rules with this one in place of its saved self, so a rule that's new, or
 changed and not yet saved, is counted as a form says before it's saved, and counts as edited now (`#specificity`, as saving it would make it). It sweeps the
 bank transactions where this rule *wins*, not every one it fits: one that a more specific rule fits is that rule's, as it would have been in an Import, and the count
-is what it files. `like` is the bank transaction a rule is being made from by hand: it's left out and only ones that went the same way (money in, or out) are swept,
+is what it files. `#left_to_other_rules` is the ones it fits but a more specific rule files, which the form says ("1 more fits, but a more specific Filing rule files it.", or
+"1 other unfiled bank transaction fits, but a more specific Filing rule files it." when that's all there is) so that "No other unfiled bank transactions fit" is never said when
+some do. `made_from` is the bank transaction a rule is being made from by hand: it's left out and only ones that went the same way (money in, or out) are swept,
 so an Ignore rule, which fits either, doesn't act on the other way's bank transactions, which the person wasn't looking at, and the count is the same for File and Ignore.
 On the filing form the second box, `filing[rule][sweep]`, is ticked by default and only there when there's something to sweep; the count follows the text as it's edited:
 the `sweep-preview` Stimulus controller sends the form's `filing[rule]` fields, after a pause, to `GET /bank_transactions/:id/filing/rule`
 (`BankTransactionRulePreviewsController`, which changes nothing), whose Turbo Frame `#filing-rule-preview` holds the update-in-place note, the count and the box,
 and that frame is where the box sits, so its ticked state travels with the request. `Offer` runs the sweep after saving the rule, in the same database transaction, and
-the notice says what it did: "Bank transaction filed. The Filing rule also filed 2 other bank transactions." A form that doesn't send the box sweeps nothing.
+the notice says what it did (`Applier::Result#describe`): "Bank transaction filed. The Filing rule also filed 2 other bank transactions." A form that doesn't send the box sweeps
+nothing. A text that can't make a rule, which is too short or isn't in the bank transaction's description, has no count, and the frame says why. The frames are `aria-live`.
 
 **The Filing rules page.** `/filing_rules` (`FilingRulesController`, in the header's section links; no `show`) lists every rule grouped by what it sets: one section per envelope that has a
 rule, alphabetically as in the month view (an archived envelope's section has the "Archived" badge), then Deposit, then Ignore, each only if it has rules, and each rule a `components/link_row`
@@ -349,14 +357,15 @@ scratch, edited and deleted there (notices "Filing rule added.", "Filing rule up
 transaction shows it (money out negative, such as -82.45), and the model's error says which sign suits the outcome; leaving it blank is any amount. The Account and envelope come from the form as ids and
 the model refuses another budget's ("isn't one of this budget's"), and `budget_id` is never a permitted param; another user's rule is a 404. A rule with the same text, Account and amount as another is a
 validation error that says what the other one does, and unlike the filing form it doesn't update in place. Saving with the sweep box ticked (the form's `filing_rule[sweep]`) sweeps the
-unfiled bank transactions the rule now fits, in both directions, since there's no bank transaction it's made from, in the same database transaction, and the notice says so: "Filing rule added.
+unfiled bank transactions the rule now fits (`FilingRule#save_and_sweep`), in both directions, since there's no bank transaction it's made from, in the same database transaction, and the notice says so: "Filing rule added.
 It also filed 2 bank transactions." The count and the box are the Turbo Frame `#filing-rule-sweep`, which `GET /filing_rules/sweep` (`FilingRuleSweepsController`, which changes nothing) answers with for the rule as
 it's entered, a new rule or the one being edited (`id`) with the form's changes in place of itself, with no count for a rule that isn't valid yet; the same `sweep-preview` controller as the filing form's
 sends the form's `filing_rule` fields. Editing or deleting a rule never changes what it already filed or ignored: deleting nullifies `filing_rule_id` on what it filed, and moving a rule to another envelope
 affects what comes in from then on, so fixing past ones means un-filing and filing again. A filed or ignored bank transaction's "Filing rule: loblaws → Spend from Groceries" links to the rule's edit page.
 
 **Deleting.** `Budget::Envelope` and `Budget::Account` have `has_many :filing_rules, dependent: :destroy`, declared after the checks that refuse, so deleting an envelope
-with no records, or an Account with no bank transactions, takes its rules with it, and keeps them when it's refused. Archiving is never blocked by rules. `Budget#delete_importer_records`
+with no records, or an Account with no bank transactions, takes its rules with it, and keeps them when it's refused, and the question before deleting says so ("Its 2 Filing rules are deleted with it.", `filing_rules_deleted_with`).
+Archiving is never blocked by rules. `Budget#delete_importer_records`
 deletes bank transactions, then Filing rules, then Accounts and CSV formats, ahead of the envelopes' records, and `user:delete`'s confirmation counts the rules.
 
 ### Production

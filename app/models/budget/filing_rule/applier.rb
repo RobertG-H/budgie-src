@@ -12,7 +12,21 @@
 # a statement for however many there are, so it makes the same number of queries for 10 bank transactions as for 1,000 and for 1
 # rule as for 100.
 class Budget::FilingRule::Applier
-  Result = Data.define(:filed, :ignored)
+  # A bank transaction and the rule that wins for it.
+  Claim = Data.define(:bank_transaction, :rule)
+
+  # How many bank transactions were filed and how many were ignored.
+  Result = Data.define(:filed, :ignored) do
+    def none?
+      filed.zero? && ignored.zero?
+    end
+
+    # What was done, in words, for a bank transaction by the `noun`: "filed 2 other bank transactions", or "ignored 1 bank transaction". A rule has
+    # one outcome, so it files or ignores, and never both.
+    def describe(noun)
+      filed.positive? ? "filed #{filed} #{noun.pluralize(filed)}" : "ignored #{ignored} #{noun.pluralize(ignored)}"
+    end
+  end
 
   # `rules` are the budget's active rules, with their envelopes, which is all of them unless it's given others.
   def initialize(budget, rules: nil)
@@ -23,12 +37,12 @@ class Budget::FilingRule::Applier
 
   attr_reader :rules
 
-  # Each of the `bank_transactions` that a rule fits, with the rule that wins, as pairs. Nothing is changed. With `only`, just the ones
+  # Each of the `bank_transactions` that a rule fits, with the rule that wins, as Claims. Nothing is changed. With `only`, just the ones
   # that rule wins, such as when it's a rule that was only just saved.
   def claims(bank_transactions, only: nil)
     bank_transactions.filter_map do |bank_transaction|
       rule = @matcher.rule_for(bank_transaction)
-      [ bank_transaction, rule ] if rule && (only.nil? || rule == only)
+      Claim.new(bank_transaction: bank_transaction, rule: rule) if rule && (only.nil? || rule == only)
     end
   end
 
@@ -39,7 +53,7 @@ class Budget::FilingRule::Applier
 
     Budget::BankTransaction.transaction do
       claims = still_unfiled(claims)
-      to_ignore, to_file = claims.partition { |_, rule| rule.outcome == "ignore" }
+      to_ignore, to_file = claims.partition { |claim| claim.rule.outcome == "ignore" }
 
       Result.new(filed: file(to_file), ignored: ignore(to_ignore))
     end
@@ -49,20 +63,20 @@ class Budget::FilingRule::Applier
     # The claims whose bank transactions are still unfiled, which is only known once their rows are locked: the locks are held until
     # the database transaction ends, so nothing can file or ignore them in between.
     def still_unfiled(claims)
-      ids = claims.map { |bank_transaction, _| bank_transaction.id }
+      ids = claims.map { |claim| claim.bank_transaction.id }
       Budget::BankTransaction.where(id: ids).lock.pluck(:id)
       unfiled = Budget::BankTransaction.unfiled.where(id: ids).pluck(:id).to_set
 
-      claims.select { |bank_transaction, _| unfiled.include?(bank_transaction.id) }
+      claims.select { |claim| unfiled.include?(claim.bank_transaction.id) }
     end
 
     # Through the filing operation, as a person's filing is. A rule never fails the bank transactions that came in with it: if filing
     # one is refused, such as for an envelope that was archived since the rules were loaded, it's left unfiled for a person to do,
     # and the rest are filed. Each pass leaves out what the last one refused, so it ends.
     def file(claims)
-      entries = claims.map do |bank_transaction, rule|
-        Budget::Filing::Entry.new(bank_transaction: bank_transaction, filing_rule: rule,
-          drafts: [ Budget::Filing::Draft.for(bank_transaction, kind: rule.outcome, envelope_id: rule.envelope_id) ])
+      entries = claims.map do |claim|
+        Budget::Filing::Entry.new(bank_transaction: claim.bank_transaction, filing_rule: claim.rule,
+          drafts: [ Budget::Filing::Draft.for(claim.bank_transaction, kind: claim.rule.outcome, envelope_id: claim.rule.envelope_id) ])
       end
       filing = Budget::Filing.new(@budget)
       entries = entries.reject(&:refused?) until filing.file(entries)
@@ -71,7 +85,7 @@ class Budget::FilingRule::Applier
     end
 
     def ignore(claims)
-      Budget::BankTransaction.record_filing_rules(claims.to_h { |bank_transaction, rule| [ bank_transaction.id, rule.id ] }, ignored_at: Time.current)
+      Budget::BankTransaction.note_filing_rules(claims.to_h { |claim| [ claim.bank_transaction.id, claim.rule.id ] }, ignored_at: Time.current)
 
       claims.size
     end

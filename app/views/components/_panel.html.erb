@@ -1,0 +1,3 @@
+<%# locals: (tag: :div, **attributes) %>
+<%# A bordered box that holds things that belong together and are apart from what's around them, such as the bank transaction on the filing form, and the Filing rule that filing it offers to make. It's a `div` unless it's given another `tag`, such as a `fieldset`, and anything else it's given, such as a `class` for the space around it or `data`, goes on it. %>
+<%= content_tag tag, class: [ "rounded-box border border-base-300 p-4", attributes[:class] ], **attributes.except(:class) do %><%= yield %><% end %>

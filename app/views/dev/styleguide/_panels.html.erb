@@ -1,0 +1,15 @@
+<%# locals: () %>
+<section id="panels" aria-labelledby="panels-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="panels-heading" class="text-xl font-semibold">Panel</h2>
+  <p class="text-base-content/70">A bordered box that holds things that belong together and are apart from what's around them. It's a <code>div</code>, or a <code>fieldset</code> for a group of fields with a legend.</p>
+
+  <%= render "components/panel" do %>
+    <p class="text-base-content/70">Chequing, Sep 3, 2026</p>
+    <p class="font-semibold">Hydro</p>
+  <% end %>
+
+  <%= render "components/panel", tag: :fieldset, class: "space-y-4" do %>
+    <legend class="px-2 font-medium">Filing rule</legend>
+    <p>A group of fields that go together.</p>
+  <% end %>
+</section>

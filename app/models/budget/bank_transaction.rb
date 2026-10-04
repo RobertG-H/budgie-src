@@ -55,6 +55,10 @@ class Budget::BankTransaction < ApplicationRecord
       .distinct
   }
 
+  # Which way the money went: in is positive and out is negative.
+  scope :money_in, -> { where("budget_bank_transactions.amount > 0") }
+  scope :money_out, -> { where("budget_bank_transactions.amount < 0") }
+
   # The three kinds of record a bank transaction is filed as, each with the link table that holds it: the record's class, then its
   # link's. Everything that has to treat the kinds alike, such as inserting them or deleting them, goes through this.
   def self.links_by_record
@@ -78,7 +82,7 @@ class Budget::BankTransaction < ApplicationRecord
   # Notes which Filing rule filed or ignored each bank transaction, which is the value for its id in `rule_ids_by_id`, or none (nil) for
   # one that a person did. It's one statement however many there are, and `attributes` are set on them all, such as when they were
   # ignored.
-  def self.record_filing_rules(rule_ids_by_id, **attributes)
+  def self.note_filing_rules(rule_ids_by_id, **attributes)
     return if rule_ids_by_id.empty?
 
     # Cast, since a CASE of nothing but nulls is text to PostgreSQL, which is what it is when a person did them all.
@@ -102,6 +106,16 @@ class Budget::BankTransaction < ApplicationRecord
 
   def self.normalize_description(description)
     description.squish.downcase(:fold)
+  end
+
+  # The description as a Filing rule reads it: trimmed, whitespace collapsed and case folded, here in Ruby as the rule's own text is, so
+  # the two can't disagree over an unusual space or case fold the way the database's `normalized_description` could, which is only
+  # SQL's idea of the same thing. It's kept for as long as the description is the same, since an Import matches every row against
+  # every rule.
+  def description_for_matching
+    @description_for_matching = nil unless @description_matched == description
+    @description_matched = description
+    @description_for_matching ||= self.class.normalize_description(description)
   end
 
   def ignored?

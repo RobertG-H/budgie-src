@@ -33,6 +33,15 @@ RSpec.describe "Envelopes", type: :request do
       end
     end
 
+    it "says in the question before deleting it that its Filing rules are deleted with it, since they'd go without a word" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+      create(:budget_filing_rule, :refund, budget: budget, envelope: groceries, text: "loblaws return")
+
+      get month_envelope_path("2026-09", groceries)
+
+      assert_select "form[action='#{envelope_path(groceries)}'][data-turbo-confirm='Delete the Groceries envelope? Its 2 Filing rules are deleted with it.']"
+    end
+
     it "shows what it carried over, what's Assigned to it, Spent from it and Refunded to it and Reallocated into it in the month, and what's Available, in that order" do
       get month_envelope_path("2026-09", groceries)
 

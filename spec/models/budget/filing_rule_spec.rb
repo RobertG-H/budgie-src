@@ -143,11 +143,69 @@ RSpec.describe Budget::FilingRule do
   end
 
   describe "what it says it does" do
+    it "is a phrase to follow 'it': what it files them as, or that it ignores them" do
+      expect(rule(outcome: "spend").effect).to eq("files them as Spend from Groceries")
+      expect(rule(outcome: "deposit").effect).to eq("files them as Deposit")
+      expect(rule(outcome: "ignore").effect).to eq("ignores them")
+    end
+
     it "is a Spend from an envelope, a Refund to one, a Deposit, or Ignore" do
       expect(rule(outcome: "spend").outcome_label).to eq("Spend from Groceries")
       expect(rule(outcome: "refund").outcome_label).to eq("Refund to Groceries")
       expect(rule(outcome: "deposit").outcome_label).to eq("Deposit")
       expect(rule(outcome: "ignore").outcome_label).to eq("Ignore")
+    end
+  end
+
+  describe "#save_and_sweep" do
+    let(:account) { create(:budget_account, budget: budget) }
+
+    it "saves the rule, and files the unfiled bank transactions it now fits when asked to, saying what it did" do
+      row = create(:budget_bank_transaction, account: account, description: "LOBLAWS #1", amount: -20)
+      loblaws = rule
+
+      expect(loblaws.save_and_sweep(sweep: true)).to be(true)
+
+      expect(loblaws).to be_persisted
+      expect(loblaws.swept).to have_attributes(filed: 1, ignored: 0)
+      expect(row.reload.filing_rule_id).to eq(loblaws.id)
+    end
+
+    it "saves it and sweeps nothing when not asked to" do
+      row = create(:budget_bank_transaction, account: account, description: "LOBLAWS #1", amount: -20)
+      loblaws = rule
+
+      expect(loblaws.save_and_sweep).to be(true)
+
+      expect(loblaws.swept).to be_nil
+      expect(row.reload).to be_unfiled
+    end
+
+    it "saves and sweeps nothing for a rule that's refused, which says why" do
+      create(:budget_bank_transaction, account: account, description: "LOBLAWS #1", amount: -20)
+
+      expect(rule(text: "lo").save_and_sweep(sweep: true)).to be(false)
+
+      expect(Budget::FilingRule.count).to eq(0)
+      expect(Budget::Spend.count).to eq(0)
+    end
+
+    it "is one database transaction, so a failure in the sweep leaves no rule" do
+      create(:budget_bank_transaction, account: account, description: "LOBLAWS #1", amount: -20)
+      allow_any_instance_of(Budget::FilingRule::Sweep).to receive(:run).and_raise(ActiveRecord::StatementInvalid, "the database went away")
+
+      expect { rule.save_and_sweep(sweep: true) }.to raise_error(ActiveRecord::StatementInvalid)
+
+      expect(Budget::FilingRule.count).to eq(0)
+    end
+
+    it "says so, and not with an error page, when a rule with the same conditions was saved a moment ago, which only the unique index sees" do
+      loblaws = rule
+      allow(loblaws).to receive(:save).and_raise(ActiveRecord::RecordNotUnique)
+
+      expect(loblaws.save_and_sweep(sweep: true)).to be(false)
+
+      expect(loblaws.errors.full_messages).to eq([ "Another Filing rule with the same text, Account and amount was saved a moment ago. Try again." ])
     end
   end
 

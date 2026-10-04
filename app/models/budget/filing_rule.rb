@@ -13,6 +13,9 @@ class Budget::FilingRule < ApplicationRecord
   OUTCOMES = %w[ spend refund deposit ignore ].freeze
   # A shorter text would fit nearly everything.
   MIN_TEXT_LENGTH = 3
+  # What's said when two saves of the same conditions race: the validation looks for the other rule before it's saved, so only the unique index
+  # sees it.
+  SAVED_A_MOMENT_AGO = "Another Filing rule with the same text, Account and amount was saved a moment ago. Try again.".freeze
 
   belongs_to :budget
   # Nobody has to be pinned: a rule with no Account fits every Account, and one with no amount fits every amount.
@@ -38,10 +41,27 @@ class Budget::FilingRule < ApplicationRecord
   validate :envelope_is_not_archived
   validate :conditions_are_not_another_rules
 
+  # What the sweep did when it was saved with one (see #save_and_sweep): a Budget::FilingRule::Applier::Result.
+  attr_reader :swept
+
   scope :alphabetical_by_text, -> { order(:text, :id) }
   # The rules that act: those that aren't for an archived envelope. A rule with no envelope has none to be archived. The envelopes come
   # with them, so that asking one whether it's inactive costs nothing.
   scope :active, -> { eager_load(:envelope).where(budget_envelopes: { archived_at: nil }) }
+
+  # Saves it, and files and ignores the unfiled bank transactions it now fits if `sweep`, in one database transaction: when either fails,
+  # neither is done. What the sweep did is `swept`. Two saves of the same conditions can race, which only the unique index sees, and the
+  # loser is told so like any other refusal.
+  def save_and_sweep(sweep: false)
+    transaction do
+      saved = save
+      @swept = Budget::FilingRule::Sweep.new(self).run if saved && sweep
+      saved
+    end
+  rescue ActiveRecord::RecordNotUnique
+    errors.add(:base, SAVED_A_MOMENT_AGO)
+    false
+  end
 
   # Whether it does nothing for now, because its envelope is archived.
   def inactive?
@@ -58,6 +78,11 @@ class Budget::FilingRule < ApplicationRecord
     end
   end
 
+  # What it does with the bank transactions it fits, as a phrase to follow "it" or "which": "files them as Spend from Groceries" or "ignores them".
+  def effect
+    outcome == "ignore" ? "ignores them" : "files them as #{outcome_label}"
+  end
+
   # A Spend or a Refund goes to an envelope, and a Deposit or Ignore doesn't.
   def needs_envelope?
     %w[ spend refund ].include?(outcome)
@@ -65,13 +90,13 @@ class Budget::FilingRule < ApplicationRecord
 
   # Whether the bank transaction is one it files or ignores: its description contains the text, it's in the rule's Account if the rule
   # has one, its amount is the rule's if the rule has one, and its sign suits the outcome. It's only about the bank transaction's own
-  # figures: whether it's already filed or ignored, and whether the rule is inactive, are for what asks. The description is the
-  # database's normalised one, so read the bank transaction back from it.
+  # figures: whether it's already filed or ignored, and whether the rule is inactive, are for what asks. The description is read the way
+  # the text is, in Ruby, so they can't disagree.
   def fits?(bank_transaction)
     suits_money?(bank_transaction.amount) &&
       (account_id.nil? || account_id == bank_transaction.account_id) &&
       (amount.nil? || amount == bank_transaction.amount) &&
-      bank_transaction.normalized_description.include?(text)
+      bank_transaction.description_for_matching.include?(text)
   end
 
   # How specific it is, to compare with another's: an exact amount beats none, then a pinned Account beats any Account, then longer
@@ -137,7 +162,6 @@ class Budget::FilingRule < ApplicationRecord
       other = budget.filing_rules.where.not(id: id).includes(:envelope).find_by(text: text, account_id: account_id, amount: amount)
       return unless other
 
-      errors.add(:base, "Another Filing rule already has the same text, Account and amount. " \
-        "It #{other.outcome == "ignore" ? "ignores them" : "files them as #{other.outcome_label}"}.")
+      errors.add(:base, "Another Filing rule already has the same text, Account and amount. It #{other.effect}.")
     end
 end
