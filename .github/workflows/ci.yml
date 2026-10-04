@@ -146,7 +146,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # A fork's or Dependabot's token can't read this private package, so a failed login isn't fatal:
       # the build below falls back to running without the cache rather than failing.
