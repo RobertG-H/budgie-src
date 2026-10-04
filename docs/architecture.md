@@ -254,7 +254,8 @@ anything is imported.
 refuses it, naming the first bad row by its line and giving the reason, and nothing is read from a file with anything wrong with
 it. The preview and every Import use that one reader, so a file can't preview one way and import another. It keeps to the
 core's money rule (at most 2 decimal places, never rounded), and to limits that keep a request small: UTF-8, 2 MB and 5,000
-rows. A row of 0 is skipped and counted, not refused.
+rows. A row of 0 is skipped and counted, not refused. A row the bank gave no description, which some banks do for some rows such as a card's payments, isn't refused
+either: it's imported as "No description", since everything a bank transaction becomes needs one, and a Filing rule can look for that text to ignore them.
 
 **The sample isn't kept.** The builder sends the sample file with the form each time a choice changes, and the server answers
 with the grid and the preview, so the sample only exists for a request, and there's no reader written in JavaScript to keep

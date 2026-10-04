@@ -9,6 +9,11 @@ class Budget::CsvFormat::Reader
   # wrong with it, in which case there are no rows.
   Reading = Data.define(:rows, :zero_rows, :refusal)
 
+  # What a row the bank gave no description is read as, since everything a bank transaction becomes needs one: a record is filed with a
+  # description, and a Filing rule or a Guess goes by it. Some banks leave it empty for some rows, such as a card's payments. The text is
+  # one a Filing rule can look for, so a person can ignore them all with one.
+  NO_DESCRIPTION = "No description"
+
   MAX_DATA_ROWS = 5_000
   EARLIEST_DATE = Date.new(1990, 1, 1)
 
@@ -64,7 +69,7 @@ class Budget::CsvFormat::Reader
       end
 
       date = read_date(line, cells[@format.date_column - 1])
-      description = read_description(line, cells)
+      description = read_description(cells)
       Row.new(line: line, date: date, description: description, amount: read_amount(line, cells))
     end
 
@@ -83,10 +88,9 @@ class Budget::CsvFormat::Reader
       date
     end
 
-    def read_description(line, cells)
-      description = @format.description_columns.map { |column| cells[column - 1].to_s.strip }.compact_blank.join(" ")
-      refuse(line, "the description is blank.") if description.empty?
-      description
+    # The description columns joined with a space, leaving out any that are blank, or NO_DESCRIPTION when all of them are.
+    def read_description(cells)
+      @format.description_columns.map { |column| cells[column - 1].to_s.strip }.compact_blank.join(" ").presence || NO_DESCRIPTION
     end
 
     def read_amount(line, cells)

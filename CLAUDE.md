@@ -135,9 +135,9 @@ has `line` (none for the whole file) and `message` ("Line 7: the date ... isn't 
 no rows. `Budget::CsvFormat::Source` holds what a file is before a format reads it (UTF-8 and at most 2 MB, BOM stripped, rows with
 the physical line each started on), and `Sample` and `Preview` use it too. The refusals are a wrong column count, an unparseable
 date, an unparseable amount (including more than 2 decimal places, never rounded), a date more than a day after today
-(`Date.current`, Eastern) or before 1990, a blank description, and in the `in_and_out` style a row with both columns filled; in
+(`Date.current`, Eastern) or before 1990, and in the `in_and_out` style a row with both columns filled; in
 this reader's own judgement a row with neither, a direction that's blank on a row that isn't 0, a file that isn't valid CSV, an empty
-one and one over 5,000 data rows are too. An amount may have a sign, one currency symbol (`$`, `€`, `£`) and thousands separators
+one and one over 5,000 data rows are too. A row whose description columns are all blank, which some banks do for some rows such as a card's payments, isn't refused: it's read as "No description" (`Reader::NO_DESCRIPTION`), because everything a bank transaction becomes needs a description (a Deposit, Spend or Refund has a non-blank one, in the model and in the database, and so does a bank transaction), so nothing downstream changes, and a Filing rule can look for the text "no description", with an Account if it should, to ignore them. An amount may have a sign, one currency symbol (`$`, `€`, `£`) and thousands separators
 in groups of three, so a European `12,50` is refused and not read as 1250. A money in or money out column holds a size, and which
 column it's in says which way the money went. Blank lines and rows with nothing in them are skipped: they count as rows when the first `rows_to_skip` are skipped, as the grid shows them as rows, but not towards the row limit. The delimiter is always a comma.
 

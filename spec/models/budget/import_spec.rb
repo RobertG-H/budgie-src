@@ -168,6 +168,34 @@ RSpec.describe Budget::Import, type: :model do
         expect(coffee.first.content_key).to eq(coffee.last.content_key)
       end
 
+      it "imports a row the bank gave no description as No description, which is filed, ignored or matched like any other" do
+        import = import_of("2026-09-01,Paycheck,2800.00\n2026-09-02,,-250.00\n2026-09-03,,-250.00\n")
+
+        expect(import).to be_persisted
+        expect(rows_of(account)).to eq([ [ Date.new(2026, 9, 1), "Paycheck", 2800, 1 ], [ Date.new(2026, 9, 2), "No description", -250, 1 ],
+                                         [ Date.new(2026, 9, 3), "No description", -250, 1 ] ])
+
+        row = account.bank_transactions.find_by!(date: Date.new(2026, 9, 2)).reload
+        envelope = create(:budget_envelope, budget: account.budget, name: "Card")
+        entry = Budget::Filing::Entry.new(bank_transaction: row, drafts: [ Budget::Filing::Draft.for(row, envelope_id: envelope.id) ])
+
+        expect(Budget::Filing.new(account.budget).file([ entry ])).to be(true)
+        expect(envelope.spends.sole).to have_attributes(description: "No description", amount: 250)
+
+        rule = create(:budget_filing_rule, :ignore, budget: account.budget, text: "no description")
+        other = account.bank_transactions.find_by!(date: Date.new(2026, 9, 3)).reload
+        expect(rule.fits?(other)).to be(true)
+      end
+
+      it "counts the same row twice in a file as two, as it does any other, and skips it when the file is imported again" do
+        text = "2026-09-02,,-250.00\n2026-09-02,,-250.00\n"
+        import_of(text)
+
+        expect(rows_of(account).map(&:last)).to eq([ 1, 2 ])
+        expect(import_of(text).duplicates_skipped).to eq(2)
+        expect(account.bank_transactions.count).to eq(2)
+      end
+
       it "reads with the CSV format it was given, in any of its amount styles" do
         format = create(:budget_csv_format, :in_and_out, budget: account.budget)
 
