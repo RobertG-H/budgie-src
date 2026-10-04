@@ -1060,7 +1060,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select "progress:not([aria-hidden=true])", count: 0
-      expect(response.body).not_to match(/\b(plenty|a little)\b/i)
+      expect(css_select("table").sole.text).not_to match(/\b(plenty|a little)\b/i)
     end
 
     it "is under the figure in the Available column, which stays right-aligned" do

@@ -70,13 +70,13 @@ class Budget::Month
       Rational(available.clamp(ZERO, had_to_spend), had_to_spend)
     end
 
-    # The bar's length in whole percent, 0 to 100: the share, however tiny, a full bar when Overspent, and nil when there's
-    # no bar.
+    # The bar's length in whole percent, 0 to 100: the share rounded down, so a bar reads 25 or more only when the level is plenty
+    # and 100 only when nothing is spent, however tiny the share, a full bar when Overspent, and nil when there's no bar.
     def available_percent
       case available_level
       when :none then nil
       when :overspent then 100
-      else (available_share * 100).round
+      else (available_share * 100).floor
       end
     end
 

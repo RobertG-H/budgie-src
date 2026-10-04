@@ -64,11 +64,19 @@ RSpec.describe Budget::Month::EnvelopeLine do
   describe "#available_percent" do
     it "is the share of what the envelope had that's Available, in whole percent" do
       expect(line(assigned: 400, spent: 100).available_percent).to eq(75)
-      expect(line(assigned: 3, spent: 1).available_percent).to eq(67)
+      expect(line(assigned: 3, spent: 1).available_percent).to eq(66)
     end
 
     it "is the tiny share it is, with no minimum" do
       expect(line(assigned: 5, spent: BigDecimal("4.50")).available_percent).to eq(10)
+    end
+
+    it "rounds down, so the bar is under 25 exactly when the level is a little" do
+      almost = line(assigned: 1000, spent: BigDecimal("753"))
+
+      expect(almost.available_level).to eq(:little)
+      expect(almost.available_percent).to eq(24)
+      expect(line(assigned: 1000, spent: 750).available_percent).to eq(25)
     end
 
     it "is 0 when everything is spent" do
@@ -103,7 +111,7 @@ RSpec.describe Budget::Month::EnvelopeLine do
     it "counts a Refund in what the envelope had, so spending it back leaves it a little" do
       line = line(assigned: 100, refunded: 20, spent: 100)
 
-      expect(line.available_percent).to eq(17)
+      expect(line.available_percent).to eq(16)
       expect(line.available_level).to eq(:little)
     end
   end
