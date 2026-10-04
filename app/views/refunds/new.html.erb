@@ -3,5 +3,6 @@
 <div class="mx-auto max-w-md">
   <%= render "components/page_header", title: "New refund" %>
 
-  <%= render "form", refund: @refund, cancel_path: return_path(@month, envelope: origin_envelope) %>
+  <%= render "envelope_record_form", record: @refund, hint: "Such as IKEA return",
+        cancel_path: return_path(@month, envelope: origin_envelope) %>
 </div>

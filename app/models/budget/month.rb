@@ -25,17 +25,9 @@ class Budget::Month
     end
   end
 
-  # What's assigned to one envelope in the months before this one, and in this one.
-  AssignedTotals = Data.define(:before, :in_month)
-  NOTHING_ASSIGNED = AssignedTotals.new(before: ZERO, in_month: ZERO)
-
-  # What's spent from one envelope in the months before this one, and in this one.
-  SpentTotals = Data.define(:before, :in_month)
-  NOTHING_SPENT = SpentTotals.new(before: ZERO, in_month: ZERO)
-
-  # What's refunded to one envelope in the months before this one, and in this one.
-  RefundedTotals = Data.define(:before, :in_month)
-  NOTHING_REFUNDED = RefundedTotals.new(before: ZERO, in_month: ZERO)
+  # What's been assigned to, spent from or refunded to one envelope in the months before this one, and in this one.
+  Totals = Data.define(:before, :in_month)
+  NOTHING = Totals.new(before: ZERO, in_month: ZERO)
 
   # One envelope's figures for this month: what it carries over (its Starting balance and everything assigned to it
   # in the months before, less everything spent from it and plus everything refunded to it), what's assigned to it,
@@ -101,9 +93,9 @@ class Budget::Month
   # The budget's envelopes, alphabetically.
   def envelopes
     @envelopes ||= budget.envelopes.alphabetical.map do |envelope|
-      assigned = assignment_totals.fetch(envelope.id, NOTHING_ASSIGNED)
-      spent = spend_totals.fetch(envelope.id, NOTHING_SPENT)
-      refunded = refund_totals.fetch(envelope.id, NOTHING_REFUNDED)
+      assigned = assignment_totals.fetch(envelope.id, NOTHING)
+      spent = spend_totals.fetch(envelope.id, NOTHING)
+      refunded = refund_totals.fetch(envelope.id, NOTHING)
       carried_over = envelope.starting_balance + assigned.before - spent.before + refunded.before
 
       EnvelopeLine.new(
@@ -125,32 +117,32 @@ class Budget::Month
       budget.deposits.where(month: ..date).pick(sum_where("month < ?"), sum_where("month = ?"))
     end
 
-    # What's assigned to each envelope, from a single query: { envelope id => AssignedTotals }. An envelope with
+    # What's assigned to each envelope, from a single query: { envelope id => Totals }. An envelope with
     # nothing assigned up to this month isn't in it. The budget's own totals are added up from these, so they always
     # agree with its envelopes'.
     def assignment_totals
       @assignment_totals ||= budget.assignments.where(month: ..date).group(:envelope_id)
         .pluck(:envelope_id, sum_where("month < ?"), sum_where("month = ?"))
-        .to_h { |envelope_id, before, in_month| [ envelope_id, AssignedTotals.new(before: before, in_month: in_month) ] }
+        .to_h { |envelope_id, before, in_month| [ envelope_id, Totals.new(before: before, in_month: in_month) ] }
     end
 
-    # What's spent from each envelope, from a single query: { envelope id => SpentTotals }. An envelope with nothing spent
+    # What's spent from each envelope, from a single query: { envelope id => Totals }. An envelope with nothing spent
     # up to the end of this month isn't in it.
     def spend_totals
-      @spend_totals ||= dated_totals(budget.spends, SpentTotals)
+      @spend_totals ||= dated_totals(budget.spends)
     end
 
-    # What's refunded to each envelope, from a single query: { envelope id => RefundedTotals }, in the same way.
+    # What's refunded to each envelope, from a single query: { envelope id => Totals }, in the same way.
     def refund_totals
-      @refund_totals ||= dated_totals(budget.refunds, RefundedTotals)
+      @refund_totals ||= dated_totals(budget.refunds)
     end
 
-    # Each envelope's totals from dated records, as { envelope id => totals_class instance }. A Spend or a Refund counts in
-    # the month its date is in, and in every month after it.
-    def dated_totals(records, totals_class)
+    # Each envelope's totals from dated records, as { envelope id => Totals }. A Spend or a Refund counts in the month
+    # its date is in, and in every month after it.
+    def dated_totals(records)
       records.where(date: ..date.end_of_month).group(:envelope_id)
         .pluck(:envelope_id, sum_where("date < ?"), sum_where("date >= ?"))
-        .to_h { |envelope_id, before, in_month| [ envelope_id, totals_class.new(before: before, in_month: in_month) ] }
+        .to_h { |envelope_id, before, in_month| [ envelope_id, Totals.new(before: before, in_month: in_month) ] }
     end
 
     # One column of a query: the total amount where `condition` holds, given this month. Only for the literal

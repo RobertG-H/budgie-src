@@ -36,6 +36,8 @@
 <%= render "record_section", title: "Spends", records: @spends, budget: budget, empty_message: "No spends in #{@month.name}.",
       edit_path: ->(spend) { edit_spend_path(spend, month: @month, from: "envelope") } %>
 
-<%# Refunds are rarer, so with no empty message the section is only there when the month has some. %>
-<%= render "record_section", title: "Refunds", records: @refunds, budget: budget,
-      edit_path: ->(refund) { edit_refund_path(refund, month: @month, from: "envelope") } %>
+<%# Refunds are rarer, so their section is only there when the month has some. %>
+<% if @refunds.any? %>
+  <%= render "record_section", title: "Refunds", records: @refunds, budget: budget,
+        edit_path: ->(refund) { edit_refund_path(refund, month: @month, from: "envelope") } %>
+<% end %>

@@ -172,8 +172,9 @@ Refunded is money that comes back to one envelope, such as a store refund, a fri
 payout, recorded as a Refund with a date. An envelope's Refunds in a month add up to its Refunded, and Available is the
 Starting balance plus everything assigned up to the month, less every Spend and plus every Refund dated on or before
 the end of it. A Refund lands in its envelope and never touches Ready to Assign, and it isn't tied to any particular
-Spend. It is handled like a Spend: it belongs to its budget through its envelope, the envelope it's saved against is
-looked up in the budget's own envelopes, and it's listed on its envelope's page for the month of its date. The month view
+Spend. It is handled like a Spend, and the two models share their validations and scopes in `DatedEnvelopeRecord` and
+their form in `application/_envelope_record_form`: it belongs to its budget through its envelope, the envelope it's saved
+against is looked up in the budget's own envelopes, and it's listed on its envelope's page for the month of its date. The month view
 shows a Refunded column from `sm:` up and has no "New refund", since Refunds are rarer than Spends; an envelope's page
 has "New refund" beside "New spend", its Refunded, and a Refunds section when the month has any. With Refunds, the core
 of the month view is complete, and every balance on it, in a fixed number of grouped queries, comes from `Budget::Month`.
