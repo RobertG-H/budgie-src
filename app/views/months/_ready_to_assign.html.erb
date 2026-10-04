@@ -1,0 +1,56 @@
+<%# locals: (ready_to_assign:, current:, budget:, deposits_path:, new_deposit_path:, id: "ready-to-assign") %>
+<%# The month view's Ready to Assign card: the figure, a caption that says in words what it means, and the figures it adds up from, labelled. `ready_to_assign` is a Budget::Month::ReadyToAssign, which says which of four states it's in so this does no arithmetic, and `current` is whether the month is the current one, which is the only one warning is loud in: the warning is a background and a border, never text, since it's 2.24:1 on white, and the caption's badge brings its own dark text. Over-assigned is a fact about the plan in any month, so it's error-styled in all of them. %>
+<%# It isn't one link: a link around the figures would make the whole card say "click anywhere". The way to the Deposits is a plain link at the foot. daisyUI mutes stat text to 60%, which is under AA here, so it's set back to 70%. %>
+<% state = ready_to_assign.state %>
+<% card = case state
+          when :over_assigned then "border-error"
+          when :to_assign then (current ? "border-warning bg-warning/10" : "border-base-300")
+          else "border-base-300"
+          end %>
+<section id="<%= id %>" aria-labelledby="<%= id %>-title" class="stats w-full border <%= card %>">
+  <div class="stat content-start">
+    <h2 id="<%= id %>-title" class="stat-title text-base-content/70">Ready to Assign</h2>
+    <div class="stat-value whitespace-normal"><%= render "components/money", amount: ready_to_assign.amount, budget: budget %></div>
+
+    <%# What the figure means, in words, so a person doesn't have to work out whether it's good news. %>
+    <div class="mt-1 text-sm">
+      <% case state %>
+      <% when :to_assign %>
+        <span class="badge <%= current ? "badge-warning" : "badge-ghost" %>">left to assign</span>
+      <% when :all_assigned %>
+        <span class="badge badge-success">All assigned</span>
+      <% when :over_assigned %>
+        <span class="font-medium text-error">More was assigned than deposited.</span>
+      <% when :empty %>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span class="text-base-content/70">Nothing to assign yet.</span>
+          <%= link_to "New deposit", new_deposit_path, class: "btn btn-sm" %>
+        </div>
+      <% end %>
+    </div>
+
+    <%# In the order they add up. Reallocated, what came back from envelopes, only when it isn't zero. They wrap rather than sit in a grid, so three or four fit at any width. %>
+    <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+      <div>
+        <dt class="text-xs text-base-content/70">Carried over</dt>
+        <dd class="tabular-nums"><%= render "components/money", amount: ready_to_assign.carried_over, budget: budget %></dd>
+      </div>
+      <div>
+        <dt class="text-xs text-base-content/70">Deposited</dt>
+        <dd class="tabular-nums"><%= render "components/money", amount: ready_to_assign.deposited, budget: budget %></dd>
+      </div>
+      <div>
+        <dt class="text-xs text-base-content/70">Assigned</dt>
+        <dd class="tabular-nums"><%= render "components/money", amount: ready_to_assign.assigned, budget: budget %></dd>
+      </div>
+      <% unless ready_to_assign.reallocated.zero? %>
+        <div>
+          <dt class="text-xs text-base-content/70">Reallocated</dt>
+          <dd class="tabular-nums"><%= render "components/money", amount: ready_to_assign.reallocated, budget: budget %></dd>
+        </div>
+      <% end %>
+    </dl>
+
+    <p class="mt-4"><%= link_to "See Deposits", deposits_path, class: "link" %></p>
+  </div>
+</section>

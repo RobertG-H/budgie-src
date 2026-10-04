@@ -107,6 +107,115 @@ RSpec.describe Budget::Month, type: :model do
       expect(amount).to be_a(BigDecimal)
       expect(amount).to eq(BigDecimal("0.30"))
     end
+
+    describe "its state, which the Ready to Assign card says in words" do
+      let(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+      let(:september) { Date.new(2026, 9, 1) }
+
+      # Ready to Assign for September, worked out afresh.
+      def ready_to_assign = month_of(september).ready_to_assign
+
+      def figures(amount: 0, carried_over: 0, deposited: 0, assigned: 0, reallocated: 0)
+        Budget::Month::ReadyToAssign.new(amount: BigDecimal(amount), carried_over: BigDecimal(carried_over),
+          deposited: BigDecimal(deposited), assigned: BigDecimal(assigned), reallocated: BigDecimal(reallocated))
+      end
+
+      it "is to assign when there is money left, and nothing else" do
+        deposit 3000, september
+        assign groceries, 2800, september
+
+        expect(ready_to_assign).to be_to_assign
+        expect(ready_to_assign).not_to be_all_assigned
+        expect(ready_to_assign).not_to be_empty
+        expect(ready_to_assign).not_to be_over_assigned
+        expect(ready_to_assign.state).to eq(:to_assign)
+      end
+
+      it "is to assign for money that was only carried over, and for the cent left" do
+        deposit 3000, Date.new(2026, 8, 1)
+        expect(ready_to_assign).to be_to_assign
+
+        assign groceries, "2999.99", september
+        expect(ready_to_assign).to have_attributes(amount: BigDecimal("0.01"))
+        expect(ready_to_assign.state).to eq(:to_assign)
+      end
+
+      it "is all assigned when nothing is left but there is something to show, such as a Deposit and an Assigned of the same size" do
+        deposit 3000, september
+        assign groceries, 3000, september
+
+        expect(ready_to_assign).to be_all_assigned
+        expect(ready_to_assign).not_to be_to_assign
+        expect(ready_to_assign).not_to be_empty
+        expect(ready_to_assign).not_to be_over_assigned
+        expect(ready_to_assign.state).to eq(:all_assigned)
+      end
+
+      it "is all assigned when what was carried over has all been assigned" do
+        deposit 3000, Date.new(2026, 8, 1)
+        assign groceries, 3000, september
+
+        expect(ready_to_assign.state).to eq(:all_assigned)
+      end
+
+      it "is empty when nothing has happened: no Carried over, Deposited, Assigned or Reallocated" do
+        expect(ready_to_assign).to be_empty
+        expect(ready_to_assign).not_to be_all_assigned
+        expect(ready_to_assign).not_to be_to_assign
+        expect(ready_to_assign).not_to be_over_assigned
+        expect(ready_to_assign.state).to eq(:empty)
+      end
+
+      it "is empty for a budget that has envelopes but no money in or out" do
+        groceries
+
+        expect(ready_to_assign.state).to eq(:empty)
+      end
+
+      it "isn't empty for a month that only has a Reallocation to it, or only carried-over money" do
+        spend_envelope = create(:budget_envelope, budget: budget, name: "Holiday", starting_balance: 50)
+        reallocate_to_ready_to_assign spend_envelope, 50, september
+        expect(ready_to_assign).to have_attributes(deposited: 0, reallocated: 50)
+        expect(ready_to_assign.state).to eq(:to_assign)
+        expect(ready_to_assign).not_to be_empty
+
+        deposit 10, Date.new(2026, 7, 1)
+        expect(month_of(Date.new(2026, 8, 1)).ready_to_assign).not_to be_empty
+      end
+
+      it "is over-assigned when more was assigned than there is, even in a month with no Deposit" do
+        assign groceries, 100, september
+
+        expect(ready_to_assign).to have_attributes(amount: -100, deposited: 0, carried_over: 0)
+        expect(ready_to_assign).to be_over_assigned
+        expect(ready_to_assign).not_to be_empty
+        expect(ready_to_assign).not_to be_to_assign
+        expect(ready_to_assign).not_to be_all_assigned
+        expect(ready_to_assign.state).to eq(:over_assigned)
+      end
+
+      it "is over-assigned by the cent, and in the months after, which carry the shortfall" do
+        deposit 100, september
+        assign groceries, "100.01", september
+
+        expect(ready_to_assign.state).to eq(:over_assigned)
+        expect(month_of(Date.new(2026, 10, 1)).ready_to_assign.state).to eq(:over_assigned)
+      end
+
+      it "is in exactly one state, and over-assigned wins, then empty, then all assigned, then to assign" do
+        expect(figures(amount: -1).state).to eq(:over_assigned)
+        expect(figures(amount: -1, deposited: 5, assigned: 6).state).to eq(:over_assigned)
+        expect(figures.state).to eq(:empty)
+        expect(figures(deposited: 5, assigned: 5).state).to eq(:all_assigned)
+        expect(figures(amount: 5, deposited: 5).state).to eq(:to_assign)
+
+        [ figures(amount: -1), figures, figures(deposited: 5, assigned: 5), figures(amount: 5, deposited: 5) ].each do |state|
+          predicates = [ state.over_assigned?, state.empty?, state.all_assigned?, state.to_assign? ]
+
+          expect(predicates.count(true)).to eq(1), "#{state.inspect} is in #{predicates.count(true)} states"
+        end
+      end
+    end
   end
 
   describe "Assigned" do

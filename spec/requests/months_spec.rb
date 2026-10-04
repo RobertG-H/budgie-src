@@ -5,10 +5,10 @@ RSpec.describe "Months", type: :request do
 
   before { sign_in_as budget.user }
 
-  # The words under Ready to Assign's number. Its amounts are spans of their own, so the whitespace between the
-  # pieces is collapsed before comparing.
+  # The labelled figures under Ready to Assign's number, as "Carried over $0.00 · Deposited $0.00 · Assigned $0.00". Each
+  # is a label over an amount in a span of its own, so the whitespace between the pieces is collapsed before comparing.
   def stat_description
-    css_select(".stat-desc:not(.text-error)").map { |description| description.text.squish }.sole
+    css_select("#ready-to-assign dl > div").map { |figure| figure.text.squish }.join(" · ")
   end
 
   # The amount an envelope's Assigned button shows, without the words that name the button for assistive technology.
@@ -77,7 +77,7 @@ RSpec.describe "Months", type: :request do
   end
 
   describe "Ready to Assign" do
-    it "is every Deposit for the month and before it, with what was carried over and deposited, linking to the month's Deposits" do
+    it "is every Deposit for the month and before it, with what was carried over and deposited, and a link to the month's Deposits" do
       create(:budget_deposit, budget: budget, amount: 1000, date: Date.new(2026, 8, 1))
       create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 9, 1))
       create(:budget_deposit, budget: budget, amount: 777, date: Date.new(2026, 10, 1))
@@ -85,10 +85,11 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select "a[href='#{month_deposits_path("2026-09")}']" do
+      assert_select "#ready-to-assign" do
         assert_select ".stat-title", text: "Ready to Assign"
         assert_select ".stat-value", text: "$4,000.00"
         expect(stat_description).to eq("Carried over $1,000.00 · Deposited $3,000.00 · Assigned $0.00")
+        assert_select "a[href='#{month_deposits_path("2026-09")}']", text: "See Deposits", count: 1
       end
     end
 
@@ -97,9 +98,9 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select ".stat-desc span", count: 3
-      assert_select ".stat-desc span", text: "$0.00", count: 2
-      assert_select ".stat-desc span", text: "$3,000.00"
+      assert_select "#ready-to-assign dd span", count: 3
+      assert_select "#ready-to-assign dd span", text: "$0.00", count: 2
+      assert_select "#ready-to-assign dd span", text: "$3,000.00"
     end
 
     it "is $0.00 for a budget with no Deposits" do
@@ -441,8 +442,8 @@ RSpec.describe "Months", type: :request do
     it "shows the amount the way every amount is shown, in a span of its own" do
       get month_path("2026-02")
 
-      assert_select ".stat-desc span", count: 4
-      assert_select ".stat-desc span", text: "$30.00"
+      assert_select "#ready-to-assign dd span", count: 4
+      assert_select "#ready-to-assign dd span", text: "$30.00"
     end
 
     it "carries it into the months after, which show no Reallocated of their own" do
@@ -484,7 +485,7 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-03")
       assert_select ".stat-value", text: "$0.00"
-      assert_select ".stat-desc", text: /More was assigned/, count: 0
+      assert_select "#ready-to-assign", text: /More was assigned/, count: 0
     end
   end
 
@@ -500,7 +501,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value .text-error", text: "-$150.00"
-      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+      assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
       expect(stat_description).to eq("Carried over $0.00 · Deposited $100.00 · Assigned $250.00")
     end
 
@@ -508,15 +509,14 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-10")
 
       assert_select ".stat-value .text-error", text: "-$150.00"
-      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+      assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
       expect(stat_description).to eq("Carried over -$150.00 · Deposited $0.00 · Assigned $0.00")
     end
 
     it "isn't reported in a month before the money was assigned" do
       get month_path("2026-08")
 
-      assert_select ".stat-desc.text-error", count: 0
-      assert_select ".stat-value .text-error", count: 0
+      assert_select "#ready-to-assign .text-error", count: 0
     end
 
     it "isn't reported when everything deposited has been assigned, to the cent" do
@@ -525,8 +525,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "$0.00"
-      assert_select ".stat-desc.text-error", count: 0
-      assert_select ".stat-value .text-error", count: 0
+      assert_select "#ready-to-assign .text-error", count: 0
     end
 
     it "isn't reported for a positive amount" do
@@ -535,7 +534,199 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "$850.00"
-      assert_select ".stat-desc.text-error", count: 0
+      assert_select "#ready-to-assign .text-error", count: 0
+    end
+  end
+
+  # The card says in words whether there's money left to assign, and only the current month gets the loud warning styling.
+  describe "the Ready to Assign card's states" do
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+
+    # September 2026 is the current month, in Eastern time.
+    before { travel_to Time.utc(2026, 9, 15, 16) }
+
+    def deposit(amount, date) = create(:budget_deposit, budget: budget, amount: amount, date: date)
+    def assign(amount, month) = create(:budget_assignment, envelope: groceries, month: month, amount: amount)
+
+    describe "with money left to assign" do
+      before do
+        deposit 3000, Date.new(2026, 9, 1)
+        assign 2800, Date.new(2026, 9, 1)
+      end
+
+      it "says 'left to assign' in a warning badge, on a warning card, in the current month" do
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-warning.bg-warning\\/10" do
+          assert_select ".stat-value", text: "$200.00"
+          assert_select ".badge.badge-warning", text: "left to assign"
+        end
+      end
+
+      it "is the same on the home page, which is the current month too" do
+        get root_path
+
+        assert_select "section#ready-to-assign.border-warning", count: 1
+        assert_select "#ready-to-assign .badge-warning", text: "left to assign"
+      end
+
+      it "says it quietly in a ghost badge, with no warning, in a month that isn't the current one" do
+        get month_path("2026-10")
+
+        assert_select "#ready-to-assign .stat-value", text: "$200.00"
+        assert_select "#ready-to-assign .badge.badge-ghost", text: "left to assign"
+        assert_select "#ready-to-assign .badge-warning", count: 0
+        assert_select "section#ready-to-assign.border-base-300"
+        assert_select "section#ready-to-assign.border-warning", count: 0
+        assert_select "section#ready-to-assign.bg-warning\\/10", count: 0
+
+        get month_path("2026-08")
+        assert_select "#ready-to-assign .badge-warning", count: 0
+      end
+
+      it "never uses the warning colour as text" do
+        get month_path("2026-09")
+
+        assert_select "#ready-to-assign .text-warning", count: 0
+      end
+    end
+
+    describe "with everything assigned" do
+      before do
+        deposit 3000, Date.new(2026, 9, 1)
+        assign 3000, Date.new(2026, 9, 1)
+      end
+
+      it "says 'All assigned' in a success badge on a plain card" do
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-base-300" do
+          assert_select ".stat-value", text: "$0.00"
+          assert_select ".badge.badge-success", text: "All assigned"
+        end
+        assert_select "#ready-to-assign .badge-warning", count: 0
+        assert_select "section#ready-to-assign.border-warning", count: 0
+      end
+
+      it "is the same in a month that isn't the current one, since a plain card has nothing to tone down" do
+        deposit 3000, Date.new(2026, 10, 1)
+        assign 3000, Date.new(2026, 10, 1)
+
+        get month_path("2026-10")
+
+        assert_select "#ready-to-assign .badge.badge-success", text: "All assigned"
+        assert_select "#ready-to-assign .stat-value", text: "$0.00"
+      end
+
+      it "gives way to 'nothing yet' in a later month where nothing at all is carried or entered" do
+        get month_path("2026-12")
+
+        assert_select "#ready-to-assign .badge-success", count: 0
+        assert_select "#ready-to-assign span", text: "Nothing to assign yet."
+      end
+    end
+
+    describe "with more assigned than deposited" do
+      before do
+        deposit 100, Date.new(2026, 9, 1)
+        assign 250, Date.new(2026, 9, 1)
+      end
+
+      it "has an error border and says so in the error colour, in the current month" do
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-error" do
+          assert_select ".stat-value .text-error", text: "-$150.00"
+          assert_select ".text-error", text: "More was assigned than deposited."
+        end
+        assert_select "section#ready-to-assign.border-warning", count: 0
+        assert_select "#ready-to-assign .badge", count: 0
+      end
+
+      it "is error-styled in a later month that carries it, and in a future month that only holds Assigned entered ahead" do
+        get month_path("2026-10")
+        assert_select "section#ready-to-assign.border-error"
+        assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
+
+        Budget::Deposit.delete_all
+        Budget::Assignment.delete_all
+        assign 40, Date.new(2026, 11, 1)
+        get month_path("2026-11")
+        assert_select "section#ready-to-assign.border-error"
+        assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
+      end
+
+      it "is over-assigned in a month with no Deposit of its own, however little" do
+        Budget::Deposit.delete_all
+        Budget::Assignment.delete_all
+        assign "0.01", Date.new(2026, 9, 1)
+
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-error"
+        assert_select "#ready-to-assign .stat-value .text-error", text: "-$0.01"
+      end
+    end
+
+    describe "with nothing yet" do
+      before { Budget::Envelope.delete_all }
+
+      it "is a new budget's card: muted words and a New deposit button, and never the warning" do
+        get root_path
+
+        assert_select "section#ready-to-assign.border-base-300" do
+          assert_select ".stat-value", text: "$0.00"
+          assert_select "span", text: "Nothing to assign yet."
+          assert_select "a.btn.btn-sm[href='#{new_deposit_path(month: "2026-09", from: "month")}']", text: "New deposit"
+        end
+        assert_select "section#ready-to-assign.border-warning", count: 0
+        assert_select "#ready-to-assign .badge", count: 0
+        assert_select "#ready-to-assign .text-error", count: 0
+      end
+
+      it "is the same for any month nothing has happened in" do
+        get month_path("2028-01")
+
+        assert_select "#ready-to-assign span", text: "Nothing to assign yet."
+        assert_select "#ready-to-assign a", text: "New deposit"
+      end
+
+      it "goes away as soon as a Deposit lands in the month, or before it" do
+        deposit 10, Date.new(2026, 8, 1)
+
+        get month_path("2026-09")
+
+        assert_select "#ready-to-assign span", text: "Nothing to assign yet.", count: 0
+        assert_select "#ready-to-assign a", text: "New deposit", count: 0
+        assert_select "#ready-to-assign .badge-warning", text: "left to assign"
+      end
+    end
+
+    describe "the card" do
+      it "isn't a link, and the way to the month's Deposits is a plain link inside it" do
+        deposit 3000, Date.new(2026, 9, 1)
+
+        get month_path("2026-09")
+
+        expect(css_select("a #ready-to-assign, a section#ready-to-assign")).to be_empty
+        expect(css_select("#ready-to-assign a").map { |link| [ link.text.squish, link["href"] ] })
+          .to eq([ [ "See Deposits", month_deposits_path("2026-09") ] ])
+        expect(css_select("#ready-to-assign a .stat-value, #ready-to-assign a dl")).to be_empty
+      end
+
+      it "labels its figures, and Reallocated is among them only when it isn't zero" do
+        deposit 600, Date.new(2026, 9, 1)
+
+        get month_path("2026-09")
+        expect(css_select("#ready-to-assign dt").map { |label| label.text.squish }).to eq([ "Carried over", "Deposited", "Assigned" ])
+
+        create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 600)
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, amount: 30, date: Date.new(2026, 9, 20))
+
+        get month_path("2026-09")
+        expect(css_select("#ready-to-assign dt").map { |label| label.text.squish }).to eq([ "Carried over", "Deposited", "Assigned", "Reallocated" ])
+        assert_select "#ready-to-assign .badge-warning", text: "left to assign"
+      end
     end
   end
 

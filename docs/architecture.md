@@ -217,8 +217,8 @@ to Assign in the month of its date, and in every month after, since the money is
 after" choice as a Deposit has. Ready to Assign is then the Deposits less everything assigned plus everything reallocated to
 it, and the envelope's Available takes it off, so Ready to Assign plus every envelope's Available is the same with and
 without it; its Reallocated is net of it, as of the ones between envelopes. It adds one more grouped query by envelope, and
-the budget's own figure is added up from those rows as Assigned is. The Ready to Assign card's description adds
-"Reallocated $X" after Assigned when it isn't zero, and a month's Deposits page, which the card links to, has a
+the budget's own figure is added up from those rows as Assigned is. The Ready to Assign card's figures add "Reallocated"
+after Assigned when it isn't zero, and a month's Deposits page, which the card's "See Deposits" link goes to, has a
 Reallocations section below its Deposits when the month has some, listing them from every envelope ("From Dining out"), so
 everything behind the card's figures is on that page. An envelope's page lists them with the others, as "To Ready to Assign".
 Lowering a month's Assigned and reallocating to Ready to Assign can give the same balances; that overlap is accepted,

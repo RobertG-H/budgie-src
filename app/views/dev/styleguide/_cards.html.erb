@@ -16,18 +16,24 @@
   <h3 class="font-semibold">Stat card</h3>
   <%= render "components/stat_card", title: "Ready to Assign", value: money(1250, budget: budget), description: "Across 3 envelopes" %>
 
-  <h3 class="font-semibold">Stat card that links</h3>
-  <p class="text-base-content/70">Given an href, the whole card links to the records behind its number.</p>
-  <%= render "components/stat_card", title: "Ready to Assign", value: money(1250, budget: budget),
-        description: safe_join([ "Carried over", render("components/money", amount: -30, budget: budget), "·",
-                                 "Deposited", render("components/money", amount: 1280, budget: budget) ], " "),
-        href: "#" %>
+  <h3 class="font-semibold">Ready to Assign card</h3>
+  <p class="text-base-content/70">The month view's card says in words which of four states it's in, and only the current month gets the loud warning styling. It takes its figures as plain values, so every state is drawn here without a database. The way to the Deposits is a plain link at its foot, and the card isn't one big link.</p>
 
-  <h3 class="font-semibold">Stat card with an error</h3>
-  <p class="text-base-content/70">An error says in words what's wrong with the number, under the description, so a negative isn't only red.</p>
-  <%= render "components/stat_card", title: "Ready to Assign", value: render("components/money", amount: -150, budget: budget),
-        description: safe_join([ "Carried over", render("components/money", amount: 0, budget: budget), "·",
-                                 "Deposited", render("components/money", amount: 100, budget: budget), "·",
-                                 "Assigned", render("components/money", amount: 250, budget: budget) ], " "),
-        error: "More was assigned than deposited." %>
+  <% figures = ->(amount: 0, carried_over: 0, deposited: 0, assigned: 0, reallocated: 0) {
+       Budget::Month::ReadyToAssign.new(amount: BigDecimal(amount), carried_over: BigDecimal(carried_over), deposited: BigDecimal(deposited),
+         assigned: BigDecimal(assigned), reallocated: BigDecimal(reallocated))
+     } %>
+  <% cards = [
+       [ "Money left to assign, in the current month", figures.call(amount: 200, deposited: 3000, assigned: 2800), true ],
+       [ "Money left to assign, in another month", figures.call(amount: 200, deposited: 3000, assigned: 2800), false ],
+       [ "Money left to assign, with Reallocated (four figures)", figures.call(amount: 230, carried_over: 0, deposited: 3000, assigned: 2800, reallocated: 30), true ],
+       [ "Everything assigned", figures.call(deposited: 3000, assigned: 3000), true ],
+       [ "More assigned than deposited", figures.call(amount: -150, deposited: 100, assigned: 250), true ],
+       [ "Nothing yet, such as a new budget", figures.call, true ]
+     ] %>
+  <% cards.each_with_index do |(title, ready_to_assign, current), index| %>
+    <h4 class="text-sm font-medium"><%= title %></h4>
+    <%= render "months/ready_to_assign", ready_to_assign: ready_to_assign, current: current, budget: budget,
+          deposits_path: "#", new_deposit_path: "#", id: "ready-to-assign-#{index}" %>
+  <% end %>
 </section>

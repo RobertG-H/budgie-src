@@ -508,9 +508,51 @@ RSpec.describe "The words on the pages", type: :request do
 
     expect(visible_text).to include("Ready to Assign -$2,001.50")
     expect(visible_text).to include("More was assigned than deposited.")
-    expect(visible_text).to include("Carried over -$5.00 · Deposited $3,000.00 · Assigned $5,000.00 · Reallocated $3.50")
+    expect(visible_text).to include("Carried over -$5.00 Deposited $3,000.00 Assigned $5,000.00 Reallocated $3.50")
     expect(visible_text).not_to match(/\w+_\w+/)
     expect(visible_text).not_to match(retired_terms)
+  end
+
+  describe "the Ready to Assign card's four states" do
+    def card_text
+      Nokogiri::HTML(response.body).at("#ready-to-assign").text.squish
+    end
+
+    it "says money is left to assign" do
+      get month_path("2026-10")
+
+      expect(card_text).to include("Ready to Assign $2,958.50 left to assign")
+      expect(card_text).to include("See Deposits")
+      expect(card_text).not_to match(/\w+_\w+/)
+      expect(card_text).not_to match(retired_terms)
+    end
+
+    it "says everything is assigned" do
+      assignments.first.update!(amount: "2998.50")
+
+      get month_path("2026-10")
+
+      expect(card_text).to include("Ready to Assign $0.00 All assigned")
+      expect(card_text).not_to match(/\w+_\w+/)
+      expect(card_text).not_to match(retired_terms)
+    end
+
+    it "says more was assigned than deposited" do
+      assignments.first.update!(amount: 5000)
+
+      get month_path("2026-10")
+
+      expect(card_text).to include("Ready to Assign -$2,001.50 More was assigned than deposited.")
+      expect(card_text).not_to match(retired_terms)
+    end
+
+    it "says there is nothing to assign yet, and offers a New deposit" do
+      get month_path("2026-08")
+
+      expect(card_text).to include("Ready to Assign $0.00 Nothing to assign yet. New deposit")
+      expect(card_text).not_to match(/\w+_\w+/)
+      expect(card_text).not_to match(retired_terms)
+    end
   end
 
   it "uses the same words when an envelope with records can't be deleted" do
