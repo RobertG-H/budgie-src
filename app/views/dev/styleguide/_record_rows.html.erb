@@ -1,7 +1,7 @@
 <%# locals: (budget:) %>
 <section id="record-rows" aria-labelledby="record-rows-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="record-rows-heading" class="text-xl font-semibold">Record rows</h2>
-  <p class="text-base-content/70">One record in a list, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. A Reallocation also says where the money went or came from, and is signed from the page's side. The whole row links to where the record is edited.</p>
+  <p class="text-base-content/70">One record in a list, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. A Reallocation also says where the money went or came from, such as "To Ready to Assign" or "From Dining out", and is signed from the page's side. The whole row links to where the record is edited.</p>
 
   <%= render "components/record_list" do %>
     <%= render "components/record_row", href: "#", date: Date.new(2026, 9, 30), description: "Paycheck",

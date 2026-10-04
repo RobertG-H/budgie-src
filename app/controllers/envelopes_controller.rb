@@ -11,8 +11,7 @@ class EnvelopesController < ApplicationController
     @envelope = @line.envelope
     @spends = @envelope.spends.dated_in(@month.date).newest_first.load
     @refunds = @envelope.refunds.dated_in(@month.date).newest_first.load
-    @reallocations = Budget::EnvelopeReallocation.involving(@envelope).dated_in(@month.date).newest_first
-      .includes(:from_envelope, :to_envelope).load
+    @reallocations = reallocations_of(@envelope)
   end
 
   def new
@@ -54,6 +53,15 @@ class EnvelopesController < ApplicationController
     # Scoped to the user's budget, so another user's envelope is a 404.
     def set_envelope
       @envelope = Current.budget.envelopes.find(params[:id])
+    end
+
+    # The Reallocations in or out of the envelope dated in the month, to another envelope or to Ready to Assign, which are in
+    # two tables, together, newest first.
+    def reallocations_of(envelope)
+      between_envelopes = Budget::EnvelopeReallocation.involving(envelope).dated_in(@month.date).includes(:from_envelope, :to_envelope)
+      to_ready_to_assign = envelope.ready_to_assign_reallocations.dated_in(@month.date)
+
+      (between_envelopes.to_a + to_ready_to_assign.to_a).sort_by { |reallocation| [ reallocation.date, reallocation.created_at, reallocation.id ] }.reverse
     end
 
     def envelope_params

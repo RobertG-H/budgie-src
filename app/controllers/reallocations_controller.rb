@@ -1,5 +1,6 @@
-# The Reallocate form, which makes a Reallocation. Its To decides the table the Reallocation goes in, and for now every
-# To is an envelope; editing and deleting one are per table (EnvelopeReallocationsController).
+# The Reallocate form, which makes a Reallocation. Its To decides the table the Reallocation goes in: an envelope, or
+# Ready to Assign. Editing and deleting one are per table (EnvelopeReallocationsController and
+# ReadyToAssignReallocationsController).
 class ReallocationsController < ApplicationController
   include Reallocating
 
@@ -10,7 +11,11 @@ class ReallocationsController < ApplicationController
   end
 
   def create
-    @reallocation = Budget::EnvelopeReallocation.new(reallocation_params(envelopes: %i[ from to ]))
+    @reallocation = if to_ready_to_assign?
+      Budget::ReadyToAssignReallocation.new(reallocation_params(envelopes: { from_envelope_id: :envelope }))
+    else
+      Budget::EnvelopeReallocation.new(reallocation_params(envelopes: { from_envelope_id: :from_envelope, to_envelope_id: :to_envelope }))
+    end
 
     if @reallocation.save
       redirect_to return_path_for(@reallocation), notice: "Reallocation added."
@@ -18,4 +23,9 @@ class ReallocationsController < ApplicationController
       render :new, status: :unprocessable_content
     end
   end
+
+  private
+    def to_ready_to_assign?
+      permitted_reallocation[:to_envelope_id] == READY_TO_ASSIGN
+    end
 end

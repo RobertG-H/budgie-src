@@ -1,6 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
-# them, what's spent, what came back and what was moved between envelopes, so the real pages have something to show. Running it again changes nothing
+# them, what's spent, what came back and what was moved between envelopes and back to Ready to Assign, so the real pages
+# have something to show. Running it again changes nothing
 # that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
@@ -27,7 +28,7 @@ last_month = this_month.prev_month
 end
 
 # What's assigned to each envelope last month and this month: $2,800 and then $3,100, against $3,000 deposited in
-# each, so Ready to Assign reads $200 last month and $100 this month. Bills gets nothing, which keeps it Overspent
+# each, so Ready to Assign reads $200 last month and, before the Reallocation to it below, $100 this month. Bills gets nothing, which keeps it Overspent
 # and shows an Assigned of $0.00, and the month before last has nothing assigned at all.
 {
   "Rent" => [ 1500, 1500 ],
@@ -81,3 +82,9 @@ budget.envelopes.find_by!(name: "Groceries").refunds
 groceries = budget.envelopes.find_by!(name: "Groceries")
 budget.envelopes.find_by!(name: "Dining out").incoming_reallocations
   .find_or_create_by!(from_envelope: groceries, description: "Covering the takeout", date: this_month + 11) { |reallocation| reallocation.amount = 20 }
+
+# Money moved from Fuel, which has some left, back to Ready to Assign: $50 of this month's raises it from $100 to $150, and
+# lowers what's Available in Fuel by the same. It's the only one, so Fuel is the only envelope whose page lists a
+# Reallocation to Ready to Assign, and this month's Deposits page has a Reallocations section.
+budget.envelopes.find_by!(name: "Fuel").ready_to_assign_reallocations
+  .find_or_create_by!(description: "Unspent fuel money", date: this_month + 13) { |reallocation| reallocation.amount = 50 }

@@ -18,6 +18,12 @@ class Budget::EnvelopeReallocation < ApplicationRecord
   # The Reallocations out of an envelope or into it.
   scope :involving, ->(envelope) { where(from_envelope: envelope).or(where(to_envelope: envelope)) }
 
+  # The envelope ids the Reallocation is in or out of in the database, From first. A refused change isn't saved, so these
+  # are what the Reallocation is, not what was sent.
+  def envelope_ids_in_database
+    [ from_envelope_id_in_database, to_envelope_id_in_database ]
+  end
+
   # Whether the money left `envelope`, as opposed to arriving in it.
   def outgoing_from?(envelope)
     from_envelope_id == envelope.id

@@ -5,8 +5,13 @@
 # envelope, as `envelope`. Saving, deleting or cancelling then goes back to that envelope's page for as long as the
 # Reallocation is still in or out of it, and to its From envelope's page otherwise, such as after From is changed. Which
 # page it goes back to at all is up to `from`, as for any form. See ReturnsToOrigin.
+#
+# One Reallocate form makes either kind, and the Ready to Assign option of its To field is what says which: it sends
+# READY_TO_ASSIGN where an envelope would send its id. It's a value, never a name in a URL or a param key.
 module Reallocating
   extend ActiveSupport::Concern
+
+  READY_TO_ASSIGN = "ready-to-assign".freeze
 
   included do
     include MonthScoped
@@ -47,23 +52,27 @@ module Reallocating
     # The envelope page to go back to: the one the form was opened from, if the Reallocation is still in or out of it,
     # and otherwise its From envelope's. Judged by what's in the database, since a refused change isn't saved.
     def envelope_page_for(reallocation)
-      from_id = reallocation.from_envelope_id_in_database
-      if opened_from && [ from_id, reallocation.to_envelope_id_in_database ].include?(opened_from.id)
+      envelope_ids = reallocation.envelope_ids_in_database
+      if opened_from && envelope_ids.include?(opened_from.id)
         opened_from
       else
-        Current.budget.envelopes.find_by(id: from_id)
+        Current.budget.envelopes.find_by(id: envelope_ids.first)
       end
+    end
+
+    def permitted_reallocation
+      @permitted_reallocation ||= params.expect(reallocation: [ :from_envelope_id, :to_envelope_id, :description, :date, :amount, :notes ])
     end
 
     # The form's fields, with each envelope in `envelopes` set only from the budget's own envelopes, never from the id that
     # was sent: another budget's envelope, or one that doesn't exist, is no envelope, which the Reallocation refuses. One
-    # that isn't in `envelopes`, or that the request doesn't name, is left as it is.
+    # that isn't in `envelopes`, or that the request doesn't name, is left as it is, so To can't be changed. `envelopes`
+    # maps each id that comes in, such as `from_envelope_id`, to the association it sets on this kind of Reallocation.
     def reallocation_params(envelopes:)
-      permitted = params.expect(reallocation: [ :from_envelope_id, :to_envelope_id, :description, :date, :amount, :notes ])
+      permitted = permitted_reallocation
 
-      envelopes.reduce(permitted.except(:from_envelope_id, :to_envelope_id)) do |attributes, side|
-        id = permitted[:"#{side}_envelope_id"]
-        permitted.key?(:"#{side}_envelope_id") ? attributes.merge("#{side}_envelope": Current.budget.envelopes.find_by(id: id)) : attributes
+      envelopes.reduce(permitted.except(:from_envelope_id, :to_envelope_id)) do |attributes, (id_param, association)|
+        permitted.key?(id_param) ? attributes.merge(association => Current.budget.envelopes.find_by(id: permitted[id_param])) : attributes
       end
     end
 end

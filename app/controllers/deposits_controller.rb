@@ -4,9 +4,11 @@ class DepositsController < ApplicationController
 
   before_action :set_deposit, only: %i[ edit update destroy ]
 
-  # The Deposits counting toward a month's Ready to Assign, which can include some dated in the month before.
+  # The Deposits counting toward a month's Ready to Assign, which can include some dated in the month before, and the
+  # Reallocations to it dated in the month, from every envelope.
   def index
     @deposits = Current.budget.deposits.for_month(@month.date).newest_first.load
+    @reallocations = Current.budget.ready_to_assign_reallocations.dated_in(@month.date).newest_first.includes(:envelope).load
   end
 
   def new

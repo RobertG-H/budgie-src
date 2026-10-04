@@ -10,15 +10,17 @@
 #
 # Changing what's assigned in an earlier month changes Carried over, Available and Ready to Assign in every month
 # after it, since none of them is stored. That can leave a later month's Ready to Assign negative. Changing a Spend, a
-# Refund or a Reallocation does the same to Carried over and Available, though never to Ready to Assign: money spent was
-# already assigned, money that comes back lands in its envelope and money moved between envelopes nets to zero.
+# Refund or a Reallocation does the same to Carried over and Available. A Spend, a Refund or a Reallocation between
+# envelopes never changes Ready to Assign: money spent was already assigned, money that comes back lands in its envelope
+# and money moved between envelopes nets to zero. A Reallocation to Ready to Assign does, from the month of its date.
 class Budget::Month
   ZERO = BigDecimal(0)
 
   # Money not yet assigned to an envelope: every Deposit for this month and the months before it, less everything
-  # assigned in them. `carried_over` is what was left at the end of last month, `deposited` is what came in this
-  # month and `assigned` is what went to envelopes this month, all of them.
-  ReadyToAssign = Data.define(:amount, :carried_over, :deposited, :assigned) do
+  # assigned in them, plus everything moved back into it from envelopes. `carried_over` is what was left at the end of
+  # last month, `deposited` is what came in this month, `assigned` is what went to envelopes this month, all of them, and
+  # `reallocated` is what came back from envelopes this month, all of them.
+  ReadyToAssign = Data.define(:amount, :carried_over, :deposited, :assigned, :reallocated) do
     # Over-assigned: more has been assigned than there is to assign, so Ready to Assign is below zero.
     def over_assigned?
       amount.negative?
@@ -32,9 +34,9 @@ class Budget::Month
 
   # One envelope's figures for this month: what it carries over (its Starting balance and everything assigned to it
   # in the months before, less everything spent from it and plus everything refunded to it and moved into it from other
-  # envelopes, less what's moved out of it), what's assigned to it, spent from it and refunded to it this month, what
-  # was moved into it less what was moved out of it (Reallocated, which is negative when more left than arrived), and
-  # what's left, which is what's Available.
+  # envelopes, less what's moved out of it, to another envelope or to Ready to Assign), what's assigned to it, spent from
+  # it and refunded to it this month, what was moved into it less what was moved out of it (Reallocated, which is
+  # negative when more left than arrived), and what's left, which is what's Available.
   EnvelopeLine = Data.define(:envelope, :carried_over, :assigned, :spent, :refunded, :reallocated, :available) do
     # Overspent: the envelope's Available is below zero.
     def overspent?
@@ -87,9 +89,14 @@ class Budget::Month
       deposited_before, deposited = deposit_totals
       assigned_before = assignment_totals.values.sum(ZERO, &:before)
       assigned = assignment_totals.values.sum(ZERO, &:in_month)
-      carried_over = deposited_before - assigned_before
+      reallocated_before = ready_to_assign_reallocation_totals.values.sum(ZERO, &:before)
+      reallocated = ready_to_assign_reallocation_totals.values.sum(ZERO, &:in_month)
+      carried_over = deposited_before - assigned_before + reallocated_before
 
-      ReadyToAssign.new(amount: carried_over + deposited - assigned, carried_over: carried_over, deposited: deposited, assigned: assigned)
+      ReadyToAssign.new(
+        amount: carried_over + deposited - assigned + reallocated, carried_over: carried_over, deposited: deposited,
+        assigned: assigned, reallocated: reallocated
+      )
     end
   end
 
@@ -142,20 +149,32 @@ class Budget::Month
       @refund_totals ||= dated_totals(budget.refunds)
     end
 
-    # What's moved into each envelope less what's moved out of it, from two queries: { envelope id => Totals }. An
-    # envelope with nothing moved either way up to the end of this month isn't in it. Both queries go through the
-    # budget's From envelopes, and a Reallocation's To envelope is always in the same budget.
+    # What's moved into each envelope less what's moved out of it, to another envelope or to Ready to Assign, from three
+    # queries: { envelope id => Totals }. An envelope with nothing moved either way up to the end of this month isn't in
+    # it. The first two go through the budget's From envelopes, and a Reallocation's To envelope is always in the same
+    # budget.
     def reallocation_totals
       @reallocation_totals ||= begin
         moved_in = dated_totals(budget.envelope_reallocations, by: :to_envelope_id)
         moved_out = dated_totals(budget.envelope_reallocations, by: :from_envelope_id)
+        moved_to_ready_to_assign = ready_to_assign_reallocation_totals
 
-        (moved_in.keys | moved_out.keys).to_h do |envelope_id|
+        (moved_in.keys | moved_out.keys | moved_to_ready_to_assign.keys).to_h do |envelope_id|
           into = moved_in.fetch(envelope_id, NOTHING)
           out_of = moved_out.fetch(envelope_id, NOTHING)
-          [ envelope_id, Totals.new(before: into.before - out_of.before, in_month: into.in_month - out_of.in_month) ]
+          to_ready_to_assign = moved_to_ready_to_assign.fetch(envelope_id, NOTHING)
+          [ envelope_id, Totals.new(
+            before: into.before - out_of.before - to_ready_to_assign.before,
+            in_month: into.in_month - out_of.in_month - to_ready_to_assign.in_month
+          ) ]
         end
       end
+    end
+
+    # What's moved out of each envelope back into Ready to Assign, from a single query: { envelope id => Totals }. The
+    # budget's own total is added up from these, as Assigned is, so it always agrees with its envelopes'.
+    def ready_to_assign_reallocation_totals
+      @ready_to_assign_reallocation_totals ||= dated_totals(budget.ready_to_assign_reallocations)
     end
 
     # Each envelope's totals from dated records, as { envelope id => Totals }, grouped by the column that names the

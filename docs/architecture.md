@@ -99,7 +99,7 @@ Each user has at most one `Budget`, in a currency chosen during first-run setup;
 default currency. The `RequireBudget` concern redirects a signed-in user without one to budget setup.
 
 Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb`
-with the table `budget_envelopes`, and `Budget::Deposit`, `Budget::Spend`, `Budget::Refund` and `Budget::EnvelopeReallocation` have `budget_deposits`, `budget_spends`, `budget_refunds` and `budget_envelope_reallocations`. `Budget.use_relative_model_naming?`
+with the table `budget_envelopes`, and `Budget::Deposit`, `Budget::Spend`, `Budget::Refund`, `Budget::EnvelopeReallocation` and `Budget::ReadyToAssignReallocation` have `budget_deposits`, `budget_spends`, `budget_refunds`, `budget_envelope_reallocations` and `budget_ready_to_assign_reallocations`. `Budget.use_relative_model_naming?`
 drops the prefix from routes, params and DOM ids, so it's `envelopes_path` and `EnvelopesController`.
 `Current.budget` is the one way controllers and views find the budget — for now the signed-in user's — and
 controllers look records up through it, so another user's record is a 404.
@@ -109,7 +109,7 @@ Constraints live in the database as well as in the models — check constraints,
 is validated as a number under 10¹³ with at most two decimal places, and more places is an error rather than
 being rounded.
 
-An envelope with records, such as Assigned amounts, Spends, Refunds or Reallocations (in or out of it), can't be deleted. The model refuses and its page says why,
+An envelope with records, such as Assigned amounts, Spends, Refunds or Reallocations (in or out of it, or to Ready to Assign), can't be deleted. The model refuses and its page says why,
 with `ON DELETE RESTRICT` as the backstop, and destroying a whole budget (which is what `user:delete` does) deletes its
 envelopes' records first so the envelopes can follow.
 
@@ -134,7 +134,7 @@ cancelled.
 
 Assigned is money moved from Ready to Assign into one envelope for one month, one figure per envelope per month. It is
 worked into the same calculator: an envelope's Available is its Starting balance plus everything assigned up to the
-month (less everything spent, plus everything refunded and net of everything reallocated, below), and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
+month (less everything spent, plus everything refunded and net of everything reallocated, below), and Ready to Assign is the Deposits for the months up to it less everything assigned in them (plus everything reallocated to it, below), still in a fixed
 number of grouped queries. Changing an earlier month's Assigned therefore changes every later month. It's set in place on
 the month view: each envelope's Assigned cell is a Turbo Frame that swaps between the amount and an input, and saving
 refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's
@@ -189,14 +189,28 @@ Reallocation can leave it Overspent. Money going from Ready to Assign into an en
 The amount is always positive, because the From and To columns say which way the money moved. A Reallocation belongs to
 its budget through its From envelope, both envelopes must be the budget's own (the controller looks them up in the
 budget's envelopes), and it shares its description, date, amount and notes rules with Spends and Refunds in
-`DatedEnvelopeRecord`. It's made on one Reallocate form at `/reallocations/new`, whose To decides the table, so a later
-slice can add Ready to Assign as a To without changing the form's fields; editing and deleting are per table, since ids
-repeat across them, at `/reallocations/to-envelope/:id`, and once saved its To can't change. It is listed on both of its
+`DatedEnvelopeRecord`. It's made on one Reallocate form at `/reallocations/new`, whose To decides the table (an envelope,
+or Ready to Assign, below), so both kinds share the form's fields; editing and deleting are per table, since ids
+repeat across them, at `/reallocations/to-envelope/:id` and `/reallocations/to-ready-to-assign/:id`, and once saved its To can't change. It is listed on both of its
 envelopes' pages for the month of its date, each row read from that envelope's side ("To Groceries" and negative, or "From
 Dining out" and positive), so a form opened from an envelope's page carries that envelope and goes back to its page for as
 long as the Reallocation is still in or out of it. The month view shows a Reallocated column from `sm:` up and no
 "Reallocate": Assigned stays the plan, set in place, and Reallocated is money moved, and they're never merged. An envelope's
 page has "Reallocate" with that envelope as From, its Reallocated, and a Reallocations section when the month has any.
+
+A Reallocation can also move money out of an envelope back into Ready to Assign, such as what's left of a holiday once it's
+over. It's the second table of ADR 0007, `budget_ready_to_assign_reallocations`, shaped like a Spend: one envelope (the
+form's From), a description, a date, a positive amount and notes, and no budget or month of its own. It counts toward Ready
+to Assign in the month of its date, and in every month after, since the money is already in hand and there's no "month
+after" choice as a Deposit has. Ready to Assign is then the Deposits less everything assigned plus everything reallocated to
+it, and the envelope's Available takes it off, so Ready to Assign plus every envelope's Available is the same with and
+without it; its Reallocated is net of it, as of the ones between envelopes. It adds one more grouped query by envelope, and
+the budget's own figure is added up from those rows as Assigned is. The Ready to Assign card's description adds
+"Reallocated $X" after Assigned when it isn't zero, and a month's Deposits page, which the card links to, has a
+Reallocations section below its Deposits when the month has some, listing them from every envelope ("From Dining out"), so
+everything behind the card's figures is on that page. An envelope's page lists them with the others, as "To Ready to Assign".
+Lowering a month's Assigned and reallocating to Ready to Assign can give the same balances; that overlap is accepted,
+and the two stay separate figures: Assigned is the plan for the month, Reallocated is money moved.
 
 ### Frontend
 

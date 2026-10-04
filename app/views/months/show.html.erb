@@ -6,12 +6,14 @@
 <% origin_page = current_page?(root_path) ? "home" : "month" %>
 <% ready_to_assign = @month.ready_to_assign %>
 <%# Amounts are shown through the money partial wherever they are, so a negative one is signed and red here too. %>
+<%# Reallocated, what came back from envelopes, ends it, and only when it isn't zero, so the arithmetic on the card still adds up. %>
 <% ready_to_assign_description = safe_join([
      "Carried over", render("components/money", amount: ready_to_assign.carried_over, budget: budget),
      "·",
      "Deposited", render("components/money", amount: ready_to_assign.deposited, budget: budget),
      "·",
-     "Assigned", render("components/money", amount: ready_to_assign.assigned, budget: budget)
+     "Assigned", render("components/money", amount: ready_to_assign.assigned, budget: budget),
+     *(ready_to_assign.reallocated.zero? ? [] : [ "·", "Reallocated", render("components/money", amount: ready_to_assign.reallocated, budget: budget) ])
    ], " ") %>
 
 <%= render "components/page_header", title: @month.name do %>
