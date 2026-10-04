@@ -145,12 +145,12 @@ class Budget::Month
       @refund_totals ||= dated_totals(budget.refunds, RefundedTotals)
     end
 
-    # One envelope's totals from records that are dated, as `totals`. A Spend or a Refund counts in the month its date is
-    # in, and in every month after it.
-    def dated_totals(records, totals)
+    # Each envelope's totals from dated records, as { envelope id => totals_class instance }. A Spend or a Refund counts in
+    # the month its date is in, and in every month after it.
+    def dated_totals(records, totals_class)
       records.where(date: ..date.end_of_month).group(:envelope_id)
         .pluck(:envelope_id, sum_where("date < ?"), sum_where("date >= ?"))
-        .to_h { |envelope_id, before, in_month| [ envelope_id, totals.new(before: before, in_month: in_month) ] }
+        .to_h { |envelope_id, before, in_month| [ envelope_id, totals_class.new(before: before, in_month: in_month) ] }
     end
 
     # One column of a query: the total amount where `condition` holds, given this month. Only for the literal

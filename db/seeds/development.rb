@@ -1,7 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
-# them, what's spent and what came back, so the real pages have something to show. Running it again changes nothing that's already
-# there.
+# them, what's spent and what came back, so the real pages have something to show. Running it again changes nothing
+# that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
 user = User.find_or_create_by!(email: Dev::USER_EMAIL) { |new_user| new_user.name = "Dev Budgie" }

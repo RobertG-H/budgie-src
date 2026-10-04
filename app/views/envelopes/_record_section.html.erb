@@ -1,18 +1,20 @@
 <%# locals: (title:, records:, budget:, edit_path:, empty_message: nil) %>
-<%# One kind of record on an envelope's page, such as its Spends for the month, under a heading. Without an `empty_message`, the section is a heading and its records, for a page that only shows it when there are some. `edit_path` is given a record and returns where it's edited. %>
-<div class="mt-8">
-  <h2 class="text-xl font-semibold"><%= title %></h2>
+<%# One kind of record on an envelope's page, such as its Spends for the month, under a heading. With no records it says `empty_message`, and without one there's no section at all. `edit_path` is given a record and returns where it's edited. %>
+<% if records.any? || empty_message %>
+  <div class="mt-8">
+    <h2 class="text-xl font-semibold"><%= title %></h2>
 
-  <div class="mt-4">
-    <% if records.any? %>
-      <%= render "components/record_list" do %>
-        <% records.each do |record| %>
-          <%= render "components/record_row", href: edit_path.call(record),
-                date: record.date, description: record.description, notes: record.notes, amount: record.amount, budget: budget %>
+    <div class="mt-4">
+      <% if records.any? %>
+        <%= render "components/record_list" do %>
+          <% records.each do |record| %>
+            <%= render "components/record_row", href: edit_path.call(record),
+                  date: record.date, description: record.description, notes: record.notes, amount: record.amount, budget: budget %>
+          <% end %>
         <% end %>
+      <% else %>
+        <%= render "components/empty_state", message: empty_message %>
       <% end %>
-    <% elsif empty_message %>
-      <%= render "components/empty_state", message: empty_message %>
-    <% end %>
+    </div>
   </div>
-</div>
+<% end %>
