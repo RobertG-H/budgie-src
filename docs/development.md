@@ -140,8 +140,12 @@ docker compose run --rm web bin/rails generate migration AddSomethingToSomething
 docker compose run --rm web bin/rails db:migrate
 ```
 
-Two things to know:
+Three things to know:
 
+- **Restart `web` after a migration that changes an existing table.** The running server keeps that
+  table's old column list, so a new record of its model fails with `undefined method` for a new column
+  (for example `money_in_count` on `Budget::Import`) until `docker compose restart web`. It's easy to
+  hit after pulling a branch with migrations while the stack is up.
 - **The specs load `db/schema.rb`, not the migrations**, so run `db:migrate` after adding one and commit
   the `schema.rb` it writes. Never hand-edit that file — CI rebuilds it from the migrations and fails on
   any difference. See [the schema drift check](ci.md#the-schema-drift-check).

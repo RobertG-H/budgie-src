@@ -29,7 +29,7 @@ Use these exact spellings. They match `docs/development.md`, and this checkout's
 | Build the production image | `docker build .` |
 
 - Specs load the test schema from `db/schema.rb`, so run `db:migrate` after adding a migration to update it.
-- Gems live in the Compose `bundle` volume, not the image. After editing the `Gemfile`, run `docker compose exec -T web bundle install`, then `docker compose restart web` so the server loads new gems and initializers.
+- Gems live in the Compose `bundle` volume, not the image. After editing the `Gemfile`, run `docker compose exec -T web bundle install`, then `docker compose restart web` so the server loads new gems and initializers. Restart it after `db:migrate` changes an existing table too: the running server keeps the table's old columns, so a new record of its model fails with `undefined method` for a new column until it restarts.
 - CI (`.github/workflows/ci.yml`, see `docs/ci.md`) runs four checks, which a ruleset requires on `main`: `scan_ruby` (Brakeman and bundler-audit), `scan_js` (`bin/importmap audit`), `lint` (RuboCop) and `test`. RuboCop uses the Rails omakase style, including double quotes and spaces inside array brackets (`[ :a, :b ]`).
 - `test` runs the specs with `CI=true`, which eager-loads every file, so a file that fails to load fails CI even when the local run passes. Then it rebuilds `db/schema.rb` from the migrations on an empty database and fails if that differs from the committed file, so never hand-edit `schema.rb`: commit the one `db:migrate` writes.
 
