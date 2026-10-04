@@ -1,9 +1,10 @@
-<%# locals: (bank_transaction:, budget:, from:, show_account: false, show_state: true) %>
+<%# locals: (bank_transaction:, budget:, from:, show_account: false, show_state: true, guess: nil) %>
 <%# One bank transaction in a list, as a record row: its date, its description, which Account it's in when the list has several, and its signed amount, money out red. What happens to it depends on its state: %>
 <%# - unfiled: the whole row opens the filing form, which comes back to the page the list is on (`from`) %>
 <%# - filed: the records it was filed as, which are ordinary and open where they're edited, a flag when they no longer add up to it, and Un-file %>
 <%# - ignored: Un-ignore %>
 <%# A filed or ignored one says which Filing rule did it, when one did and not a person: the rule's text and what it sets. Preload the rule and its envelope too. %>
+<%# An unfiled one with a `guess` says what it was like and what it would be filed as, in a muted line, which is only a suggestion: choosing the row opens the form, which starts on it. %>
 <%# The state is said in a word, so it isn't only in what's offered. A list of nothing but unfiled ones, such as the Unfiled list, leaves it out with `show_state: false`. Preload the links and records of every one, so a list runs the same number of queries however long it is. %>
 <% state = bank_transaction.state %>
 <% records = bank_transaction.filed_records %>
@@ -15,6 +16,10 @@
       counterpart: (bank_transaction.account.name if show_account) do %>
   <% if show_state %>
     <span class="mt-1 flex flex-wrap items-center gap-2"><%= render "components/label_badge", text: state.to_s.capitalize %></span>
+  <% end %>
+
+  <% if guess && state == :unfiled %>
+    <%= render "components/row_note" do %><%= guess.label %><% end %>
   <% end %>
 
   <% if state == :filed %>

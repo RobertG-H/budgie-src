@@ -206,6 +206,61 @@ RSpec.describe "The words on the pages", type: :request do
         expect(response.body).not_to match(/filed_by_rules|ignored_by_rules/)
       end
 
+      it "says Guess, and which bank transaction it was like, on the filing form, in words" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        later_paycheck = create(:budget_bank_transaction, account: account, description: "Paycheck", date: Date.new(2026, 10, 15), amount: 2800)
+        similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
+
+        get new_bank_transaction_filing_path(similar.reload, from: "unfiled")
+
+        expect(visible_text).to include("Guess: like Loblaws → Groceries")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+        expect(response.body).not_to match(/guess_|_guess|draft_attributes/)
+
+        get new_bank_transaction_filing_path(later_paycheck.reload, from: "unfiled")
+
+        expect(visible_text).not_to include("Guess")
+      end
+
+      it "says Guess, File as guessed and what it did in words, on the Unfiled list, its review, and when the review is refused or empty" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
+
+        get unfiled_bank_transactions_path
+
+        expect(visible_text).to include("File 1 as guessed", "Guess: like Loblaws → Groceries")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        get new_guessed_filing_path
+
+        expect(visible_text).to include("File as guessed", "1 bank transaction on this page has a Guess. Untick any you'd rather file yourself.", "Guess: like Loblaws → Groceries")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+        expect(response.body).not_to match(/budget_|_id\b|review_value|draft_attributes/)
+
+        groceries.update!(archived_at: Time.current)
+        post guessed_filing_path, params: { guessed: { similar.id.to_s => "spend:#{groceries.id}" } }
+        follow_redirect!
+
+        expect(visible_text).to include("Nothing was filed. Loblaws: Envelope is archived.", "None of the bank transactions on this page has a Guess.", "Back to Unfiled")
+        expect(visible_text).not_to match(retired_terms)
+
+        groceries.update!(archived_at: nil)
+        post guessed_filing_path, params: { guessed: { similar.id.to_s => "spend:#{groceries.id}" } }
+        follow_redirect!
+
+        expect(visible_text).to include("1 bank transaction filed as guessed.")
+        expect(visible_text).not_to match(retired_terms)
+
+        post guessed_filing_path
+        follow_redirect!
+
+        expect(visible_text).to include("Choose at least one bank transaction to file.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
       it "says what's wrong with a rule in the same words, when it's refused with a filing or an ignoring" do
         post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "lo" } } }
 

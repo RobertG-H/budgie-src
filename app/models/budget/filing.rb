@@ -1,6 +1,6 @@
 # Turns bank transactions into the Deposits, Spends and Refunds they were, which is filing (ADR 0009). It's one operation:
 # it takes bank transactions, each with the records it's filed as, and files them all or none. A person calls it from the
-# filing form with one bank transaction and one record or several, and Filing rules and a Guess will call the same operation.
+# filing form with one bank transaction and one record or several, and Filing rules and "File as guessed" call the same operation.
 #
 #   filing = Budget::Filing.new(budget)
 #   filing.file([ Budget::Filing::Entry.new(bank_transaction: bank_transaction, drafts: [ draft ]) ])

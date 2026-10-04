@@ -19,6 +19,11 @@ class Budget::Filing::Entry
     errors.any? || drafts.any? { |draft| draft.errors.any? }
   end
 
+  # Everything that's wrong, as sentences: with the bank transaction itself, and then with each record.
+  def full_messages
+    errors.full_messages + drafts.flat_map { |draft| draft.errors.full_messages }
+  end
+
   # What the records add up to as they're entered, which only counts the ones that are figures, and what's left of the bank
   # transaction's amount, which is negative when they're over it. A form shows both as it goes.
   def total

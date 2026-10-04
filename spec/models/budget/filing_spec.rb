@@ -1,7 +1,7 @@
 require "rails_helper"
 
 # Filing is one operation: it takes bank transactions, each with the records it's filed as, and files them all, or none (ADR 0009).
-# A person calls it from the filing form with one bank transaction, and Filing rules and a Guess will call the same operation.
+# A person calls it from the filing form with one bank transaction, and Filing rules and "File as guessed" call the same operation.
 RSpec.describe Budget::Filing do
   let(:budget) { create(:budget, currency: "CAD") }
   let(:account) { create(:budget_account, budget: budget) }

@@ -121,6 +121,17 @@ RSpec.describe "Imports", type: :request do
       expect(response).to redirect_to(import_path(created))
     end
 
+    it "imports a row the bank gave no description as No description, which an Account's page lists like any other" do
+      import(file: upload_text("Date,Description,Amount\n2026-09-02,,-250.00\n2026-09-03,Loblaws,-82.45\n"))
+
+      expect(response).to redirect_to(import_path(account.imports.sole))
+      expect(account.bank_transactions.newest_first.pluck(:description, :amount)).to eq([ [ "Loblaws", BigDecimal("-82.45") ], [ "No description", -250 ] ])
+
+      get account_path(account)
+
+      expect(visible_text).to include("No description", "-$250.00")
+    end
+
     it "keeps only the name of the file, which isn't kept" do
       import
 

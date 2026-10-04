@@ -262,12 +262,19 @@ RSpec.describe Budget::CsvFormat::Reader do
       end
     end
 
-    it "says when the description is blank, whichever of its columns it's read from" do
-      expect(refusal_of("2026-09-01,,10.00\n")).to eq("Line 1: the description is blank.")
-      expect(refusal_of("2026-09-01,   ,10.00\n")).to eq("Line 1: the description is blank.")
+    it "reads a row the bank gave no description as No description, whichever of its columns it's read from, and doesn't refuse it" do
+      expect(read(format, "2026-09-01,,10.00\n")).to have_attributes(refusal: nil, rows: [ have_attributes(line: 1, description: "No description", amount: 10) ])
+      expect(read(format, "2026-09-01,   ,10.00\n").rows.map(&:description)).to eq([ "No description" ])
 
       two_columns = build(:budget_csv_format, column_count: 4, description_columns: [ 2, 3 ], amount_column: 4)
-      expect(refusal_of("2026-09-01,,,10.00\n", two_columns)).to eq("Line 1: the description is blank.")
+      expect(read(two_columns, "2026-09-01,,,10.00\n").rows.map(&:description)).to eq([ "No description" ])
+    end
+
+    it "keeps the description a row has, and only stands in for one that's empty, so a payment with none sits beside the rest of the file" do
+      reading = read(format, "2026-09-01,Paycheck,2800.00\n2026-09-02,,-250.00\n2026-09-03,Loblaws,-82.45\n")
+
+      expect(reading.rows.map(&:description)).to eq([ "Paycheck", "No description", "Loblaws" ])
+      expect(reading.rows.map(&:amount)).to eq([ 2800, -250, BigDecimal("-82.45") ])
     end
 
     it "joins the description columns with a space, leaving out a blank one" do
@@ -384,7 +391,7 @@ RSpec.describe Budget::CsvFormat::Reader do
     end
 
     it "are still refused when anything else about the row is wrong" do
-      expect(read(build(:budget_csv_format), "2026-09-01,,0.00\n").refusal).to have_attributes(line: 1, reason: "the description is blank.")
+      expect(read(build(:budget_csv_format), "2026-09-01,Interest,nope\n").refusal).to have_attributes(line: 1)
       expect(read(build(:budget_csv_format), "nope,Interest,0.00\n").refusal).to have_attributes(line: 1)
     end
 

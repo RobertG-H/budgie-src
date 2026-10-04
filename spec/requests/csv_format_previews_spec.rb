@@ -118,6 +118,13 @@ RSpec.describe "CSV format previews", type: :request do
       assert_select "turbo-stream[target=csv-format-preview]", text: /5 rows\. 1 row of 0 would be skipped\./
     end
 
+    it "shows a row the bank gave no description as No description, and doesn't refuse it" do
+      post csv_format_preview_path, params: { csv_format: format_params.merge(sample: upload_text("Date,Description,Amount\n2026-09-01,Paycheck,2800.00\n2026-09-02,,-250.00\n")) }, headers: turbo_stream
+
+      expect(previewed_rows).to eq([ "2 | Sep 1, 2026 | Paycheck | $2,800.00 Money in", "3 | Sep 2, 2026 | No description | -$250.00 Money out" ])
+      assert_select "turbo-stream[target=csv-format-preview]", text: /2 rows\./
+    end
+
     it "reads separate money in and money out columns, with the same result" do
       preview sample: "in-and-out-sample.csv", amount_style: "in_and_out", amount_column: "", money_out_column: "3", money_in_column: "4"
 

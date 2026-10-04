@@ -1,0 +1,35 @@
+<%# The review before "File N as guessed": the rows of the Unfiled page that have a Guess, each ticked, with what it was like and what it would be filed as. A Guess only suggests, so nothing is filed until File as guessed, and only the rows left ticked, each as it's shown here: the form sends what was reviewed, so a Guess that has changed since isn't filed in its place. %>
+<% content_for :title, "File as guessed · Budgie" %>
+<% budget = Current.budget %>
+<% count = @reviewed.size %>
+
+<div class="mx-auto max-w-3xl">
+  <%= render "components/page_header", title: "File as guessed",
+        description: (count.zero? ? "None of the bank transactions on this page has a Guess." :
+          "#{pluralize(count, "bank transaction")} on this page #{count == 1 ? "has" : "have"} a Guess. Untick any you'd rather file yourself.") %>
+
+  <% if count.zero? %>
+    <div class="mt-8">
+      <%= render "components/empty_state", message: "Nothing here has a Guess to file." do %>
+        <%= link_to "Back to Unfiled", unfiled_page_path, class: "btn" %>
+      <% end %>
+    </div>
+  <% else %>
+    <%= form_with url: guessed_filing_path, method: :post, class: "mt-8 space-y-6" do |form| %>
+      <%= hidden_field_tag :page, page_param if page_param %>
+
+      <%= render "components/record_list" do %>
+        <% @reviewed.each do |bank_transaction| %>
+          <% guess = @guesses.fetch(bank_transaction.id) %>
+          <%= render "components/record_row", href: nil, date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount,
+                budget: budget, with_year: true, counterpart: bank_transaction.account.name,
+                leading: check_box_tag("guessed[#{bank_transaction.id}]", guess.review_value, true, id: nil, class: "checkbox checkbox-primary self-start") do %>
+            <%= render "components/row_note" do %><%= guess.label %><% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+
+      <%= render "components/form_actions", form: form, cancel_path: unfiled_page_path, submit: "File as guessed" %>
+    <% end %>
+  <% end %>
+</div>

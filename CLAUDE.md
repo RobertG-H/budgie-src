@@ -135,9 +135,9 @@ has `line` (none for the whole file) and `message` ("Line 7: the date ... isn't 
 no rows. `Budget::CsvFormat::Source` holds what a file is before a format reads it (UTF-8 and at most 2 MB, BOM stripped, rows with
 the physical line each started on), and `Sample` and `Preview` use it too. The refusals are a wrong column count, an unparseable
 date, an unparseable amount (including more than 2 decimal places, never rounded), a date more than a day after today
-(`Date.current`, Eastern) or before 1990, a blank description, and in the `in_and_out` style a row with both columns filled; in
+(`Date.current`, Eastern) or before 1990, and in the `in_and_out` style a row with both columns filled; in
 this reader's own judgement a row with neither, a direction that's blank on a row that isn't 0, a file that isn't valid CSV, an empty
-one and one over 5,000 data rows are too. An amount may have a sign, one currency symbol (`$`, `€`, `£`) and thousands separators
+one and one over 5,000 data rows are too. A row whose description columns are all blank, which some banks do for some rows such as a card's payments, isn't refused: it's read as "No description" (`Reader::NO_DESCRIPTION`), because everything a bank transaction becomes needs a description (a Deposit, Spend or Refund has a non-blank one, in the model and in the database, and so does a bank transaction), so nothing downstream changes, and a Filing rule can look for the text "no description", with an Account if it should, to ignore them. An amount may have a sign, one currency symbol (`$`, `€`, `£`) and thousands separators
 in groups of three, so a European `12,50` is refused and not read as 1250. A money in or money out column holds a size, and which
 column it's in says which way the money went. Blank lines and rows with nothing in them are skipped: they count as rows when the first `rows_to_skip` are skipped, as the grid shows them as rows, but not towards the row limit. The delimiter is always a comma.
 
@@ -235,8 +235,8 @@ deletes the filed records with their links, then the bank transactions, then the
 through `BankTransaction.links_by_record`, the one place the three kinds are listed with their link tables.
 
 **The filing operation** is `Budget::Filing#file(entries)`, which every way of filing calls: it takes `Budget::Filing::Entry`s, each a bank
-transaction and its `Budget::Filing::Draft`s (a record as it's asked for, which is what a form sends and what a Filing rule or a
-Guess will build, with `Draft.for(bank_transaction, **overrides)` giving the defaults: the date and description as the bank gave
+transaction and its `Budget::Filing::Draft`s (a record as it's asked for, which is what a form sends and what a Filing rule builds, and
+what "File as guessed" builds, with `Draft.for(bank_transaction, **overrides)` giving the defaults: the date and description as the bank gave
 them, the whole amount as a positive figure, a Spend for money out and a Deposit for money in, no envelope). It's true when every
 entry was filed, and when anything is refused nothing at all is created and what's wrong is on the entry (`errors`, for the bank
 transaction: the records don't add up, with by how much, already filed, ignored, not in this budget, no records or more than 50) or on
@@ -249,7 +249,7 @@ submit files once), one query per link table to find what's filed, and one `inse
 state doesn't allow them.
 
 Pages: `/unfiled` (`UnfiledBankTransactionsController`, in the header's section links) lists every unfiled bank transaction in the
-budget across its Accounts, newest first, 50 a page, each with its Account, date, description and signed amount, opening the filing form;
+budget across its Accounts, newest first, 50 a page, each with its Account, date, description and signed amount, and its Guess (see Guesses), opening the filing form;
 an Account's page shows each one's state in a word (`bank_transactions/_bank_transaction`): an unfiled one opens the form, a filed one
 shows the records it was filed as ("Spend from Groceries", "Refund to Groceries" or "Deposit", each opening where it's edited, with
 amounts when there are several) and Un-file, an ignored one says so and has Un-ignore. A filed one whose records no longer add up to its
@@ -368,6 +368,50 @@ with no records, or an Account with no bank transactions, takes its rules with i
 Archiving is never blocked by rules. `Budget#delete_importer_records`
 deletes bank transactions, then Filing rules, then Accounts and CSV formats, ahead of the envelopes' records, and `user:delete`'s confirmation counts the rules.
 
+#### Guesses
+
+A Guess (`Budget::Guess`, a value) is what Budgie proposes for an unfiled bank transaction that no active Filing rule fits: the kind and envelope the Budget's similar
+bank transactions were filed as, and which one it was like, so it can say why (ADR 0013). It's worked out when it's shown and never stored: no table and no column, so
+nothing goes stale, and editing or moving a filed record changes the next Guess. It only suggests: nothing is created from it unless a person files the bank transaction,
+and what's filed has no `filing_rule_id` and nothing marking it as guessed, because a Guess isn't a rule. It never proposes Ignore, an archived envelope or a Reallocation,
+and has no Deposit month: a Deposit is filed with its date's.
+
+`Budget::Guesser.new(budget)` is the one seam: `#guesses(bank_transactions)` is `{ bank_transaction.id => Budget::Guess }` for the ones that have one, `#guess(bank_transaction)`
+is one, and what it asks, in order, is `sources`, which for now is only `Budget::Guesser::History`. A later source, such as an LLM call or a bank-sync provider's category,
+is another entry there, as its own `roadmap` issue with its own ADR. A bank transaction an active Filing rule fits has no Guess (`FilingRule::Matcher`, over `budget.filing_rules.active`),
+and a rule on an archived envelope is inactive, so a Guess can show for what it would fit. It's for unfiled bank transactions read back from the database: it reads
+`normalized_description`, on both sides of every comparison, so it never compares it with Ruby's `description_for_matching`. `Guess#kind`, `#envelope_id`, `#envelope_name`
+and `#like` (the description of the bank transaction it was like, as the bank gave it) give `#label`, "Guess: like LOBLAWS #1234 → Groceries", where the part after the arrow is
+the envelope's name for a Spend, "Refund to Groceries" for a Refund and "Deposit" for a Deposit (`#destination`), and `#draft_attributes` is what the filing form starts as.
+
+History is the Budget's filed bank transactions of the same sign (money in or money out) from every Account, as they are now: the record's current kind and envelope. Ignored
+ones don't count, and neither does a split one (only those filed as exactly one record), and neither does anything in an archived envelope. A description is read as its words:
+letters and numbers, leaving out any with a digit in it (store numbers, reference codes) and one-letter words, or the numbers themselves for a description with no other words. The
+likeness of two is the weight of the words they share over the weight of all of them, as an exact `Rational`, where a word weighs 1 over how many different outcomes (a kind and an
+envelope) it's been filed as in history of the same sign, so money in never changes what a word counts for money out, so "payment" in front of every merchant says little, and a word that's never been filed weighs 1. A Guess needs a likeness of at least 1/2
+(`History::THRESHOLD`), so a merchant the Budget has never filed gets none. Its outcome is the one of the most alike bank transactions; equally alike outcomes go to the one filed
+most often, then the one filed most recently (by date, then id), so it's never a toss-up. It's worked out in Ruby from one query that counts the history by description and outcome in
+the database (a `WITH` over the three link tables from `BankTransaction.links_by_record`), so a page of Guesses runs the same number of queries (the rules and that one) for 5 rows or
+100 and for 10 filed bank transactions or 1,000, which `spec/models/budget/guesser_spec.rb` checks; there's no `pg_trgm`, extension or migration.
+
+The Unfiled list shows each unfiled row's Guess, if it has one, in a muted line under the Account ("Guess: like LOBLAWS #1234 → Groceries"), and choosing a row still opens
+the filing form, which starts on it. `UnfiledPage` (`app/controllers/concerns/`) loads a page of rows with their Guesses for both `UnfiledBankTransactionsController` and
+`GuessedFilingsController`, so a page runs the same number of queries (the rows with their Account and links, the rules and the one history query) however many rows, rules or filed
+bank transactions there are, which `spec/requests/unfiled_bank_transactions_spec.rb` checks. An Account's page shows no Guesses: the Unfiled list is where they're worked through.
+
+"File N as guessed" is the one bulk action. When the page being viewed has Guesses, the Unfiled list's header has it (N is the rows on that page that have one, at most 50), and it opens
+a review, `GET /unfiled/guessed/new?page=` (`GuessedFilingsController#new`): those rows, each with a ticked checkbox named `guessed[<bank transaction id>]` so any can be left out, and
+File as guessed, `POST /unfiled/guessed`. The checkbox's value is the outcome that was reviewed (`Guess#review_value`: "spend:5", "refund:5" or "deposit:"), and `#create` files each ticked row as
+it was reviewed and not as its Guess is now, so a Guess that changed in between never files something that wasn't seen, through `Budget::Filing`, all or none, like a person's filing. So what
+filing by hand refuses, it refuses: an envelope archived since the review, a row filed since, a kind that doesn't suit the money, or an envelope that isn't the budget's refuse the lot, which
+files nothing and goes back to the review (which is then without a Guess for that row) with "Nothing was filed. COSTCO #99: Envelope is archived." Another user's bank transaction is a 404, and
+nothing ticked is "Choose at least one bank transaction to file." It makes no Filing rule and notes none (`filing_rule_id` is null, and `filed_by_rule` nothing), because a Guess isn't a rule: only a person
+asking for "Always file like this" makes one. It goes back to the Unfiled list's page with "2 bank transactions filed as guessed.", and what it filed is ordinary: Undo deletes it with the rest of the latest
+Import, and un-filing puts one back. Nothing is ever filed as guessed without that click, at any likeness.
+
+The filing form (`BankTransactionFilingsController#new`) starts as the Guess: its kind and envelope are chosen, with the label above the records, and "Always file like this" is still
+offered. It's only where the form starts, so a form that comes back refused, or ignored, as it was entered has no label, and a record added to split it starts empty.
+
 ### Production
 
 Both hosts run `RAILS_ENV=production` from the one `config/environments/production.rb`; what differs comes from each Kamal destination's env, such as `APP_HOST` and `MAILER_FROM`.
@@ -380,7 +424,7 @@ Cloudflare terminates TLS, so `assume_ssl` makes every request count as HTTPS, a
 Request, model, service and job specs use FactoryBot and shoulda-matchers; there are no system specs yet.
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
 In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
-A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given, a Spend is `create(:budget_spend, envelope:, date:, amount:)`, a Refund is `create(:budget_refund, envelope:, date:, amount:)`, a Reallocation is `create(:budget_envelope_reallocation, from_envelope:, to_envelope:, date:, amount:)`, between two envelopes of one budget unless given others, and a Reallocation to Ready to Assign is `create(:budget_ready_to_assign_reallocation, envelope:, date:, amount:)`. An Account is `create(:budget_account, budget:)`, an Import `create(:budget_import, account:)` (with a CSV format of the Account's budget unless given another) and a bank transaction `create(:budget_bank_transaction, account:, date:, amount:)` (in a new Import of that Account unless given one, with the traits `:filed`, as a Spend or a Deposit of its whole amount, and `:ignored`; a link is `create(:budget_spend_link, bank_transaction:)`, or the Deposit's or Refund's). A Filing rule is `create(:budget_filing_rule, budget:, text:)`, a Spend from a new envelope of its budget unless given another, with the traits `:refund`, `:deposit` and `:ignore`; a spec that matches a rule reads the bank transaction back (`.reload`), since the database works out its normalised description, and a rule needs its own text, since two with the same conditions are refused. The sample files for the reader are in `spec/fixtures/files/`, one per amount style, and read the same bank transactions. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
+A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given, a Spend is `create(:budget_spend, envelope:, date:, amount:)`, a Refund is `create(:budget_refund, envelope:, date:, amount:)`, a Reallocation is `create(:budget_envelope_reallocation, from_envelope:, to_envelope:, date:, amount:)`, between two envelopes of one budget unless given others, and a Reallocation to Ready to Assign is `create(:budget_ready_to_assign_reallocation, envelope:, date:, amount:)`. An Account is `create(:budget_account, budget:)`, an Import `create(:budget_import, account:)` (with a CSV format of the Account's budget unless given another) and a bank transaction `create(:budget_bank_transaction, account:, date:, amount:)` (in a new Import of that Account unless given one, with the traits `:filed`, as a Spend or a Deposit of its whole amount, and `:ignored`; a link is `create(:budget_spend_link, bank_transaction:)`, or the Deposit's or Refund's). A Filing rule is `create(:budget_filing_rule, budget:, text:)`, a Spend from a new envelope of its budget unless given another, with the traits `:refund`, `:deposit` and `:ignore`; a spec that matches a rule reads the bank transaction back (`.reload`), since the database works out its normalised description, and a rule needs its own text, since two with the same conditions are refused. History for a Guess is `filed(description, envelope, amount:)`, a bank transaction filed as one record (a Spend, or a Deposit for money in, or a Refund to `envelope`), and `unfiled(description)`, one read back so that its normalised description is there, and `file_in_bulk(numbers, envelope)`, which imports and files that many rows through the real operations for specs that count queries against a lot of history, all from `spec/support/filing_history.rb` (`include FilingHistory`, in a group with `budget` and `account`). The sample files for the reader are in `spec/fixtures/files/`, one per amount style, and read the same bank transactions. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
 Eastern Time has daylight saving, so `30.days` is a span of calendar days there. A spec a minute either side of such a limit travels from `Time.current` (`travel_to Time.current + 30.days`) rather than with `travel 30.days`, which adds exact hours and fails on some dates. To check "today" itself, `travel_to Time.utc(2026, 10, 1, 0, 30)` is still September 30 in Eastern time.
 
 ### Frontend
@@ -411,8 +455,8 @@ After a UI change:
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
-- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions, Undo, filing and ignoring, splits and Filing rules exist so far, and the rest of its model is the `roadmap` issue #67.
-- A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Filing rules are built (the `roadmap` issue #69); the Guess isn't yet, and its model is the `roadmap` issue #70.
+- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions, Undo, filing and ignoring, splits, Filing rules and Guesses exist so far, and the rest of its model is the `roadmap` issue #67.
+- A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Filing rules (the `roadmap` issue #69) and Guesses (#70) are built.
 
 ## Agent skills
 
