@@ -287,6 +287,18 @@ RSpec.describe "Imports", type: :request do
         expect(visible_text).to include("You can undo this Import until Oct 16, 2026 at 12:00 PM, while it's the latest in this account.")
       end
 
+      it "counts the records its bank transactions were filed as too, by kind" do
+        groceries = create(:budget_envelope, budget: budget, name: "Groceries")
+        import.bank_transactions.where(description: %w[ Loblaws Hydro ]).each do |bank_transaction|
+          create(:budget_spend_link, bank_transaction: bank_transaction, spend: create(:budget_spend, envelope: groceries, amount: bank_transaction.amount.abs))
+        end
+        create(:budget_deposit_link, bank_transaction: import.bank_transactions.find_by!(description: "Paycheck"), deposit: create(:budget_deposit, budget: budget, amount: 2800))
+
+        get import_path(import)
+
+        assert_select "form[data-turbo-confirm='Undo the Import of september.csv? This deletes its 5 bank transactions and the 1 Deposit and 2 Spends filed from them.']"
+      end
+
       it "counts one bank transaction in the singular, and says when there are none" do
         one = account.imports.build(csv_format: csv_format, file_name: "one.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-03,Hydro,-65.50\n") }
         get import_path(one)
@@ -337,7 +349,9 @@ RSpec.describe "Imports", type: :request do
     end
 
     it "runs the same number of queries whatever the number of bank transactions" do
-      small = account.imports.build(csv_format: csv_format, file_name: "small.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-01,Merchant 1,-1.00\n") }
+      # In Accounts of their own, so each is its Account's latest Import, and offers Undo, which counts what it would delete.
+      small = create(:budget_account, budget: budget, name: "Visa").imports.build(csv_format: csv_format, file_name: "small.csv")
+        .tap { |i| i.run("Date,Description,Amount\n2026-09-01,Merchant 1,-1.00\n") }
       big_rows = (1..300).map { |n| "2026-09-#{format("%02d", (n % 28) + 1)},Merchant #{n},-#{n}.25\n" }.join
       big = account.imports.build(csv_format: csv_format, file_name: "big.csv").tap { |i| i.run("Date,Description,Amount\n#{big_rows}") }
       get import_path(small)

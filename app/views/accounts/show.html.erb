@@ -29,8 +29,7 @@
   <% if @bank_transactions.any? %>
     <%= render "components/record_list" do %>
       <% @bank_transactions.each do |bank_transaction| %>
-        <%= render "components/record_row", href: nil, date: bank_transaction.date, description: bank_transaction.description,
-              amount: bank_transaction.amount, budget: budget, with_year: true %>
+        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, from: "account" %>
       <% end %>
     <% end %>
 

@@ -112,7 +112,7 @@ Every form carries `from` (`home`, `month`, `deposits` or `envelope`) and `month
 
 A person imports the CSV their bank lets them download into an Account (see the `roadmap` issue #67 for the whole model and its
 sliced build tickets); each row becomes a bank transaction that they file as Deposits, Spends and Refunds, or ignore. The tables
-are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions, then Undo.
+are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring.
 
 #### CSV formats and the reader
 
@@ -209,6 +209,53 @@ figures are of what the Import added, which is what Undo would delete. Pages: `/
 transactions newest first, 50 a page through the `Paginated` concern and `components/pager`, with a fixed number of queries), and
 `/accounts/:account_id/imports/new`. Accounts are in the header's section links.
 
+#### Filing and ignoring a bank transaction
+
+A bank transaction is **unfiled**, **filed** or **ignored**, derived and never stored: ignored if `ignored_at` (a nullable timestamp, the
+only column filing adds to it) is set, filed if it has at least one link, otherwise unfiled. It's never both ignored and filed, which
+the model refuses (ignoring a filed one, and a link to an ignored one) and specs prove, and never partly filed. There's one link table
+per kind, `budget_deposit_links`, `budget_spend_links` and `budget_refund_links` (`Budget::DepositLink`, `SpendLink` and
+`RefundLink`, sharing the `BankTransactionLink` concern), each a `bank_transaction_id` and a unique `deposit_id`, `spend_id` or
+`refund_id`, so a record comes from at most one bank transaction, with `ON DELETE RESTRICT` foreign keys; the core tables get no
+import columns (ADR 0002). `Budget::Deposit`, `Spend` and `Refund` each have `has_one :bank_transaction_link, dependent: :destroy`
+(and `has_one :bank_transaction, through:`), so deleting a record deletes its link and, when it was the last, leaves the bank
+transaction unfiled. `Budget::BankTransaction.delete_filed_records(transactions)` deletes the records of a set of bank transactions
+and their links straight from the tables, in the order the foreign keys allow, and is what un-filing, Undo and destroying a Budget
+use; `Budget#delete_importer_records` runs it first, which is how `delete_envelope_records` and the Deposits never meet a link. Undo
+deletes the filed records with their links, then the bank transactions, then the Import, its confirmation counts them by kind
+(`Import#filed_record_counts`), and the month view's figures go back.
+
+**The filing operation** is `Budget::Filing#file(entries)`, which every way of filing calls: it takes `Budget::Filing::Entry`s, each a bank
+transaction and its `Budget::Filing::Draft`s (a record as it's asked for, which is what a form sends and what a Filing rule or a
+Guess will build, with `Draft.for(bank_transaction, **overrides)` giving the defaults: the date and description as the bank gave
+them, the whole amount as a positive figure, a Spend for money out and a Deposit for money in, no envelope). It's true when every
+entry was filed, and when anything is refused nothing at all is created and what's wrong is on the entry (`errors`, for the bank
+transaction: the records don't add up, with by how much, already filed, ignored, not in this budget, no records or more than 50) or on
+the draft (`errors`, by field: the kind, and whatever the typed-in record would say, with another budget's envelope "can't be blank"
+and an archived one "is archived"). Money in is a Deposit or a Refund and money out is a Spend, never a Reallocation, and the records
+add up to the bank transaction's amount exactly. It makes a fixed number of queries however many there are: the budget's envelopes
+once, every record validated in memory, the bank transactions locked in one query (`FOR UPDATE`, judged once locked, so a double
+submit files once), one query per link table to find what's filed, and one `insert_all!` per kind of record and per kind of link.
+`BankTransaction#ignore`, `#unignore` and `#unfile` hold the row lock and raise `Budget::BankTransaction::Refused` with a message when the
+state doesn't allow them.
+
+Pages: `/unfiled` (`UnfiledBankTransactionsController`, in the header's section links) lists every unfiled bank transaction in the
+budget across its Accounts, newest first, 50 a page, each with its Account, date, description and signed amount, opening the filing form;
+an Account's page shows each one's state in a word (`bank_transactions/_bank_transaction`): an unfiled one opens the form, a filed one
+shows the records it was filed as ("Spend from Groceries", "Refund to Groceries" or "Deposit", each opening where it's edited, with
+amounts when there are several) and Un-file, an ignored one says so and has Un-ignore. A filed one whose records no longer add up to its
+amount (`adds_up?`, so a typo fixed on a record, or its amount changed, trips it, and blocks nothing) shows a "Doesn't add up" badge in
+words and "Its records add up to $X, not $Y." Both lists preload every link and record, so their query counts are fixed. The filing
+form (`/bank_transactions/:id/filing/new`, `BankTransactionFilingsController`) is a `filing[records][N][...]` form, so it already holds
+several records: money out has no kind to choose (a hidden Spend) and money in is a Deposit or a Refund, an envelope's picker offers only
+envelopes in use, a Deposit has its month choice (`month-choice`), and the `filing-record` Stimulus controller shows an envelope for a
+Refund or Spend and the month for a Deposit. File posts it (`POST .../filing`), Ignore sends the same form to `POST .../ignore`, which only
+reads where it was opened from, Un-file is `DELETE .../filing` and Un-ignore `DELETE .../ignore`; the notices are "Bank transaction
+filed.", "Bank transaction ignored.", "Bank transaction unfiled." and "Bank transaction un-ignored.", and a refusal is an alert. `from`
+gains the pages `unfiled` and `account` in `ReturnsToOrigin` (which also takes no month for them, and goes back to the bank transaction's
+Account without one). Another user's bank transaction is a 404. A filed record's edit page says it was filed from a bank transaction, in
+which Account, and that deleting it un-files that bank transaction (`application/_bank_transaction_note`).
+
 ### Production
 
 Both hosts run `RAILS_ENV=production` from the one `config/environments/production.rb`; what differs comes from each Kamal destination's env, such as `APP_HOST` and `MAILER_FROM`.
@@ -221,7 +268,7 @@ Cloudflare terminates TLS, so `assume_ssl` makes every request count as HTTPS, a
 Request, model, service and job specs use FactoryBot and shoulda-matchers; there are no system specs yet.
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
 In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
-A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given, a Spend is `create(:budget_spend, envelope:, date:, amount:)`, a Refund is `create(:budget_refund, envelope:, date:, amount:)`, a Reallocation is `create(:budget_envelope_reallocation, from_envelope:, to_envelope:, date:, amount:)`, between two envelopes of one budget unless given others, and a Reallocation to Ready to Assign is `create(:budget_ready_to_assign_reallocation, envelope:, date:, amount:)`. An Account is `create(:budget_account, budget:)`, an Import `create(:budget_import, account:)` (with a CSV format of the Account's budget unless given another) and a bank transaction `create(:budget_bank_transaction, account:, date:, amount:)` (in a new Import of that Account unless given one). The sample files for the reader are in `spec/fixtures/files/`, one per amount style, and read the same bank transactions. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
+A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given, a Spend is `create(:budget_spend, envelope:, date:, amount:)`, a Refund is `create(:budget_refund, envelope:, date:, amount:)`, a Reallocation is `create(:budget_envelope_reallocation, from_envelope:, to_envelope:, date:, amount:)`, between two envelopes of one budget unless given others, and a Reallocation to Ready to Assign is `create(:budget_ready_to_assign_reallocation, envelope:, date:, amount:)`. An Account is `create(:budget_account, budget:)`, an Import `create(:budget_import, account:)` (with a CSV format of the Account's budget unless given another) and a bank transaction `create(:budget_bank_transaction, account:, date:, amount:)` (in a new Import of that Account unless given one, with the traits `:filed`, as a Spend or a Deposit of its whole amount, and `:ignored`; a link is `create(:budget_spend_link, bank_transaction:)`, or the Deposit's or Refund's). The sample files for the reader are in `spec/fixtures/files/`, one per amount style, and read the same bank transactions. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
 Eastern Time has daylight saving, so `30.days` is a span of calendar days there. A spec a minute either side of such a limit travels from `Time.current` (`travel_to Time.current + 30.days`) rather than with `travel 30.days`, which adds exact hours and fails on some dates. To check "today" itself, `travel_to Time.utc(2026, 10, 1, 0, 30)` is still September 30 in Eastern time.
 
 ### Frontend
@@ -252,7 +299,7 @@ After a UI change:
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
-- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions and Undo exist so far, and the rest of its model is the `roadmap` issue #67.
+- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions, Undo, and filing and ignoring exist so far, and the rest of its model is the `roadmap` issue #67.
 - A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Neither is built yet: their models are the `roadmap` issues #69 (Filing rules) and #70 (Filing guesses).
 
 ## Agent skills

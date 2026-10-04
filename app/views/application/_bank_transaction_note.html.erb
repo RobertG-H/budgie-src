@@ -1,0 +1,9 @@
+<%# locals: (record:) %>
+<%# What a Deposit, Spend or Refund that was filed from a bank transaction says on its edit page: where it came from, and that deleting it un-files that bank transaction. The record is otherwise ordinary, and a typed-in one says nothing. %>
+<% bank_transaction = record.bank_transaction %>
+<% if bank_transaction %>
+  <p class="mt-4 text-base-content/70">
+    Filed from a bank transaction in <%= link_to bank_transaction.account.name, account_path(bank_transaction.account), class: "link" %>,
+    <%= spelled_date(bank_transaction.date) %>, <%= bank_transaction.description %>. Deleting it un-files that bank transaction.
+  </p>
+<% end %>

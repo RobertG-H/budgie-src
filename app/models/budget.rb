@@ -33,8 +33,8 @@ class Budget < ApplicationRecord
   # `prepend` runs this ahead of the callback that `has_many :envelopes` adds, wherever it's declared.
   before_destroy :delete_envelope_records, prepend: true
   # The importer's rows go before everything else, ahead of the envelopes' records and of the Deposits: a bank transaction
-  # keeps its Account and Import from being deleted, an Import keeps its Account and CSV format, and what's filed from a bank
-  # transaction will keep the records it made. Declared after the one above, so that it's the first to run.
+  # keeps its Account and Import from being deleted, an Import keeps its Account and CSV format, and a link keeps the record it
+  # holds. Declared after the one above, so that it's the first to run.
   before_destroy :delete_importer_records, prepend: true
 
   # The latest month that has been started, which Assigned was copied into from the month before. A new budget's first
@@ -96,9 +96,12 @@ class Budget < ApplicationRecord
       Budget::Assignment.insert_all(copies, unique_by: [ :envelope_id, :month ]) if copies.any?
     end
 
-    # In the order that each one's foreign keys allow: bank transactions, then the Imports they came from, then the Accounts and
-    # CSV formats those were in. Deleted straight from the tables in one statement each.
+    # In the order that each one's foreign keys allow: the records that bank transactions were filed as, with their links, then
+    # the bank transactions, then the Imports they came from, then the Accounts and CSV formats those were in. Deleted straight
+    # from the tables in one statement each. The records go here, with their links, because a link keeps its record from being
+    # deleted, which `delete_envelope_records` and the Deposits would run into.
     def delete_importer_records
+      Budget::BankTransaction.delete_filed_records(Budget::BankTransaction.where(account: accounts))
       Budget::BankTransaction.where(account: accounts).delete_all
       Budget::Import.where(account: accounts).delete_all
       Budget::Account.where(budget: self).delete_all

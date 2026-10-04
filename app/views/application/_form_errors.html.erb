@@ -1,7 +1,10 @@
-<% if record.errors.any? %>
+<%# locals: (record: nil, messages: nil) %>
+<%# What was wrong with what was sent: a record's errors, or `messages` when they're from more than one thing, such as a bank transaction and each record it's being filed as. %>
+<% messages ||= record.errors.full_messages %>
+<% if messages.any? %>
   <div class="alert alert-error" role="alert">
     <ul class="list-disc pl-5">
-      <% record.errors.full_messages.each do |message| %>
+      <% messages.each do |message| %>
         <li><%= message %></li>
       <% end %>
     </ul>

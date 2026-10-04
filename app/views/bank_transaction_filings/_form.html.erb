@@ -1,0 +1,19 @@
+<%# locals: (entry:, cancel_path:) %>
+<%# The records a bank transaction is filed as, in one form, and then File, which files them all or none. Ignore is another action, sent the same form, and doesn't read what's in it. %>
+<% bank_transaction = entry.bank_transaction %>
+
+<%= form_with scope: :filing, url: bank_transaction_filing_path(bank_transaction), method: :post, class: "mt-8 space-y-6" do |form| %>
+  <%= render "form_errors", messages: entry.errors.full_messages + entry.drafts.flat_map { |draft| draft.errors.full_messages } %>
+  <%= render "origin_fields" %>
+
+  <% entry.drafts.each_with_index do |draft, index| %>
+    <%= fields_for "filing[records][#{index}]", draft do |record_form| %>
+      <%= render "bank_transaction_filings/record", form: record_form, draft: draft, bank_transaction: bank_transaction, autofocus: index.zero? %>
+    <% end %>
+  <% end %>
+
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: "File" do %>
+    <%# Ignoring needs none of the records, so it's a button of its own that sends the form to its own address, which only reads where it was opened from. The method is stated again because the form is a post. %>
+    <button type="submit" name="_method" value="post" formaction="<%= bank_transaction_ignore_path(bank_transaction) %>" formnovalidate class="btn">Ignore</button>
+  <% end %>
+<% end %>

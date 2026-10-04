@@ -152,17 +152,126 @@ RSpec.describe "Accounts", type: :request do
       get account_path(account)
 
       rows = css_select("main ul.list li").map { |row| row.text.squish }
-      expect(rows).to eq([ "Sep 12, 2026 Loblaws -$82.45", "Aug 30, 2026 Paycheck $2,800.00", "Dec 1, 2025 Hydro -$65.50" ])
+      expect(rows).to eq([ "Sep 12, 2026 Loblaws Unfiled -$82.45", "Aug 30, 2026 Paycheck Unfiled $2,800.00", "Dec 1, 2025 Hydro Unfiled -$65.50" ])
       assert_select "main ul.list li span.text-error", text: "-$82.45"
       assert_select "main ul.list li span.text-error", text: "$2,800.00", count: 0
     end
 
-    it "shows the bank transactions as they are, with no link, since they can't be changed" do
-      create(:budget_bank_transaction, account: account)
+    describe "each bank transaction's state" do
+      let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+      let!(:unfiled) { create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 4), description: "Unfiled one", amount: -20) }
+      let!(:ignored) { create(:budget_bank_transaction, :ignored, account: account, date: Date.new(2026, 9, 3), description: "Ignored one", amount: -30) }
+      let!(:filed) { create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 2), description: "Filed one", amount: -50) }
 
-      get account_path(account)
+      before do
+        create(:budget_spend_link, bank_transaction: filed, spend: create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 2), amount: 50))
+      end
 
-      assert_select "main ul.list li a", count: 0
+      def row(description)
+        css_select("main ul.list li").find { |li| li.text.include?(description) }
+      end
+
+      it "opens the filing form from an unfiled one, which says Unfiled, and comes back to the Account" do
+        get account_path(account)
+
+        expect(row("Unfiled one").text.squish).to eq("Sep 4, 2026 Unfiled one Unfiled -$20.00")
+        assert_select "li a.list-row[href='#{new_bank_transaction_filing_path(unfiled, from: "account")}']", text: /Unfiled one/
+      end
+
+      it "says an ignored one is, and offers to un-ignore it, which isn't a link to file it" do
+        get account_path(account)
+
+        expect(row("Ignored one").text.squish).to eq("Sep 3, 2026 Ignored one Ignored Un-ignore -$30.00")
+        expect(row("Ignored one").css("a")).to be_empty
+        assert_select "form[action='#{bank_transaction_ignore_path(ignored)}'] input[name=_method][value=delete]"
+        assert_select "form[action='#{bank_transaction_ignore_path(ignored)}'] input[name=from][value=account]"
+        assert_select "form[action='#{bank_transaction_ignore_path(ignored)}'] button", text: "Un-ignore"
+      end
+
+      it "shows what a filed one was filed as, and offers to un-file it" do
+        get account_path(account)
+
+        expect(row("Filed one").text.squish).to eq("Sep 2, 2026 Filed one Filed Spend from Groceries Un-file -$50.00")
+        assert_select "form[action='#{bank_transaction_filing_path(filed)}'] input[name=_method][value=delete]"
+        assert_select "form[action='#{bank_transaction_filing_path(filed)}'][data-turbo-confirm] button", text: "Un-file"
+        assert_select "form[data-turbo-confirm='Un-file this bank transaction? This deletes the records it was filed as.']"
+      end
+
+      it "links the record it was filed as to where it's edited" do
+        get account_path(account)
+
+        spend = filed.spend_links.sole.spend
+        assert_select "main ul.list li a[href='#{edit_spend_path(spend, month: "2026-09")}']", text: "Spend from Groceries"
+      end
+
+      it "names each kind of record, with an envelope or without" do
+        deposit = create(:budget_bank_transaction, account: account, description: "Paid", amount: 10, date: Date.new(2026, 9, 5))
+        create(:budget_deposit_link, bank_transaction: deposit)
+        refunded = create(:budget_bank_transaction, account: account, description: "Returned", amount: 12.25, date: Date.new(2026, 9, 6))
+        create(:budget_refund_link, bank_transaction: refunded, refund: create(:budget_refund, envelope: groceries, amount: 12.25))
+
+        get account_path(account)
+
+        expect(row("Paid").text.squish).to include("Deposit")
+        expect(row("Paid").text).not_to include("Deposit from")
+        expect(row("Returned").text.squish).to include("Refund to Groceries")
+      end
+
+      it "shows its records with their amounts when there are several, and each links to where it's edited" do
+        split = create(:budget_bank_transaction, account: account, description: "Costco", amount: -100, date: Date.new(2026, 9, 7))
+        household = create(:budget_envelope, budget: budget, name: "Household")
+        create(:budget_spend_link, bank_transaction: split, spend: create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 7), amount: 60))
+        create(:budget_spend_link, bank_transaction: split, spend: create(:budget_spend, envelope: household, date: Date.new(2026, 9, 7), amount: 40))
+
+        get account_path(account)
+
+        expect(row("Costco").text.squish).to include("Spend from Groceries, $60.00", "Spend from Household, $40.00")
+        expect(row("Costco").text).not_to include("Doesn't add up")
+      end
+
+      describe "the flag" do
+        it "says in words and colour when the records no longer add up, and isn't there when they do" do
+          get account_path(account)
+          expect(row("Filed one").text).not_to include("Doesn't add up")
+
+          filed.spend_links.sole.spend.update!(amount: 40)
+          get account_path(account)
+
+          expect(row("Filed one").text.squish).to include("Doesn't add up", "Its records add up to $40.00, not $50.00.")
+          assert_select "main ul.list li span.badge.badge-warning", text: "Doesn't add up"
+        end
+
+        it "blocks nothing: the bank transaction can still be un-filed, and the record is still ordinary" do
+          filed.spend_links.sole.spend.update!(amount: 40)
+
+          delete bank_transaction_filing_path(filed), params: { from: "account" }
+
+          expect(filed.reload).to be_unfiled
+        end
+
+        it "isn't on one that's unfiled or ignored" do
+          get account_path(account)
+
+          expect(row("Unfiled one").text).not_to include("Doesn't add up")
+          expect(row("Ignored one").text).not_to include("Doesn't add up")
+        end
+      end
+
+      it "runs the same number of queries whatever the number of bank transactions or records, the flag included" do
+        get account_path(account)
+        few = count_queries { get account_path(account) }
+
+        import = create(:budget_import, account: account)
+        10.times do |n|
+          bank_transaction = create(:budget_bank_transaction, account: account, import: import, description: "Merchant #{n}", amount: -10)
+          create(:budget_spend_link, bank_transaction: bank_transaction, spend: create(:budget_spend, envelope: groceries, amount: 10 + n)) # Some of them don't add up.
+        end
+        create_list(:budget_bank_transaction, 10, :ignored, account: account, import: import)
+        create_list(:budget_bank_transaction, 10, account: account, import: import)
+        many = count_queries { get account_path(account) }
+
+        expect(many).to eq(few)
+      end
     end
 
     it "doesn't list another Account's bank transactions, even in the same budget" do

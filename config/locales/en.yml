@@ -30,6 +30,13 @@
 en:
   hello: "Hello world"
 
+  activemodel:
+    attributes:
+      # What the filing form calls the month a Deposit counts toward, as the Deposit's own form does.
+      budget/filing/draft:
+        month: Ready to Assign in
+        envelope_id: Envelope
+
   activerecord:
     models:
       # What a Reallocation is called to a person, such as on the form's button.

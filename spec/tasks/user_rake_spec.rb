@@ -30,25 +30,39 @@ RSpec.describe "user rake tasks", type: :task do
       create(:budget_import, account: accounts.last, csv_format: csv_formats.first, zero_rows_skipped: 1)
     end
 
-    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds), CSV formats and invite once the email is typed to confirm" do
+    # One bank transaction filed as a Spend and another as a Deposit, and one ignored, which have to go before the rest.
+    def file_and_ignore_some_bank_transactions
+      budget = user.budget
+      filed_out, filed_in, ignored = budget.bank_transactions.order(:id).first(3)
+      filed_out.update_column(:amount, -10)
+      filed_in.update_column(:amount, 10)
+      ignored.update_column(:ignored_at, Time.current)
+      create(:budget_spend_link, bank_transaction: filed_out, spend: create(:budget_spend, envelope: budget.envelopes.first, amount: 10))
+      create(:budget_deposit_link, bank_transaction: filed_in, deposit: create(:budget_deposit, budget: budget, amount: 10))
+    end
+
+    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds), CSV formats, Accounts, Imports, bank transactions and invite once the email is typed to confirm" do
       output = nil
+      file_and_ignore_some_bank_transactions
 
       expect { output = run_task("user:delete", stdin: "Robin@Example.com\n", "EMAIL" => "robin@example.com") }
         .to change(User, :count).by(-1).and change(Identity, :count).by(-1)
         .and change(Session, :count).by(-1).and change(Invite, :count).by(-1)
         .and change(Budget, :count).by(-1).and change(Budget::Envelope, :count).by(-2)
-        .and change(Budget::Deposit, :count).by(-3).and change(Budget::Assignment, :count).by(-4)
-        .and change(Budget::Spend, :count).by(-6).and change(Budget::Refund, :count).by(-4)
+        .and change(Budget::Deposit, :count).by(-4).and change(Budget::Assignment, :count).by(-4)
+        .and change(Budget::Spend, :count).by(-7).and change(Budget::Refund, :count).by(-4)
         .and change(Budget::EnvelopeReallocation, :count).by(-2)
         .and change(Budget::ReadyToAssignReallocation, :count).by(-1)
         .and change(Budget::CsvFormat, :count).by(-2)
         .and change(Budget::Account, :count).by(-2)
         .and change(Budget::Import, :count).by(-3)
         .and change(Budget::BankTransaction, :count).by(-5)
-      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits, 4 assignments, 6 spends, 4 refunds, 3 reallocations, 2 CSV formats, 2 accounts, 3 imports and 5 bank transactions and their invite", "Deleted robin@example.com.")
+        .and change(Budget::SpendLink, :count).by(-1).and change(Budget::DepositLink, :count).by(-1)
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 4 deposits, 4 assignments, 7 spends, 4 refunds, 3 reallocations, 2 CSV formats, 2 accounts, 3 imports and 5 bank transactions and their invite", "Deleted robin@example.com.")
     end
 
     it "leaves another user's budget alone" do
+      file_and_ignore_some_bank_transactions
       others = create(:budget_assignment)
       others_spend = create(:budget_spend)
       others_refund = create(:budget_refund)

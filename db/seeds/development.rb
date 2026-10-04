@@ -117,3 +117,17 @@ if chequing.imports.none?
   sample = Rails.root.join("spec/fixtures/files/signed-sample.csv")
   sample.open { |file| chequing.imports.build(csv_format: sample_bank, file_name: sample.basename.to_s).run(file) or raise "The sample file wasn't imported." }
 end
+
+# Left unfiled, filed and ignored, so the Unfiled list and the Account's page have each to show. Loblaws is a Spend from Groceries,
+# of its whole amount, which counts in Groceries' September like any other Spend, and Coffee shop is ignored. Paycheck, Hydro and
+# Hydro rebate stay unfiled. Only an unfiled bank transaction is touched, so one that a developer has filed or ignored another way
+# is left, though one they've un-filed or un-ignored is filed or ignored again by seeding.
+bank_transactions = chequing.bank_transactions.index_by(&:description)
+loblaws = bank_transactions["Loblaws"]
+if loblaws&.unfiled?
+  groceries_envelope = budget.envelopes.find_by!(name: "Groceries")
+  entry = Budget::Filing::Entry.new(bank_transaction: loblaws, drafts: [ Budget::Filing::Draft.for(loblaws, envelope_id: groceries_envelope.id) ])
+  Budget::Filing.new(budget).file([ entry ]) or raise "Loblaws wasn't filed: #{entry.errors.full_messages.to_sentence}"
+end
+coffee_shop = bank_transactions["Coffee shop"]
+coffee_shop.ignore if coffee_shop&.unfiled?

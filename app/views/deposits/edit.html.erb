@@ -7,5 +7,7 @@
           params: { from: origin, month: @month.to_param }.compact %>
   <% end %>
 
+  <%= render "bank_transaction_note", record: @deposit %>
+
   <%= render "form", deposit: @deposit, cancel_path: return_path(@month) %>
 </div>

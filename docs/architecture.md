@@ -239,7 +239,7 @@ month viewed. An archived envelope's page has Unarchive in place of Archive and 
 A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
 Refunds it was, or ignore it. The model is the `roadmap` issue
 [#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
-formats, then Accounts, Imports and bank transactions, then Undo.
+formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
 columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
@@ -289,7 +289,28 @@ while another is being undone, and an Import that added nothing, such as the sam
 protects the rows its file skipped. It's offered on the Import's summary and beside the latest Import on the Account's page, and when
 it can't be, the page says why.
 
-The header has a second row of links to the pages that aren't a month's: the budget, Accounts and CSV formats so far.
+**Filing and ignoring.** A bank transaction is unfiled, filed or ignored, and which is never stored: it's ignored if it has an ignore
+time, filed if it has a link to a record, and otherwise unfiled. Filing turns it into the Deposits, Spends and Refunds it was, which
+must add up to its amount exactly ([ADR 0009](adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md)):
+money in is a Deposit or a Refund and money out is a Spend, and never a Reallocation, which moves money inside the budget. The records
+are made together with their links in one database transaction, so there's no partly filed state, and a record that's wrong creates
+nothing. Ignoring is for what Budgie won't file, such as a card payment between a person's own accounts, and both can be taken back:
+un-filing deletes the records, and un-ignoring makes the bank transaction unfiled again.
+
+**Links, not columns.** A record that came from a bank transaction is an ordinary Deposit, Spend or Refund
+([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)): it shows in the month view and on its envelope's page, and is edited and
+deleted like one typed in. What says where it came from is a link table for each kind, so the core tables have no import columns and a
+record can come from at most one bank transaction. Deleting a record deletes its link, which leaves the bank transaction unfiled when it
+was the last. Editing one so that the records no longer add up to the bank transaction doesn't block anything; the bank transaction
+shows a "Doesn't add up" flag, in words as well as colour, because a typo fixed on an imported record shouldn't be refused.
+
+**One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
+or none. The filing form calls it for one bank transaction, and Filing rules and a Guess will call the same operation, so it makes the
+same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
+transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Unfiled list shows
+every bank transaction across the Accounts that's still to do, and an Account's page shows each one's state.
+
+The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled and CSV formats so far.
 
 ### Frontend
 

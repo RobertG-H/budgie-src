@@ -9,9 +9,10 @@ RSpec.describe "Navigation", type: :request do
 
     get csv_formats_path
 
-    assert_select "header nav[aria-label=Sections] a", count: 3
+    assert_select "header nav[aria-label=Sections] a", count: 4
     assert_select "header nav[aria-label=Sections] a[href='#{root_path}']:not([aria-current])", text: "Budget"
     assert_select "header nav[aria-label=Sections] a[href='#{accounts_path}']:not([aria-current])", text: "Accounts"
+    assert_select "header nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}']:not([aria-current])", text: "Unfiled"
     assert_select "header nav[aria-label=Sections] a[href='#{csv_formats_path}'][aria-current=page]", text: "CSV formats"
   end
 
@@ -24,6 +25,15 @@ RSpec.describe "Navigation", type: :request do
       assert_select "nav[aria-label=Sections] a[href='#{root_path}'][aria-current=page]", text: "Budget"
       assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
     end
+  end
+
+  it "says Unfiled is the one they're on in the Unfiled list" do
+    sign_in_as budget.user
+
+    get unfiled_bank_transactions_path
+
+    assert_select "nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}'][aria-current=page]", text: "Unfiled"
+    assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
   end
 
   it "says CSV formats is the one they're on while building or changing one" do

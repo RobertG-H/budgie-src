@@ -347,6 +347,67 @@ RSpec.describe Budget::Import, type: :model do
       expect(Budget::Import.where(id: others.import_id)).to exist
     end
 
+    describe "with bank transactions that have been filed" do
+      let(:groceries) { create(:budget_envelope, budget: account.budget, name: "Groceries") }
+
+      def file_as_spend(bank_transaction, amount)
+        create(:budget_spend_link, bank_transaction: bank_transaction, spend: create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 2), amount: amount))
+      end
+
+      it "deletes the records they were filed as and their links first, then the bank transactions, then the Import, and the month's figures go back" do
+        import = import_of(file)
+        month = -> { Budget::Month.new(account.budget, Date.new(2026, 9, 1)).envelope_line(groceries.id) }
+        before = month.call.available
+        file_as_spend(import.bank_transactions.find_by!(description: "Loblaws"), BigDecimal("82.45"))
+        expect(month.call.available).to eq(before - BigDecimal("82.45"))
+
+        expect { import.undo }
+          .to change(Budget::Spend, :count).by(-1).and change(Budget::SpendLink, :count).by(-1)
+          .and change(Budget::BankTransaction, :count).by(-2).and change(Budget::Import, :count).by(-1)
+
+        expect(month.call.available).to eq(before)
+        expect(month.call.spent).to eq(0)
+      end
+
+      it "deletes records of every kind, and leaves the records of other Imports and other Accounts alone" do
+        earlier = import_of("2026-08-01,Rent,-1500.00\n", created_at: 3.days.ago)
+        file_as_spend(earlier.bank_transactions.sole, 1500)
+        import = import_of(file)
+        paycheck = import.bank_transactions.find_by!(description: "Paycheck")
+        create(:budget_deposit_link, bank_transaction: paycheck, deposit: create(:budget_deposit, budget: account.budget, amount: 2800))
+        file_as_spend(import.bank_transactions.find_by!(description: "Loblaws"), BigDecimal("82.45"))
+        others = create(:budget_bank_transaction, :filed)
+
+        expect { import.undo }.to change(Budget::Deposit, :count).by(-1).and change(Budget::Spend, :count).by(-1)
+
+        expect(earlier.bank_transactions.sole).to be_filed
+        expect(others.reload).to be_filed
+        expect(Budget::SpendLink.count).to eq(2)
+      end
+
+      it "counts the records it will delete, of each kind, for the confirmation" do
+        import = import_of(file)
+        file_as_spend(import.bank_transactions.find_by!(description: "Loblaws"), BigDecimal("82.45"))
+        create(:budget_deposit_link, bank_transaction: import.bank_transactions.find_by!(description: "Paycheck"), deposit: create(:budget_deposit, budget: account.budget, amount: 2800))
+        create(:budget_spend_link, bank_transaction: create(:budget_bank_transaction, :filed).tap { |other| other }, spend: create(:budget_spend, envelope: groceries, amount: 5)) # Someone else's.
+
+        expect(import.filed_record_counts).to eq(deposits: 1, spends: 1, refunds: 0)
+        expect(import.filed_record_counts.values.sum).to eq(2)
+      end
+
+      it "is all or nothing, so a record that can't be deleted keeps everything" do
+        import = import_of(file)
+        file_as_spend(import.bank_transactions.find_by!(description: "Loblaws"), BigDecimal("82.45"))
+        allow(import).to receive(:destroy!).and_raise(ActiveRecord::StatementInvalid, "the database went away")
+
+        expect { import.undo }.to raise_error(ActiveRecord::StatementInvalid)
+
+        expect(Budget::Spend.count).to eq(1)
+        expect(Budget::SpendLink.count).to eq(1)
+        expect(import.bank_transactions.count).to eq(2)
+      end
+    end
+
     it "takes the Account's row lock, so an Import can't land while it's running" do
       import = import_of(file)
       statements = []

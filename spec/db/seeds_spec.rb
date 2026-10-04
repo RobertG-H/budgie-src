@@ -149,8 +149,8 @@ RSpec.describe "db/seeds.rb" do
 
       groceries = ->(month) { Budget::Month.new(budget, month).envelopes.find { |line| line.envelope.name == "Groceries" } }
 
-      expect(groceries.call(Date.new(2026, 9, 1))).to have_attributes(refunded: 0, available: BigDecimal("430.65"))
-      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), reallocated: -20, available: BigDecimal("976.85"))
+      expect(groceries.call(Date.new(2026, 9, 1))).to have_attributes(refunded: 0, available: BigDecimal("348.20"))
+      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), reallocated: -20, available: BigDecimal("894.40"))
     end
 
     it "reallocates $20 from Groceries to Dining out this month, once, and no other month" do
@@ -172,7 +172,7 @@ RSpec.describe "db/seeds.rb" do
       line = ->(name, month) { Budget::Month.new(budget, month).envelopes.find { |envelope_line| envelope_line.envelope.name == name } }
 
       expect(line.call("Dining out", Date.new(2026, 10, 1))).to have_attributes(reallocated: 20, available: BigDecimal("-4.00"), overspent?: true)
-      expect(line.call("Groceries", Date.new(2026, 10, 1))).to have_attributes(reallocated: -20, available: BigDecimal("976.85"))
+      expect(line.call("Groceries", Date.new(2026, 10, 1))).to have_attributes(reallocated: -20, available: BigDecimal("894.40"))
       expect(line.call("Dining out", Date.new(2026, 9, 1))).to have_attributes(reallocated: 0, available: BigDecimal("234.50"))
     end
 
@@ -249,6 +249,25 @@ RSpec.describe "db/seeds.rb" do
         ])
       end
 
+      it "files Loblaws as a Spend from Groceries, ignores Coffee shop, and leaves the other three unfiled, in the Unfiled list" do
+        bank_transactions = budget.accounts.sole.bank_transactions.index_by(&:description)
+
+        expect(bank_transactions["Loblaws"]).to be_filed
+        expect(bank_transactions["Loblaws"].spend_links.sole.spend).to have_attributes(
+          description: "Loblaws", date: Date.new(2026, 9, 2), amount: BigDecimal("82.45"), envelope: budget.envelopes.find_by!(name: "Groceries")
+        )
+        expect(bank_transactions["Coffee shop"]).to be_ignored
+        expect(budget.bank_transactions.unfiled.pluck(:description)).to contain_exactly("Paycheck", "Hydro", "Hydro rebate")
+        expect(bank_transactions.values.select(&:filed?).size).to eq(1)
+      end
+
+      it "counts the filed Spend in Groceries' September like one typed in, and doesn't add up to a flag" do
+        spend = budget.bank_transactions.find_by!(description: "Loblaws").spend_links.sole.spend
+
+        expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).envelope_line(spend.envelope_id).spent).to eq(BigDecimal("182.40") + BigDecimal("240.15") + BigDecimal("96.80") + BigDecimal("82.45"))
+        expect(budget.bank_transactions.find_by!(description: "Loblaws")).to be_adds_up
+      end
+
       it "changes nothing when it's run again, and leaves a bank transaction the developer has changed" do
         budget.accounts.sole.bank_transactions.first.update!(description: "Changed")
 
@@ -293,7 +312,7 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
 
       expect { run_seeds }.not_to change {
-        [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
+        [ Budget::SpendLink.count, Budget::Spend.count, Budget::BankTransaction.where.not(ignored_at: nil).count, User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
           Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count, Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ]
       }
     end

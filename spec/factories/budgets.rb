@@ -112,5 +112,41 @@ FactoryBot.define do
     sequence(:description) { |n| "Merchant #{n}" }
     date { Date.new(2026, 9, 15) }
     amount { -10 }
+
+    # Filed as a Deposit when it's money in, and a Spend when it's money out, of its whole amount.
+    trait :filed do
+      after(:create) do |bank_transaction|
+        create(bank_transaction.amount.positive? ? :budget_deposit_link : :budget_spend_link, bank_transaction: bank_transaction)
+      end
+    end
+
+    trait :ignored do
+      ignored_at { Time.zone.local(2026, 9, 16, 10) }
+    end
+  end
+
+  # The link between a bank transaction and the record it was filed as, with a record of the whole amount in the same budget
+  # unless given another. A Deposit's is of money in, so its bank transaction is.
+  factory :budget_deposit_link, class: "Budget::DepositLink" do
+    bank_transaction { association :budget_bank_transaction, amount: 10 }
+    deposit do
+      association :budget_deposit, budget: bank_transaction.account.budget, date: bank_transaction.date, amount: bank_transaction.amount.abs
+    end
+  end
+
+  factory :budget_spend_link, class: "Budget::SpendLink" do
+    bank_transaction { association :budget_bank_transaction, amount: -10 }
+    spend do
+      association :budget_spend, envelope: association(:budget_envelope, budget: bank_transaction.account.budget), date: bank_transaction.date,
+        amount: bank_transaction.amount.abs
+    end
+  end
+
+  factory :budget_refund_link, class: "Budget::RefundLink" do
+    bank_transaction { association :budget_bank_transaction, amount: 10 }
+    refund do
+      association :budget_refund, envelope: association(:budget_envelope, budget: bank_transaction.account.budget), date: bank_transaction.date,
+        amount: bank_transaction.amount.abs
+    end
   end
 end

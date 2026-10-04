@@ -39,6 +39,13 @@ Rails.application.routes.draw do
     resources :imports, only: [ :new, :create ]
   end
   resources :imports, only: [ :show, :destroy ]
+  # Filing a bank transaction, as the Deposits, Spends and Refunds it was (create), taking that back (destroy), and ignoring
+  # it (and un-ignoring it). Every bank transaction that isn't filed or ignored, across the Accounts, is the Unfiled list.
+  resources :bank_transactions, only: [] do
+    resource :filing, only: [ :new, :create, :destroy ], controller: "bank_transaction_filings"
+    resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
+  end
+  get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions
   post "csv_formats/preview" => "csv_format_previews#create", as: :csv_format_preview
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]

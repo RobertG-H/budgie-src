@@ -163,6 +163,193 @@ RSpec.describe Budget::BankTransaction, type: :model do
     end
   end
 
+  describe "its state, which is derived and never stored" do
+    it "is unfiled when it has no records and isn't ignored" do
+      transaction = create(:budget_bank_transaction)
+
+      expect(transaction).to be_unfiled
+      expect(transaction).not_to be_filed
+      expect(transaction).not_to be_ignored
+      expect(transaction.state).to eq(:unfiled)
+    end
+
+    it "is ignored when it was ignored" do
+      transaction = create(:budget_bank_transaction, :ignored)
+
+      expect(transaction).to be_ignored
+      expect(transaction).not_to be_filed
+      expect(transaction).not_to be_unfiled
+      expect(transaction.state).to eq(:ignored)
+    end
+
+    it "is filed when it has at least one link, of any kind" do
+      [ [ :budget_deposit_link, 10 ], [ :budget_spend_link, -10 ], [ :budget_refund_link, 10 ] ].each do |factory, amount|
+        transaction = create(:budget_bank_transaction, amount: amount)
+        create(factory, bank_transaction: transaction)
+
+        expect(transaction.reload).to be_filed
+        expect(transaction).not_to be_unfiled
+        expect(transaction.state).to eq(:filed)
+      end
+    end
+
+    it "has no column for it, apart from when it was ignored" do
+      expect(Budget::BankTransaction.column_names).to include("ignored_at")
+      expect(Budget::BankTransaction.column_names).not_to include("state", "status", "filed_at")
+    end
+
+    it "can't be both ignored and filed: ignoring one that's filed is refused" do
+      transaction = create(:budget_bank_transaction, :filed)
+
+      expect(transaction.update(ignored_at: Time.current)).to be(false)
+
+      expect(transaction.errors.full_messages).to eq([ "Bank transaction is filed, so it can't be ignored" ])
+      expect(transaction.reload.ignored_at).to be_nil
+    end
+
+    it "can be ignored when it isn't filed, and unignored" do
+      transaction = create(:budget_bank_transaction)
+
+      expect(transaction.update(ignored_at: Time.current)).to be(true)
+      expect(transaction.update(ignored_at: nil)).to be(true)
+    end
+
+    it "is found by the .unfiled scope when it's neither ignored nor filed, whichever kind of link the others have" do
+      unfiled = create(:budget_bank_transaction)
+      create(:budget_bank_transaction, :ignored)
+      create(:budget_bank_transaction, :filed)
+      create(:budget_bank_transaction, :filed, amount: 25)
+      refunded = create(:budget_bank_transaction, amount: 5)
+      create(:budget_refund_link, bank_transaction: refunded)
+      split = create(:budget_bank_transaction, amount: -10)
+      2.times { create(:budget_spend_link, bank_transaction: split) }
+
+      expect(Budget::BankTransaction.unfiled).to contain_exactly(unfiled)
+    end
+  end
+
+  describe "#ignore" do
+    it "sets when it was ignored" do
+      transaction = create(:budget_bank_transaction)
+
+      travel_to(Time.zone.local(2026, 9, 20, 9)) { transaction.ignore }
+
+      expect(transaction.reload.ignored_at).to eq(Time.zone.local(2026, 9, 20, 9))
+      expect(transaction).to be_ignored
+    end
+
+    it "is refused for one that's filed, saying so, and changes nothing" do
+      transaction = create(:budget_bank_transaction, :filed)
+
+      expect { transaction.ignore }.to raise_error(Budget::BankTransaction::Refused, "This bank transaction is filed. Un-file it before ignoring it.")
+
+      expect(transaction.reload.ignored_at).to be_nil
+    end
+
+    it "is refused for one that's already ignored, and leaves when it was" do
+      transaction = create(:budget_bank_transaction, :ignored)
+      ignored_at = transaction.ignored_at
+
+      expect { transaction.ignore }.to raise_error(Budget::BankTransaction::Refused, "This bank transaction is already ignored.")
+
+      expect(transaction.reload.ignored_at).to eq(ignored_at)
+    end
+
+    it "judges it once the bank transaction is locked, so a record filed since it was looked at stops it" do
+      transaction = create(:budget_bank_transaction)
+      stale = Budget::BankTransaction.find(transaction.id)
+      create(:budget_spend_link, bank_transaction: transaction)
+
+      expect { stale.ignore }.to raise_error(Budget::BankTransaction::Refused, /filed/)
+    end
+  end
+
+  describe "#unignore" do
+    it "clears when it was ignored, which makes it unfiled again" do
+      transaction = create(:budget_bank_transaction, :ignored)
+
+      transaction.unignore
+
+      expect(transaction.reload).to be_unfiled
+      expect(transaction.ignored_at).to be_nil
+    end
+
+    it "is refused for one that isn't ignored" do
+      expect { create(:budget_bank_transaction).unignore }.to raise_error(Budget::BankTransaction::Refused, "This bank transaction isn't ignored.")
+    end
+  end
+
+  describe "#unfile" do
+    it "deletes the records it was filed as and their links, which makes it unfiled again, and deletes nothing else" do
+      transaction = create(:budget_bank_transaction, :filed)
+      other = create(:budget_bank_transaction, :filed)
+      spend = transaction.spend_links.sole.spend
+
+      expect { transaction.unfile }.to change(Budget::Spend, :count).by(-1).and change(Budget::SpendLink, :count).by(-1)
+
+      expect(Budget::Spend.exists?(spend.id)).to be(false)
+      expect(transaction.reload).to be_unfiled
+      expect(Budget::BankTransaction.exists?(transaction.id)).to be(true)
+      expect(other.reload).to be_filed
+      expect(Budget::Spend.count).to eq(1)
+    end
+
+    it "deletes every record when there are several, of any kind" do
+      transaction = create(:budget_bank_transaction, amount: 10)
+      create(:budget_deposit_link, bank_transaction: transaction)
+      create(:budget_refund_link, bank_transaction: transaction)
+
+      expect { transaction.unfile }
+        .to change(Budget::Deposit, :count).by(-1).and change(Budget::Refund, :count).by(-1)
+        .and change(Budget::DepositLink, :count).by(-1).and change(Budget::RefundLink, :count).by(-1)
+
+      expect(transaction.reload).to be_unfiled
+    end
+
+    it "is refused for one that isn't filed, saying so" do
+      expect { create(:budget_bank_transaction).unfile }.to raise_error(Budget::BankTransaction::Refused, "This bank transaction isn't filed.")
+      expect { create(:budget_bank_transaction, :ignored).unfile }.to raise_error(Budget::BankTransaction::Refused, "This bank transaction isn't filed.")
+    end
+
+    it "is all or nothing" do
+      transaction = create(:budget_bank_transaction, :filed)
+      allow(Budget::Spend).to receive(:where).and_raise(ActiveRecord::StatementInvalid, "the database went away")
+
+      expect { transaction.unfile }.to raise_error(ActiveRecord::StatementInvalid)
+
+      expect(transaction.reload).to be_filed
+    end
+  end
+
+  describe "what it was filed as" do
+    let(:transaction) { create(:budget_bank_transaction, amount: -100) }
+
+    it "is its records, whichever kind, and what they add up to" do
+      create(:budget_spend_link, bank_transaction: transaction, spend: create(:budget_spend, envelope: create(:budget_envelope, budget: transaction.account.budget, name: "Groceries"), amount: 60))
+      create(:budget_spend_link, bank_transaction: transaction, spend: create(:budget_spend, envelope: create(:budget_envelope, budget: transaction.account.budget, name: "Household"), amount: 40))
+      transaction.reload
+
+      expect(transaction.filed_records.map { |record| [ record.class, record.amount ] }).to contain_exactly([ Budget::Spend, 60 ], [ Budget::Spend, 40 ])
+      expect(transaction.filed_total).to eq(100)
+      expect(transaction).to be_adds_up
+    end
+
+    it "adds up when the records are of the amount in whichever direction, and doesn't when they aren't" do
+      link = create(:budget_spend_link, bank_transaction: transaction, spend: create(:budget_spend, envelope: create(:budget_envelope, budget: transaction.account.budget), amount: 100))
+      expect(transaction.reload).to be_adds_up
+
+      link.spend.update!(amount: 90)
+
+      expect(transaction.reload).not_to be_adds_up
+      expect(transaction.filed_total).to eq(90)
+    end
+
+    it "has nothing to add up when it isn't filed, so it isn't flagged" do
+      expect(transaction.filed_total).to eq(0)
+      expect(transaction).to be_adds_up
+    end
+  end
+
   describe "database constraints" do
     let(:transaction) { create(:budget_bank_transaction, description: "Coffee shop", date: Date.new(2026, 9, 15), amount: -4.25) }
 

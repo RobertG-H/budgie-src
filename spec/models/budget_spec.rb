@@ -300,6 +300,7 @@ RSpec.describe Budget, type: :model do
     before do
       groceries, rent, extra = create_list(:budget_envelope, 3, budget: budget)
       create(:budget_envelope, budget: budget)
+      @groceries = groceries
       [ groceries, rent ].each do |envelope|
         [ Date.new(2026, 9, 1), Date.new(2026, 10, 1) ].each { |month| create(:budget_assignment, envelope: envelope, month: month) }
         create_list(:budget_spend, 3, envelope: envelope)
@@ -320,6 +321,12 @@ RSpec.describe Budget, type: :model do
       create_list(:budget_bank_transaction, 3, account: busy, import: import)
       create(:budget_import, account: busy, csv_format: budget.csv_formats.last)
       create(:budget_import, account: quiet, csv_format: budget.csv_formats.first, zero_rows_skipped: 2)
+      # A bank transaction filed as a Spend and another as a Deposit, whose records keep them from being deleted first.
+      filed_out, filed_in = import.bank_transactions.first(2)
+      filed_out.update_column(:amount, -10)
+      filed_in.update_column(:amount, 10)
+      create(:budget_spend_link, bank_transaction: filed_out, spend: create(:budget_spend, envelope: @groceries, amount: 10))
+      create(:budget_deposit_link, bank_transaction: filed_in, deposit: create(:budget_deposit, budget: budget, amount: 10))
     end
 
     it "deletes its envelopes' records first, since an envelope with records can't be deleted, and then everything else" do
@@ -327,15 +334,17 @@ RSpec.describe Budget, type: :model do
         .to change(Budget, :count).by(-1)
         .and change(Budget::Envelope, :count).by(-4)
         .and change(Budget::Assignment, :count).by(-4)
-        .and change(Budget::Spend, :count).by(-6)
+        .and change(Budget::Spend, :count).by(-7)
         .and change(Budget::Refund, :count).by(-4)
         .and change(Budget::EnvelopeReallocation, :count).by(-6)
         .and change(Budget::ReadyToAssignReallocation, :count).by(-3)
-        .and change(Budget::Deposit, :count).by(-1)
+        .and change(Budget::Deposit, :count).by(-2)
         .and change(Budget::CsvFormat, :count).by(-2)
         .and change(Budget::Account, :count).by(-2)
         .and change(Budget::Import, :count).by(-3)
         .and change(Budget::BankTransaction, :count).by(-3)
+        .and change(Budget::SpendLink, :count).by(-1)
+        .and change(Budget::DepositLink, :count).by(-1)
     end
 
     it "leaves another budget's records alone" do
@@ -345,17 +354,18 @@ RSpec.describe Budget, type: :model do
       others_reallocation = create(:budget_envelope_reallocation)
       others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
       others_csv_format = create(:budget_csv_format)
-      others_transaction = create(:budget_bank_transaction)
+      others_transaction = create(:budget_bank_transaction, :filed)
 
       budget.destroy!
 
       expect(Budget::Assignment.all).to contain_exactly(others)
-      expect(Budget::Spend.all).to contain_exactly(others_spend)
+      expect(Budget::Spend.all).to contain_exactly(others_spend, others_transaction.spend_links.sole.spend)
       expect(Budget::Refund.all).to contain_exactly(others_refund)
       expect(Budget::EnvelopeReallocation.all).to contain_exactly(others_reallocation)
       expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
       expect(Budget::CsvFormat.all).to contain_exactly(others_csv_format, others_transaction.import.csv_format)
       expect(Budget::BankTransaction.all).to contain_exactly(others_transaction)
+      expect(Budget::SpendLink.count).to eq(1)
       expect(Budget::Envelope.exists?(others.envelope_id)).to be(true)
     end
   end

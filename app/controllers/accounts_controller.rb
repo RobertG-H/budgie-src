@@ -10,9 +10,9 @@ class AccountsController < ApplicationController
     @transaction_counts = Current.budget.bank_transactions.group(:account_id).count
   end
 
-  # The Account's bank transactions, a page at a time, newest first, and its latest Import.
+  # The Account's bank transactions, a page at a time, newest first, each with what it was filed as, and its latest Import.
   def show
-    @bank_transactions = paginate(@account.bank_transactions.newest_first)
+    @bank_transactions = paginate(@account.bank_transactions.includes(deposit_links: :deposit, spend_links: { spend: :envelope }, refund_links: { refund: :envelope }).newest_first)
     @latest_import = @account.latest_import
   end
 

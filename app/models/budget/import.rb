@@ -65,7 +65,8 @@ class Budget::Import < ApplicationRecord
     true
   end
 
-  # Takes back the Import: deletes its bank transactions, then the Import, so the Account is as it was before it ran (ADR 0011).
+  # Takes back the Import: deletes the records its bank transactions were filed as, with their links, then the bank transactions,
+  # then the Import, so the Account and the budget are as they were before it ran (ADR 0011).
   # It reaches only the Account's latest Import, and only within 24 hours of it running, and is refused with a message
   # otherwise. Once the latest is undone, the one before it is the latest, and can be undone in turn if it's still in time.
   #
@@ -76,8 +77,10 @@ class Budget::Import < ApplicationRecord
       reason = undo_refusal
       raise Refused, reason if reason
 
-      # Straight from the table: `bank_transactions.delete_all` would only take them out of this Import, leaving them with none.
-      Budget::BankTransaction.where(import: self).delete_all
+      # Straight from the tables: `bank_transactions.delete_all` would only take them out of this Import, leaving them with none.
+      transactions = Budget::BankTransaction.where(import: self)
+      Budget::BankTransaction.delete_filed_records(transactions)
+      transactions.delete_all
       destroy!
     end
 
@@ -91,6 +94,14 @@ class Budget::Import < ApplicationRecord
     elsif !latest?
       "This Import can't be undone while a newer Import is in this account. Undo that one first."
     end
+  end
+
+  # How many records of each kind its bank transactions were filed as, which Undo deletes too, so the confirmation can say so.
+  def filed_record_counts
+    transactions = Budget::BankTransaction.where(import: self).select(:id)
+
+    { deposits: Budget::DepositLink.where(bank_transaction_id: transactions).count, spends: Budget::SpendLink.where(bank_transaction_id: transactions).count,
+      refunds: Budget::RefundLink.where(bank_transaction_id: transactions).count }
   end
 
   # Whether it's still within 24 hours of the Import running, which is all that undoing it is waiting on, once it's the latest.

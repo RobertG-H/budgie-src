@@ -95,7 +95,10 @@ RSpec.describe "The words on the pages", type: :request do
     "the Account edit form" => -> { edit_account_path(account) },
     "an Account's page" => -> { account_path(account) },
     "the Import form" => -> { new_account_import_path(account) },
-    "an Import's summary" => -> { import_path(import) }
+    "an Import's summary" => -> { import_path(import) },
+    "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "unfiled") },
+    "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
       get instance_exec(&path)
@@ -127,6 +130,110 @@ RSpec.describe "The words on the pages", type: :request do
       expect(visible_text).to include("Added 2 bank transactions", "Money in $2,800.00 1 bank transaction", "Money out -$82.45 1 bank transaction",
         "Duplicates skipped 0", "Rows of 0 skipped 1", "First row", "Oct 1, 2026 Paycheck Money in $2,800.00")
       expect(response.body).not_to match(/budget_|zero_rows|duplicates_skipped|content_key|occurrence/)
+    end
+
+    describe "filing" do
+      let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+      let(:loblaws_row) { account.bank_transactions.find_by!(description: "Loblaws") }
+      let(:paycheck_row) { account.bank_transactions.find_by!(description: "Paycheck") }
+
+      def file_params(**attributes)
+        { filing: { records: { "0" => { kind: "spend", envelope_id: groceries.id, description: "Loblaws", date: "2026-10-02", amount: "82.45" }.merge(attributes) } } }
+      end
+
+      it "says Unfiled, Filed and Ignored, and Un-file and Un-ignore, with the flag in words, on an Account's page" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        paycheck_row.ignore
+        extra = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
+        loblaws_row.spend_links.sole.spend.update!(amount: 80)
+
+        get account_path(account)
+
+        expect(visible_text).to include("Unfiled", "Filed", "Ignored", "Un-file", "Un-ignore", "Spend from Groceries", "Doesn't add up", "Its records add up to $80.00, not $82.45.")
+        expect(extra).to be_unfiled
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says what a filed record came from, on its edit page, and the confirmation for un-filing, in the same words" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        spend = loblaws_row.spend_links.sole.spend
+
+        get edit_spend_path(spend, month: "2026-10")
+
+        expect(visible_text).to include("Filed from a bank transaction in Chequing, Oct 2, 2026, Loblaws. Deleting it un-files that bank transaction.")
+        expect(visible_text).not_to match(retired_terms)
+
+        get account_path(account)
+
+        confirmation = css_select("main form[data-turbo-confirm]").map { |form| form["data-turbo-confirm"] }.find { |text| text.start_with?("Un-file") }
+        expect(confirmation).to eq("Un-file this bank transaction? This deletes the records it was filed as.")
+        expect(confirmation).not_to match(retired_terms)
+      end
+
+      it "uses the same words for what went wrong when a bank transaction is refused" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params(envelope_id: "", amount: "60", description: "")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("Envelope can't be blank", "Description can't be blank")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_filing_path(loblaws_row), params: file_params(amount: "60")
+
+        expect(visible_text).to include("The records add up to $60.00, which is $22.45 less than the bank transaction's $82.45.")
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_filing_path(loblaws_row), params: file_params(kind: "deposit")
+
+        expect(visible_text).to include("Kind must be Spend, since the money went out")
+
+        post bank_transaction_filing_path(paycheck_row), params: file_params(kind: "spend", amount: "2800")
+
+        expect(visible_text).to include("Kind must be Deposit or Refund, since the money came in")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "uses the same words for what was done, and what can't be" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction filed.")
+
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        follow_redirect!
+        expect(visible_text).to include("This bank transaction is already filed.")
+
+        post bank_transaction_ignore_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("This bank transaction is filed. Un-file it before ignoring it.")
+
+        delete bank_transaction_filing_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction unfiled.")
+
+        post bank_transaction_ignore_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction ignored.")
+
+        get new_bank_transaction_filing_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("This bank transaction is ignored. Un-ignore it first.")
+
+        delete bank_transaction_ignore_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction un-ignored.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "counts the records an Undo deletes in the confirmation, by kind, in the same words" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+
+        get import_path(import)
+
+        confirmation = css_select("main form[data-turbo-confirm]").map { |form| form["data-turbo-confirm"] }.sole
+        expect(confirmation).to eq("Undo the Import of sept.csv? This deletes its 2 bank transactions and the 1 Spend filed from them.")
+        expect(confirmation).not_to match(retired_terms)
+      end
     end
 
     describe "Undo" do
