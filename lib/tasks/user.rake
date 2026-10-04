@@ -10,7 +10,7 @@ namespace :user do
       "their budget with #{count.(user.budget.envelopes.count, "envelope")}, " \
         "#{count.(user.budget.deposits.count, "deposit")}, #{count.(user.budget.assignments.count, "assignment")}, " \
         "#{count.(user.budget.spends.count, "spend")}, #{count.(user.budget.refunds.count, "refund")} and " \
-        "#{count.(user.budget.envelope_reallocations.count, "reallocation")}"
+        "#{count.(user.budget.envelope_reallocations.count + user.budget.ready_to_assign_reallocations.count, "reallocation")}"
     else
       "no budget"
     end

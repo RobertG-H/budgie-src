@@ -68,6 +68,86 @@ RSpec.describe "Deposits", type: :request do
       expect(rows).to eq([ "Sep 30 Dated in September, for October $100.00" ])
     end
 
+    describe "Reallocations to Ready to Assign" do
+      let!(:dining_out) { create(:budget_envelope, budget: budget, name: "Dining out") }
+      let!(:fuel) { create(:budget_envelope, budget: budget, name: "Fuel") }
+      let!(:holiday) do
+        create(:budget_ready_to_assign_reallocation, envelope: dining_out, description: "Unspent holiday money",
+          date: Date.new(2026, 9, 12), amount: 40, notes: "Back to the pool")
+      end
+      let!(:gas) { create(:budget_ready_to_assign_reallocation, envelope: fuel, description: "Unspent gas", date: Date.new(2026, 9, 20), amount: 12.5) }
+
+      before do
+        create(:budget_ready_to_assign_reallocation, envelope: fuel, description: "Month before", date: Date.new(2026, 8, 31))
+        create(:budget_ready_to_assign_reallocation, envelope: fuel, description: "Month after", date: Date.new(2026, 10, 1))
+        create(:budget_ready_to_assign_reallocation, description: "Someone else's", date: Date.new(2026, 9, 12))
+        create(:budget_envelope_reallocation, from_envelope: dining_out, to_envelope: fuel, description: "Between envelopes", date: Date.new(2026, 9, 12))
+      end
+
+      it "are in a Reallocations section below the Deposits, with every envelope's dated in the month, newest first" do
+        deposit "Paycheck", Date.new(2026, 9, 1)
+
+        get month_deposits_path("2026-09")
+
+        expect(css_select("h2").map { |heading| heading.text.strip }).to eq([ "Reallocations" ])
+        expect(css_select("ul.list").map { |list| list.css("li").map { |row| row.text.squish } }).to eq([
+          [ "Sep 1 Paycheck $100.00" ],
+          [ "Sep 20 Unspent gas From Fuel $12.50", "Sep 12 Unspent holiday money From Dining out Back to the pool $40.00" ]
+        ])
+        expect(response.body).not_to include("Someone else")
+        expect(response.body).not_to include("Between envelopes")
+      end
+
+      it "link to the Reallocation's edit page, with from=deposits, so saving comes back here" do
+        get month_deposits_path("2026-09")
+
+        assert_select "ul.list li a[href='#{edit_ready_to_assign_reallocation_path(holiday, month: "2026-09", from: "deposits")}']"
+        expect(response.body).not_to match(/ready_to_assign/)
+      end
+
+      it "are shown as money in, with no minus sign, since they raise Ready to Assign" do
+        get month_deposits_path("2026-09")
+
+        assert_select "ul.list li span.text-right", text: "$40.00"
+        assert_select ".text-error", count: 0
+      end
+
+      it "leave the Deposited total as it was, since a Reallocation isn't a Deposit" do
+        deposit "Paycheck", Date.new(2026, 9, 1), amount: 3000
+
+        get month_deposits_path("2026-09")
+
+        assert_select ".stat-title", text: "Deposited"
+        assert_select ".stat-value", text: "$3,000.00"
+      end
+
+      it "are in no section at all in a month without any, which keeps its empty message for Deposits" do
+        get month_deposits_path("2026-07")
+
+        assert_select "h2", count: 0
+        expect(response.body).to include("No deposits in July 2026.")
+      end
+
+      it "are the whole page's list in a month with no Deposits" do
+        get month_deposits_path("2026-09")
+
+        expect(response.body).to include("No deposits in September 2026.")
+        assert_select "h2", text: "Reallocations"
+        expect(rows.size).to eq(2)
+      end
+
+      it "come back to this page for the month of their date after saving, deleting or cancelling one opened from here" do
+        get edit_ready_to_assign_reallocation_path(holiday, month: "2026-09", from: "deposits")
+        assert_select "a.btn[href='#{month_deposits_path("2026-09")}']", text: "Cancel"
+
+        patch ready_to_assign_reallocation_path(holiday), params: { reallocation: { amount: "41" }, from: "deposits", month: "2026-09" }
+        expect(response).to redirect_to(month_deposits_path("2026-09"))
+
+        delete ready_to_assign_reallocation_path(holiday), params: { from: "deposits", month: "2026-09" }
+        expect(response).to redirect_to(month_deposits_path("2026-09"))
+      end
+    end
+
     it "lists the newest date first, and the most recently entered first within a date" do
       deposit "Oldest", Date.new(2026, 9, 1)
       deposit "Latest entered", Date.new(2026, 9, 20)

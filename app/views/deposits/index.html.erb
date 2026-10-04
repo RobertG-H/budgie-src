@@ -30,3 +30,20 @@
     <%= render "components/empty_state", message: "No deposits in #{@month.name}." %>
   <% end %>
 </div>
+
+<%# Reallocations to Ready to Assign are rarer, so their section is only there when the month has some. They count in the month of their date, and are listed from every envelope, each saying which it came from. %>
+<% if @reallocations.any? %>
+  <div class="mt-8">
+    <h2 class="text-xl font-semibold">Reallocations</h2>
+
+    <div class="mt-4">
+      <%= render "components/record_list" do %>
+        <% @reallocations.each do |reallocation| %>
+          <%= render "components/record_row", href: edit_polymorphic_path(reallocation, month: @month, from: "deposits"),
+                date: reallocation.date, description: reallocation.description, counterpart: "From #{reallocation.envelope.name}",
+                notes: reallocation.notes, amount: reallocation.amount, budget: budget %>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

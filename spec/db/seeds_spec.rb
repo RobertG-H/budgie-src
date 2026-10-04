@@ -31,6 +31,7 @@ RSpec.describe "db/seeds.rb" do
 
   it "creates no Reallocations outside development" do
     expect { run_seeds }.not_to change(Budget::EnvelopeReallocation, :count)
+    expect { run_seeds }.not_to change(Budget::ReadyToAssignReallocation, :count)
   end
 
   context "in development" do
@@ -68,7 +69,7 @@ RSpec.describe "db/seeds.rb" do
       expect(budget.assignments.map { |assignment| assignment.envelope.name }.uniq.size).to be > 1
     end
 
-    it "has Ready to Assign read $200 last month and $100 this month, like the worked example, and nothing before last month" do
+    it "has Ready to Assign read $200 last month and $150 this month, with $50 reallocated to it, and nothing before last month" do
       travel_to Time.utc(2026, 10, 15, 16)
       run_seeds
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
@@ -77,7 +78,7 @@ RSpec.describe "db/seeds.rb" do
       expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).ready_to_assign)
         .to have_attributes(carried_over: 0, deposited: 3000, assigned: 2800, amount: 200)
       expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign)
-        .to have_attributes(carried_over: 200, deposited: 3000, assigned: 3100, amount: 100)
+        .to have_attributes(carried_over: 200, deposited: 3000, assigned: 3100, reallocated: 50, amount: 150)
     end
 
     it "leaves an envelope Overspent, so there's one on the month view to see, with nothing assigned to it" do
@@ -167,13 +168,35 @@ RSpec.describe "db/seeds.rb" do
       expect(line.call("Dining out", Date.new(2026, 9, 1))).to have_attributes(reallocated: 0, available: BigDecimal("234.50"))
     end
 
-    it "leaves Ready to Assign as it was, which Spends, Refunds and Reallocations don't change" do
+    it "reallocates $50 from Fuel to Ready to Assign this month, once, and no other month" do
+      travel_to Time.utc(2026, 10, 15, 16)
+
+      run_seeds
+
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+      reallocation = budget.ready_to_assign_reallocations.sole
+      expect(reallocation).to have_attributes(description: "Unspent fuel money", date: Date.new(2026, 10, 14), amount: 50)
+      expect(reallocation.envelope.name).to eq("Fuel")
+    end
+
+    it "lowers what's Available in Fuel by the $50 reallocated to Ready to Assign, and leaves it with money" do
       travel_to Time.utc(2026, 10, 15, 16)
       run_seeds
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
 
-      expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign)
-        .to have_attributes(carried_over: 200, deposited: 3000, assigned: 3100, amount: 100)
+      line = ->(month) { Budget::Month.new(budget, month).envelopes.find { |envelope_line| envelope_line.envelope.name == "Fuel" } }
+
+      expect(line.call(Date.new(2026, 10, 1))).to have_attributes(reallocated: -50, available: BigDecimal("480.45"))
+      expect(line.call(Date.new(2026, 9, 1))).to have_attributes(reallocated: 0)
+    end
+
+    it "leaves Ready to Assign as it was, which only a Reallocation to it changes" do
+      travel_to Time.utc(2026, 10, 15, 16)
+      run_seeds
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+
+      expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).ready_to_assign.amount).to eq(200)
+      expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign.amount).to eq(150)
     end
 
     it "changes nothing when it's run again" do
@@ -181,7 +204,7 @@ RSpec.describe "db/seeds.rb" do
 
       expect { run_seeds }.not_to change {
         [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
-          Budget::Refund.count, Budget::EnvelopeReallocation.count ]
+          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count ]
       }
     end
 
@@ -214,6 +237,17 @@ RSpec.describe "db/seeds.rb" do
 
       expect(reallocation.reload.amount).to eq(1)
       expect(Budget::EnvelopeReallocation.count).to eq(1)
+    end
+
+    it "leaves a Reallocation to Ready to Assign the developer has changed" do
+      run_seeds
+      reallocation = Budget::ReadyToAssignReallocation.sole
+      reallocation.update!(amount: 1)
+
+      run_seeds
+
+      expect(reallocation.reload.amount).to eq(1)
+      expect(Budget::ReadyToAssignReallocation.count).to eq(1)
     end
 
     it "leaves an Assigned amount the developer has changed" do

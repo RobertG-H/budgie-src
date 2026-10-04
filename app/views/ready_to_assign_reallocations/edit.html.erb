@@ -1,0 +1,11 @@
+<% content_for :title, "Edit reallocation · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "Edit reallocation" do %>
+    <%= render "components/delete_button", path: ready_to_assign_reallocation_path(@reallocation),
+          confirm: "Delete the #{@reallocation.description_was} reallocation?",
+          params: { from: origin, month: @month.to_param, envelope: opened_from&.id }.compact %>
+  <% end %>
+
+  <%= render "reallocations/form", record: @reallocation %>
+</div>

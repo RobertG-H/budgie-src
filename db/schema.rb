@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -66,6 +66,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_120000) do
     t.index "budget_id, lower((name)::text)", name: "index_budget_envelopes_on_budget_id_and_lower_name", unique: true
     t.index ["budget_id"], name: "index_budget_envelopes_on_budget_id"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_envelopes_name_not_blank"
+  end
+
+  create_table "budget_ready_to_assign_reallocations", force: :cascade do |t|
+    t.bigint "envelope_id", null: false
+    t.string "description", null: false
+    t.date "date", null: false
+    t.decimal "amount", precision: 15, scale: 2, null: false
+    t.text "notes", default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["envelope_id", "date"], name: "index_ready_to_assign_reallocations_on_envelope_id_and_date"
+    t.check_constraint "amount > 0::numeric", name: "budget_ready_to_assign_reallocations_amount_positive"
+    t.check_constraint "btrim(description::text) <> ''::text", name: "budget_ready_to_assign_reallocations_description_not_blank"
   end
 
   create_table "budget_refunds", force: :cascade do |t|
@@ -151,6 +164,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_120000) do
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "from_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "to_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelopes", "budgets", on_delete: :restrict
+  add_foreign_key "budget_ready_to_assign_reallocations", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_refunds", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_spends", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budgets", "users", on_delete: :restrict

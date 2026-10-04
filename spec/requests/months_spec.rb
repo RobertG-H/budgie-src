@@ -422,6 +422,72 @@ RSpec.describe "Months", type: :request do
     end
   end
 
+  describe "Ready to Assign with Reallocations to it" do
+    let!(:dining_out) { create(:budget_envelope, budget: budget, name: "Dining out") }
+
+    before do
+      create(:budget_deposit, budget: budget, amount: 600, date: Date.new(2026, 2, 1))
+      create(:budget_assignment, envelope: dining_out, month: Date.new(2026, 2, 1), amount: 600)
+      create(:budget_ready_to_assign_reallocation, envelope: dining_out, amount: 30, date: Date.new(2026, 2, 20))
+    end
+
+    it "adds Reallocated after Assigned in the month it's dated in, so the arithmetic on the card adds up" do
+      get month_path("2026-02")
+
+      assert_select ".stat-value", text: "$30.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $600.00 · Assigned $600.00 · Reallocated $30.00")
+    end
+
+    it "shows the amount the way every amount is shown, in a span of its own" do
+      get month_path("2026-02")
+
+      assert_select ".stat-desc span", count: 4
+      assert_select ".stat-desc span", text: "$30.00"
+    end
+
+    it "carries it into the months after, which show no Reallocated of their own" do
+      get month_path("2026-03")
+
+      assert_select ".stat-value", text: "$30.00"
+      expect(stat_description).to eq("Carried over $30.00 · Deposited $0.00 · Assigned $0.00")
+    end
+
+    it "shows no Reallocated in a month before it, or in a budget that has none" do
+      get month_path("2026-01")
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00 · Assigned $0.00")
+
+      Budget::ReadyToAssignReallocation.delete_all
+      get month_path("2026-02")
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $600.00 · Assigned $600.00")
+      expect(response.body).not_to include("Reallocated $")
+    end
+
+    it "shows nothing for a Reallocation to Ready to Assign in another budget" do
+      Budget::ReadyToAssignReallocation.delete_all
+      create(:budget_ready_to_assign_reallocation, amount: 999, date: Date.new(2026, 2, 20))
+
+      get month_path("2026-02")
+
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $600.00 · Assigned $600.00")
+    end
+
+    it "is in the Reallocated column of its envelope, as money out, and in Available" do
+      get month_path("2026-02")
+
+      expect(css_select("tr#envelope_#{dining_out.id} td:nth-child(6)").map { |cell| cell.text.squish }).to eq([ "-$30.00" ])
+      assert_select "tr#envelope_#{dining_out.id} td:nth-child(6) .text-error", text: "-$30.00"
+      expect(css_select("tr#envelope_#{dining_out.id} td:nth-child(7)").map { |cell| cell.text.squish }).to eq([ "$570.00" ])
+    end
+
+    it "can bring a negative Ready to Assign back to zero" do
+      create(:budget_assignment, envelope: dining_out, month: Date.new(2026, 3, 1), amount: 30)
+
+      get month_path("2026-03")
+      assert_select ".stat-value", text: "$0.00"
+      assert_select ".stat-desc", text: /More was assigned/, count: 0
+    end
+  end
+
   describe "a negative Ready to Assign" do
     let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
 

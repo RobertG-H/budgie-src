@@ -9,7 +9,7 @@ class EnvelopeReallocationsController < ApplicationController
   end
 
   def update
-    if @reallocation.update(reallocation_params(envelopes: %i[ from ]))
+    if @reallocation.update(reallocation_params(envelopes: { from_envelope_id: :from_envelope }))
       redirect_to return_path_for(@reallocation), notice: "Reallocation updated."
     else
       render :edit, status: :unprocessable_content

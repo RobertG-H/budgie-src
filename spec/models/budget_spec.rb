@@ -10,6 +10,7 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to have_many(:spends).through(:envelopes) }
   it { is_expected.to have_many(:refunds).through(:envelopes) }
   it { is_expected.to have_many(:envelope_reallocations).through(:envelopes).source(:outgoing_reallocations) }
+  it { is_expected.to have_many(:ready_to_assign_reallocations).through(:envelopes) }
   it { is_expected.to validate_presence_of(:currency) }
   it { is_expected.to validate_inclusion_of(:currency).in_array(Budget::CURRENCIES.keys).with_message("isn't supported") }
 
@@ -78,6 +79,16 @@ RSpec.describe Budget, type: :model do
       create(:budget_envelope_reallocation)
 
       expect(budget.envelope_reallocations).to contain_exactly(mine, back)
+    end
+  end
+
+  describe "#ready_to_assign_reallocations" do
+    it "are the Reallocations out of its envelopes to Ready to Assign, and no other budget's" do
+      budget = create(:budget)
+      mine = create(:budget_ready_to_assign_reallocation, envelope: create(:budget_envelope, budget: budget))
+      create(:budget_ready_to_assign_reallocation)
+
+      expect(budget.ready_to_assign_reallocations).to contain_exactly(mine)
     end
   end
 
@@ -232,6 +243,8 @@ RSpec.describe Budget, type: :model do
       [ [ groceries, rent ], [ rent, extra ], [ extra, groceries ] ].each do |from, to|
         create_list(:budget_envelope_reallocation, 2, from_envelope: from, to_envelope: to)
       end
+      create_list(:budget_ready_to_assign_reallocation, 2, envelope: groceries)
+      create(:budget_ready_to_assign_reallocation, envelope: extra)
       create(:budget_deposit, budget: budget)
     end
 
@@ -243,6 +256,7 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::Spend, :count).by(-6)
         .and change(Budget::Refund, :count).by(-4)
         .and change(Budget::EnvelopeReallocation, :count).by(-6)
+        .and change(Budget::ReadyToAssignReallocation, :count).by(-3)
         .and change(Budget::Deposit, :count).by(-1)
     end
 
@@ -251,6 +265,7 @@ RSpec.describe Budget, type: :model do
       others_spend = create(:budget_spend)
       others_refund = create(:budget_refund)
       others_reallocation = create(:budget_envelope_reallocation)
+      others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
 
       budget.destroy!
 
@@ -258,6 +273,7 @@ RSpec.describe Budget, type: :model do
       expect(Budget::Spend.all).to contain_exactly(others_spend)
       expect(Budget::Refund.all).to contain_exactly(others_refund)
       expect(Budget::EnvelopeReallocation.all).to contain_exactly(others_reallocation)
+      expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
       expect(Budget::Envelope.exists?(others.envelope_id)).to be(true)
     end
   end

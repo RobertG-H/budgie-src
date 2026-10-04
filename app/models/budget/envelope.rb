@@ -10,6 +10,9 @@ class Budget::Envelope < ApplicationRecord
     inverse_of: :from_envelope, dependent: :restrict_with_error
   has_many :incoming_reallocations, class_name: "Budget::EnvelopeReallocation", foreign_key: :to_envelope_id,
     inverse_of: :to_envelope, dependent: :restrict_with_error
+  # Money moved out of this envelope back into Ready to Assign.
+  has_many :ready_to_assign_reallocations, class_name: "Budget::ReadyToAssignReallocation", inverse_of: :envelope,
+    dependent: :restrict_with_error
 
   normalizes :name, with: ->(name) { name.squish }
 

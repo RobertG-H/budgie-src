@@ -45,6 +45,14 @@ FactoryBot.define do
     notes { "" }
   end
 
+  factory :budget_ready_to_assign_reallocation, class: "Budget::ReadyToAssignReallocation" do
+    association :envelope, factory: :budget_envelope
+    sequence(:description) { |n| "Reallocation to Ready to Assign #{n}" }
+    date { Date.new(2026, 9, 15) }
+    amount { 100 }
+    notes { "" }
+  end
+
   factory :budget_assignment, class: "Budget::Assignment" do
     association :envelope, factory: :budget_envelope
     month { Date.new(2026, 9, 1) }

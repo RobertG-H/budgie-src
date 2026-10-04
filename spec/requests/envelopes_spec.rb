@@ -271,6 +271,85 @@ RSpec.describe "Envelopes", type: :request do
       end
     end
 
+    describe "Reallocations to Ready to Assign" do
+      let!(:dining_out) { create(:budget_envelope, budget: budget, name: "Dining out", starting_balance: 100) }
+      let!(:holiday) do
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, description: "Unspent holiday money",
+          date: Date.new(2026, 9, 12), amount: 40, notes: "Back to the pool")
+      end
+      let!(:dentist) do
+        create(:budget_envelope_reallocation, from_envelope: dining_out, to_envelope: groceries, description: "Covering the dentist",
+          date: Date.new(2026, 9, 30), amount: 30)
+      end
+
+      before do
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, description: "Month before", date: Date.new(2026, 8, 31), amount: 100)
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, description: "Month after", date: Date.new(2026, 10, 1))
+        create(:budget_ready_to_assign_reallocation, envelope: dining_out, description: "Not Groceries", date: Date.new(2026, 9, 5))
+        create(:budget_ready_to_assign_reallocation, envelope: others_envelope, description: "Someone else's", date: Date.new(2026, 9, 5))
+      end
+
+      it "lists them in the Reallocations section with the ones between envelopes, newest first, as To Ready to Assign" do
+        get month_envelope_path("2026-09", groceries)
+
+        expect(css_select("h2").map { |heading| heading.text.strip }).to eq([ "Spends", "Reallocations" ])
+        expect(css_select("ul.list li").map { |row| row.text.squish }).to eq([
+          "Sep 30 Covering the dentist From Dining out $30.00",
+          "Sep 12 Unspent holiday money To Ready to Assign Back to the pool -$40.00"
+        ])
+        expect(response.body).not_to include("Someone else")
+      end
+
+      it "orders them by date and then by when they were entered, whichever table they're in" do
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, description: "Entered last", date: Date.new(2026, 9, 30), created_at: 1.hour.from_now)
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, description: "Entered first", date: Date.new(2026, 9, 30), created_at: 1.day.ago)
+
+        get month_envelope_path("2026-09", groceries)
+
+        expect(css_select("ul.list li").map { |row| row.at_css(".list-col-grow .block").text.strip }).to eq([
+          "Entered last", "Covering the dentist", "Entered first", "Unspent holiday money"
+        ])
+      end
+
+      it "links each to its own edit page, keeping the page it was opened from, and shows the money out in red" do
+        get month_envelope_path("2026-09", groceries)
+
+        assert_select "ul.list li a[href='#{edit_ready_to_assign_reallocation_path(holiday, month: "2026-09", from: "envelope", envelope: groceries.id)}']" do
+          assert_select "span.text-right .text-error", text: "-$40.00"
+        end
+        assert_select "ul.list li a[href='#{edit_envelope_reallocation_path(dentist, month: "2026-09", from: "envelope", envelope: groceries.id)}']"
+        expect(response.body).not_to match(/ready_to_assign/)
+      end
+
+      it "counts in the envelope's Reallocated and Available, with the ones between envelopes" do
+        get month_envelope_path("2026-09", groceries)
+
+        titles = css_select(".stat-title").map { |title| title.text.strip }
+        values = css_select(".stat-value").map { |value| value.text.squish }
+
+        expect(values[titles.index("Reallocated")]).to eq("-$10.00")
+        # The $250.00 it started with, less the $100.00 that left the day before the month began, and the $10.00 net of the
+        # $30.00 that arrived and the $40.00 that left in it.
+        expect(values[titles.index("Available")]).to eq("$140.00")
+      end
+
+      it "takes the month before's into Carried over, and the month after's out of this one" do
+        get month_envelope_path("2026-09", groceries)
+
+        # The $250.00 it started with less the $100.00 that left the day before the month began.
+        expect(css_select(".stat-value").map { |value| value.text.squish }.first).to eq("$150.00")
+      end
+
+      it "makes a Reallocations section of its own when it's the only kind the month has" do
+        dentist.destroy!
+
+        get month_envelope_path("2026-09", groceries)
+
+        assert_select "h2", text: "Reallocations"
+        expect(css_select("ul.list li").map { |row| row.text.squish }).to eq([ "Sep 12 Unspent holiday money To Ready to Assign Back to the pool -$40.00" ])
+      end
+    end
+
     it "has no Reallocations section when the month has none, even when other months have, and no empty message for it" do
       create(:budget_envelope_reallocation, from_envelope: groceries, description: "In August", date: Date.new(2026, 8, 31))
 
@@ -620,6 +699,29 @@ RSpec.describe "Envelopes", type: :request do
         assert_select "[role=status]", count: 0
         expect(response.body).not_to include("PG::")
       end
+    end
+
+    it "refuses to delete an envelope with Reallocations to Ready to Assign, says why on the envelope's page, and keeps both" do
+      reallocation = create(:budget_ready_to_assign_reallocation, envelope: create(:budget_envelope, budget: budget, name: "Groceries"), date: Date.new(2026, 9, 12))
+      envelope = reallocation.envelope
+
+      expect { delete envelope_path(envelope), params: { month: "2026-09" } }
+        .to not_change(Budget::Envelope, :count).and not_change(Budget::ReadyToAssignReallocation, :count)
+
+      expect(response).to have_http_status(:see_other)
+      expect(response).to redirect_to(month_envelope_path("2026-09", envelope))
+      follow_redirect!
+      assert_select "[role=alert]", text: "This envelope can't be deleted because it has records."
+      assert_select "[role=status]", count: 0
+      expect(response.body).not_to include("PG::")
+    end
+
+    it "deletes it once its Reallocations to Ready to Assign are deleted" do
+      reallocation = create(:budget_ready_to_assign_reallocation, envelope: create(:budget_envelope, budget: budget), date: Date.new(2026, 9, 12))
+
+      reallocation.destroy!
+
+      expect { delete envelope_path(reallocation.envelope), params: { month: "2026-09" } }.to change(Budget::Envelope, :count).by(-1)
     end
 
     it "deletes it once its Reallocations are deleted" do

@@ -11,8 +11,8 @@ RSpec.describe "user rake tasks", type: :task do
       budget = create(:budget, user: user)
       envelopes = create_list(:budget_envelope, 2, budget: budget)
       create_list(:budget_deposit, 3, budget: budget)
-      # Two months of Assigned amounts, three Spends and two Refunds for each envelope, and a Reallocation each way between
-      # the two, which an envelope can't be deleted while it has.
+      # Two months of Assigned amounts, three Spends and two Refunds for each envelope, a Reallocation each way between
+      # the two and one to Ready to Assign, which an envelope can't be deleted while it has.
       envelopes.each do |envelope|
         [ Date.new(2026, 9, 1), Date.new(2026, 10, 1) ].each { |month| create(:budget_assignment, envelope: envelope, month: month) }
         create_list(:budget_spend, 3, envelope: envelope)
@@ -20,9 +20,10 @@ RSpec.describe "user rake tasks", type: :task do
       end
       create(:budget_envelope_reallocation, from_envelope: envelopes.first, to_envelope: envelopes.last)
       create(:budget_envelope_reallocation, from_envelope: envelopes.last, to_envelope: envelopes.first)
+      create(:budget_ready_to_assign_reallocation, envelope: envelopes.first)
     end
 
-    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations and invite once the email is typed to confirm" do
+    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds) and invite once the email is typed to confirm" do
       output = nil
 
       expect { output = run_task("user:delete", stdin: "Robin@Example.com\n", "EMAIL" => "robin@example.com") }
@@ -32,7 +33,8 @@ RSpec.describe "user rake tasks", type: :task do
         .and change(Budget::Deposit, :count).by(-3).and change(Budget::Assignment, :count).by(-4)
         .and change(Budget::Spend, :count).by(-6).and change(Budget::Refund, :count).by(-4)
         .and change(Budget::EnvelopeReallocation, :count).by(-2)
-      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits, 4 assignments, 6 spends, 4 refunds and 2 reallocations and their invite", "Deleted robin@example.com.")
+        .and change(Budget::ReadyToAssignReallocation, :count).by(-1)
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits, 4 assignments, 6 spends, 4 refunds and 3 reallocations and their invite", "Deleted robin@example.com.")
     end
 
     it "leaves another user's budget alone" do
@@ -40,6 +42,7 @@ RSpec.describe "user rake tasks", type: :task do
       others_spend = create(:budget_spend)
       others_refund = create(:budget_refund)
       others_reallocation = create(:budget_envelope_reallocation)
+      others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
 
       run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
@@ -47,6 +50,7 @@ RSpec.describe "user rake tasks", type: :task do
       expect(Budget::Spend.all).to contain_exactly(others_spend)
       expect(Budget::Refund.all).to contain_exactly(others_refund)
       expect(Budget::EnvelopeReallocation.all).to contain_exactly(others_reallocation)
+      expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
     end
 
     it "counts a single envelope, a single deposit, a single assignment, a single spend and a single refund in the singular" do
@@ -55,6 +59,7 @@ RSpec.describe "user rake tasks", type: :task do
       Budget::Spend.where(envelope: user.budget.envelopes).where.not(id: kept.envelope.spends.first.id).delete_all
       Budget::Refund.where(envelope: user.budget.envelopes).where.not(id: kept.envelope.refunds.first.id).delete_all
       Budget::EnvelopeReallocation.where(from_envelope: user.budget.envelopes).delete_all
+      Budget::ReadyToAssignReallocation.where(envelope: user.budget.envelopes).delete_all
       user.budget.envelopes.where.not(id: kept.envelope_id).destroy_all
       user.budget.deposits.where.not(id: user.budget.deposits.first.id).destroy_all
 
@@ -65,6 +70,7 @@ RSpec.describe "user rake tasks", type: :task do
 
     it "counts a single reallocation in the singular" do
       user.budget.envelope_reallocations.last.destroy!
+      user.budget.ready_to_assign_reallocations.each(&:destroy!)
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
@@ -76,6 +82,7 @@ RSpec.describe "user rake tasks", type: :task do
       user.budget.spends.each(&:destroy!)
       user.budget.refunds.each(&:destroy!)
       user.budget.envelope_reallocations.each(&:destroy!)
+      user.budget.ready_to_assign_reallocations.each(&:destroy!)
       user.budget.deposits.destroy_all
       user.budget.envelopes.destroy_all
 

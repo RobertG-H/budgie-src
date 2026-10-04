@@ -1,7 +1,7 @@
 require "rails_helper"
 
-# The Reallocate form, which makes a Reallocation between two envelopes. Editing and deleting one are in
-# envelope_reallocations_spec.rb.
+# The Reallocate form, which makes a Reallocation, to an envelope or to Ready to Assign. Editing and deleting one are in
+# envelope_reallocations_spec.rb and ready_to_assign_reallocations_spec.rb.
 RSpec.describe "Reallocations", type: :request do
   let(:budget) { create(:budget, currency: "CAD") }
   let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
@@ -49,8 +49,16 @@ RSpec.describe "Reallocations", type: :request do
       get new_reallocation_path(month: "2026-09")
 
       expect(choices(:from)).to eq([ "Choose an envelope", "bills", "Dining out", "Groceries" ])
-      expect(choices(:to)).to eq([ "Choose an envelope", "bills", "Dining out", "Groceries" ])
+      expect(choices(:to)).to eq([ "Choose an envelope", "Ready to Assign", "bills", "Dining out", "Groceries" ])
       expect(response.body).not_to include("Someone else")
+    end
+
+    it "offers Ready to Assign as To's first option, above the envelopes, but not as From, and spells it nowhere with underscores" do
+      get new_reallocation_path(month: "2026-09")
+
+      assert_select "select[name='reallocation[to_envelope_id]'] option:nth-child(2)", text: "Ready to Assign"
+      expect(choices(:from)).not_to include("Ready to Assign")
+      expect(response.body).not_to match(/ready_to_assign/)
     end
 
     it "starts with no envelope chosen on either side, and the focus on From" do
@@ -331,6 +339,123 @@ RSpec.describe "Reallocations", type: :request do
       delete session_path
 
       expect { post reallocations_path, params: { reallocation: reallocation_params } }.not_to change(Budget::EnvelopeReallocation, :count)
+
+      expect(response).to redirect_to(sign_in_path)
+    end
+  end
+
+  describe "POST /reallocations to Ready to Assign" do
+    let(:reallocation_params) do
+      {
+        from_envelope_id: dining_out.id, to_envelope_id: Reallocating::READY_TO_ASSIGN,
+        description: "Unspent holiday money", date: "2026-09-15", amount: "20.50", notes: "Back to the pool"
+      }
+    end
+
+    it "adds a Reallocation to Ready to Assign, not one to an envelope, and goes to the month view for the month of its date" do
+      expect { post reallocations_path, params: { reallocation: reallocation_params, from: "month", month: "2026-09" } }
+        .to change(Budget::ReadyToAssignReallocation, :count).by(1).and not_change(Budget::EnvelopeReallocation, :count)
+
+      expect(Budget::ReadyToAssignReallocation.sole).to have_attributes(
+        envelope: dining_out, description: "Unspent holiday money", date: Date.new(2026, 9, 15), amount: BigDecimal("20.5"), notes: "Back to the pool"
+      )
+      expect(response).to redirect_to(month_path("2026-09"))
+      follow_redirect!
+      assert_select "[role=status]", text: "Reallocation added."
+    end
+
+    it "goes back to the page of the envelope it was opened from, for the month of its date" do
+      post reallocations_path, params: { reallocation: reallocation_params.merge(date: "2026-10-31"), from: "envelope", month: "2026-09", envelope: dining_out.id }
+
+      expect(response).to redirect_to(month_envelope_path("2026-10", dining_out))
+    end
+
+    it "goes to the From envelope's page when the form was opened from the page of another envelope" do
+      post reallocations_path, params: { reallocation: reallocation_params, from: "envelope", month: "2026-09", envelope: groceries.id }
+
+      expect(response).to redirect_to(month_envelope_path("2026-09", dining_out))
+    end
+
+    it "goes back to a month's Deposits page for the month of its date when it was opened from there" do
+      post reallocations_path, params: { reallocation: reallocation_params.merge(date: "2026-10-02"), from: "deposits", month: "2026-09" }
+
+      expect(response).to redirect_to(month_deposits_path("2026-10"))
+    end
+
+    it "saves blank notes as an empty string" do
+      post reallocations_path, params: { reallocation: reallocation_params.merge(notes: "") }
+
+      expect(Budget::ReadyToAssignReallocation.sole.notes).to eq("")
+    end
+
+    it "may be more than the envelope has Available, which leaves it Overspent" do
+      post reallocations_path, params: { reallocation: reallocation_params.merge(amount: "5000"), month: "2026-09" }
+
+      get month_envelope_path("2026-09", dining_out)
+      assert_select ".badge", text: "Overspent"
+    end
+
+    it "shows what's wrong, and keeps what was typed, with Ready to Assign still chosen, for an invalid Reallocation" do
+      params = { reallocation: reallocation_params.merge(description: " ", amount: "0", notes: "Keep me"), from: "envelope", month: "2026-09", envelope: dining_out.id }
+
+      expect { post reallocations_path, params: params }.not_to change(Budget::ReadyToAssignReallocation, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "Description can't be blank"
+      assert_select "[role=alert] li", text: "Amount must be greater than 0"
+      assert_select "textarea[name='reallocation[notes]']", text: "Keep me"
+      assert_select "select[name='reallocation[from_envelope_id]'] option[selected][value='#{dining_out.id}']"
+      assert_select "select[name='reallocation[to_envelope_id]'] option[selected]", text: "Ready to Assign"
+      assert_select "form[action='#{reallocations_path}']"
+      assert_select "a.btn[href='#{month_envelope_path("2026-09", dining_out)}']", text: "Cancel"
+    end
+
+    it "refuses more than 2 decimal places instead of rounding" do
+      post reallocations_path, params: { reallocation: reallocation_params.merge(amount: "10.005") }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "Amount can't have more than 2 decimal places"
+    end
+
+    it "can't be saved without a From, and says so on the From field" do
+      expect { post reallocations_path, params: { reallocation: reallocation_params.merge(from_envelope_id: ""), month: "2026-09" } }
+        .not_to change(Budget::ReadyToAssignReallocation, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "From can't be blank"
+      assert_select "select[name='reallocation[from_envelope_id]'][aria-invalid=true]"
+      assert_select "p.text-error", text: "From can't be blank"
+      assert_select "input[name='reallocation[description]'][value='Unspent holiday money']"
+    end
+
+    it "can't be saved from another budget's envelope: it's an error on the From field, and nothing is saved" do
+      expect { post reallocations_path, params: { reallocation: reallocation_params.merge(from_envelope_id: others_envelope.id) } }
+        .not_to change(Budget::ReadyToAssignReallocation, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "From can't be blank"
+      expect(response.body).not_to include("Someone else")
+    end
+
+    it "can't be saved from an envelope that doesn't exist, or something that isn't an id" do
+      [ 0, "not-an-id", "1 OR 1=1" ].each do |envelope_id|
+        expect { post reallocations_path, params: { reallocation: reallocation_params.merge(from_envelope_id: envelope_id) } }
+          .not_to change(Budget::ReadyToAssignReallocation, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+      end
+    end
+
+    it "ignores an envelope or budget given any other way than the From envelope's id" do
+      post reallocations_path, params: { reallocation: reallocation_params.merge(envelope: others_envelope.id, envelope_id: others_envelope.id, budget_id: others_envelope.budget_id) }
+
+      expect(Budget::ReadyToAssignReallocation.sole).to have_attributes(envelope: dining_out)
+    end
+
+    it "requires sign-in" do
+      delete session_path
+
+      expect { post reallocations_path, params: { reallocation: reallocation_params } }.not_to change(Budget::ReadyToAssignReallocation, :count)
 
       expect(response).to redirect_to(sign_in_path)
     end
