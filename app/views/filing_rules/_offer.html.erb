@@ -1,0 +1,22 @@
+<%# locals: (offer:) %>
+<%# "Always file like this", on the filing form: a Filing rule made from what's done to this bank transaction, whether that's filing it or ignoring it, which files or ignores the bank transactions that come in with the same text in their description, the same way. The text starts as the bank's whole description, normalised, and can be trimmed right there. It has no Account or amount, which is for the Filing rules page, and it's never offered for a split, which the filing-split controller turns off by disabling this fieldset. A description too short to make a rule from says so instead. %>
+<% if offer.available? %>
+  <fieldset class="space-y-4 rounded-box border border-base-300 p-4" data-filing-split-target="rule">
+    <legend class="px-2 font-medium">Filing rule</legend>
+    <%= fields_for "filing[rule]", offer do |rule_form| %>
+      <%= render "components/field", form: rule_form, attribute: :make, control: :checkbox, label: "Always file like this",
+            hint: "Bank transactions with this text in their description are filed, or ignored, the way you do this one, as they come in." do |field| %>
+        <%= rule_form.check_box :make, **field %>
+      <% end %>
+
+      <%= render "components/field", form: rule_form, attribute: :text, label: "Text to look for",
+            hint: "Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
+        <%= rule_form.text_field :text, **field %>
+      <% end %>
+
+      <%= render "filing_rules/offer_preview", offer: offer %>
+    <% end %>
+  </fieldset>
+<% else %>
+  <p class="text-base-content/70">A Filing rule needs at least 3 characters in the bank transaction's description, so Always file like this isn't offered for this one.</p>
+<% end %>

@@ -18,6 +18,8 @@ class Budget < ApplicationRecord
   # read into them. An Import and a bank transaction belong to the budget through their Account, so these are only for reading.
   has_many :csv_formats, dependent: :destroy
   has_many :accounts, dependent: :destroy
+  # Standing instructions for filing the bank transactions that come in, such as "anything from Loblaws goes to Groceries".
+  has_many :filing_rules, dependent: :destroy
   has_many :imports, through: :accounts
   has_many :bank_transactions, through: :accounts
   # Money assigned to the budget's envelopes, money spent from them, money that came back to them, money moved between
@@ -97,13 +99,14 @@ class Budget < ApplicationRecord
     end
 
     # In the order that each one's foreign keys allow: the records that bank transactions were filed as, with their links, then
-    # the bank transactions, then the Imports they came from, then the Accounts and CSV formats those were in. Deleted straight
-    # from the tables in one statement each. The records go here, with their links, because a link keeps its record from being
+    # the bank transactions, then the Imports they came from and the Filing rules that filed them, then the Accounts and CSV formats
+    # those were in, and the rules' envelopes are only reached afterwards. Deleted straight from the tables in one statement each. The records go here, with their links, because a link keeps its record from being
     # deleted, which `delete_envelope_records` and the Deposits would run into.
     def delete_importer_records
       Budget::BankTransaction.delete_filed_records(Budget::BankTransaction.where(account: accounts))
       Budget::BankTransaction.where(account: accounts).delete_all
       Budget::Import.where(account: accounts).delete_all
+      Budget::FilingRule.where(budget: self).delete_all
       Budget::Account.where(budget: self).delete_all
       Budget::CsvFormat.where(budget: self).delete_all
     end

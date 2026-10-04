@@ -1,8 +1,8 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
 # them, what's spent, what came back, what was moved between envelopes and back to Ready to Assign, an archived
-# envelope with history, a CSV format and an Account with an Import, so the real pages have something to show. Running it again changes nothing that's
-# already there.
+# envelope with history, a CSV format, Filing rules and an Account with an Import, so the real pages have something to show. Running it
+# again changes nothing that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
 user = User.find_or_create_by!(email: Dev::USER_EMAIL) { |new_user| new_user.name = "Dev Budgie" }
@@ -99,6 +99,9 @@ old_gym = budget.envelopes.find_or_create_by!(name: "Old gym") do |envelope|
   envelope.assignments.build(month: last_month, amount: 40)
   envelope.spends.build(description: "Membership", date: last_month + 14, amount: 40)
 end
+# A Filing rule for it, made while it's in use, since an archived envelope takes no new ones: it's inactive once the envelope is archived, which is
+# what the Filing rules page flags.
+budget.filing_rules.create!(text: "gym membership", outcome: "spend", envelope: old_gym) if old_gym.previously_new_record?
 old_gym.archive! if old_gym.previously_new_record?
 
 # A CSV format that reads spec/fixtures/files/signed-sample.csv, so a developer can build a format from that file to see
@@ -109,32 +112,29 @@ sample_bank = budget.csv_formats.find_or_create_by!(name: "Sample bank") do |csv
     amount_style: "signed", amount_column: 3)
 end
 
+# Two Filing rules for what's in that file: "loblaws" files as a Spend from Groceries, and "coffee shop" ignores. They're only made when
+# there isn't one by their text, so a developer's changes to them stay.
+groceries = budget.envelopes.find_by!(name: "Groceries")
+budget.filing_rules.find_or_create_by!(text: "loblaws") { |rule| rule.assign_attributes(outcome: "spend", envelope: groceries) }
+budget.filing_rules.find_or_create_by!(text: "coffee shop") { |rule| rule.outcome = "ignore" }
+
 # An Account with the sample file imported into it with that format: five bank transactions, money in and money out, and a sixth
 # row of 0 that's skipped. It's only imported while the Account has no Import, and the bank transactions are only filed and ignored
 # then, straight after, so what a developer has done to them since, such as undoing the Import or un-filing one, isn't redone by
 # seeding again.
 chequing = budget.accounts.find_or_create_by!(name: "Chequing")
 if chequing.imports.none?
+  # The rules above file Loblaws as a Spend from Groceries, of its whole amount, which counts in Groceries' September like any other Spend,
+  # and ignore Coffee shop, as the Import brings them in: the Import's summary says so, and the Account's page shows which rule did it.
   sample = Rails.root.join("spec/fixtures/files/signed-sample.csv")
   sample.open { |file| chequing.imports.build(csv_format: sample_bank, file_name: sample.basename.to_s).run(file) or raise "The sample file wasn't imported." }
 
-  # Left unfiled, filed and ignored, so the Unfiled list and the Account's page have each to show. Loblaws is a Spend from Groceries,
-  # of its whole amount, which counts in Groceries' September like any other Spend. Hydro is a split: $50.00 from Bills and the other
-  # $15.50 from Rent, which add up to its $65.50, so a bank transaction filed as several records has something to show. Coffee shop is
-  # ignored. Paycheck and Hydro rebate stay unfiled.
-  bank_transactions = chequing.bank_transactions.index_by(&:description)
-
-  loblaws = bank_transactions.fetch("Loblaws")
-  loblaws_entry = Budget::Filing::Entry.new(bank_transaction: loblaws, drafts: [ Budget::Filing::Draft.for(loblaws, envelope_id: budget.envelopes.find_by!(name: "Groceries").id) ])
-
-  hydro = bank_transactions.fetch("Hydro")
+  # Hydro is filed by hand, as a split: $50.00 from Bills and the other $15.50 from Rent, which add up to its $65.50, so a bank
+  # transaction filed as several records has something to show. Paycheck and Hydro rebate stay unfiled, so the Unfiled list has some.
+  hydro = chequing.bank_transactions.find_by!(description: "Hydro")
   bills, rent = budget.envelopes.where(name: %w[ Bills Rent ]).order(:name)
   hydro_entry = Budget::Filing::Entry.new(bank_transaction: hydro,
     drafts: [ Budget::Filing::Draft.for(hydro, envelope_id: bills.id, amount: 50), Budget::Filing::Draft.for(hydro, envelope_id: rent.id, amount: 15.5) ])
 
-  # Both at once, which is what the operation is for.
-  entries = [ loblaws_entry, hydro_entry ]
-  Budget::Filing.new(budget).file(entries) or raise "The sample wasn't filed: #{entries.flat_map { |entry| entry.errors.full_messages + entry.drafts.flat_map { |draft| draft.errors.full_messages } }.to_sentence}"
-
-  bank_transactions.fetch("Coffee shop").ignore
+  Budget::Filing.new(budget).file([ hydro_entry ]) or raise "The sample wasn't filed: #{(hydro_entry.errors.full_messages + hydro_entry.drafts.flat_map { |draft| draft.errors.full_messages }).to_sentence}"
 end

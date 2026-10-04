@@ -8,6 +8,7 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to have_many(:deposits).class_name("Budget::Deposit").dependent(:destroy) }
   it { is_expected.to have_many(:csv_formats).class_name("Budget::CsvFormat").dependent(:destroy) }
   it { is_expected.to have_many(:accounts).class_name("Budget::Account").dependent(:destroy) }
+  it { is_expected.to have_many(:filing_rules).class_name("Budget::FilingRule").dependent(:destroy) }
   it { is_expected.to have_many(:imports).through(:accounts) }
   it { is_expected.to have_many(:bank_transactions).through(:accounts) }
   it { is_expected.to have_many(:assignments).through(:envelopes) }
@@ -327,6 +328,12 @@ RSpec.describe Budget, type: :model do
       filed_in.update_column(:amount, 10)
       create(:budget_spend_link, bank_transaction: filed_out, spend: create(:budget_spend, envelope: @groceries, amount: 10))
       create(:budget_deposit_link, bank_transaction: filed_in, deposit: create(:budget_deposit, budget: budget, amount: 10))
+      # Filing rules for an envelope, for an Account and for neither, and a bank transaction that one of them filed, which keeps
+      # that rule from being deleted before it's gone.
+      spend_rule = create(:budget_filing_rule, budget: budget, envelope: @groceries, text: "loblaws")
+      create(:budget_filing_rule, :ignore, budget: budget, account: busy, text: "payment thank you")
+      create(:budget_filing_rule, :deposit, budget: budget, text: "payroll")
+      filed_out.update_column(:filing_rule_id, spend_rule.id)
     end
 
     it "deletes its envelopes' records first, since an envelope with records can't be deleted, and then everything else" do
@@ -345,6 +352,7 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::BankTransaction, :count).by(-3)
         .and change(Budget::SpendLink, :count).by(-1)
         .and change(Budget::DepositLink, :count).by(-1)
+        .and change(Budget::FilingRule, :count).by(-3)
     end
 
     it "leaves another budget's records alone" do
@@ -355,6 +363,8 @@ RSpec.describe Budget, type: :model do
       others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
       others_csv_format = create(:budget_csv_format)
       others_transaction = create(:budget_bank_transaction, :filed)
+      others_rule = create(:budget_filing_rule, text: "loblaws")
+      others_transaction.update_column(:filing_rule_id, others_rule.id)
 
       budget.destroy!
 
@@ -365,6 +375,8 @@ RSpec.describe Budget, type: :model do
       expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
       expect(Budget::CsvFormat.all).to contain_exactly(others_csv_format, others_transaction.import.csv_format)
       expect(Budget::BankTransaction.all).to contain_exactly(others_transaction)
+      expect(Budget::FilingRule.all).to contain_exactly(others_rule)
+      expect(others_transaction.reload.filing_rule_id).to eq(others_rule.id)
       expect(Budget::SpendLink.count).to eq(1)
       expect(Budget::Envelope.exists?(others.envelope_id)).to be(true)
     end

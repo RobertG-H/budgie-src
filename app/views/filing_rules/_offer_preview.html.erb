@@ -1,0 +1,6 @@
+<%# locals: (offer:) %>
+<%# What making the rule would do, which depends on its text: it says so when a Filing rule with that text exists, which is updated in place and not made again. %>
+<% existing = offer.existing_rule %>
+<% if existing %>
+  <p class="font-medium">Updates the Filing rule for '<%= existing.text %>', which <%= existing.outcome == "ignore" ? "ignores these" : "files these as #{existing.outcome_label}" %> now.</p>
+<% end %>

@@ -537,6 +537,54 @@ RSpec.describe Budget::Envelope, type: :model do
 
       expect(envelope.destroy).to be_truthy
     end
+
+    it "takes its Filing rules with it, since an envelope with no records has nothing for them to file into, and leaves the others" do
+      envelope = create(:budget_envelope)
+      create(:budget_filing_rule, budget: envelope.budget, envelope: envelope, text: "loblaws")
+      create(:budget_filing_rule, budget: envelope.budget, envelope: envelope, text: "costco")
+      other = create(:budget_filing_rule, budget: envelope.budget, text: "shell")
+      ignore = create(:budget_filing_rule, :ignore, budget: envelope.budget, text: "payment thank you")
+
+      expect { envelope.destroy! }.to change(Budget::FilingRule, :count).by(-2)
+
+      expect(Budget::FilingRule.all).to contain_exactly(other, ignore)
+    end
+
+    it "leaves the bank transactions its rules filed as they are, with no rule to say which one did it" do
+      envelope = create(:budget_envelope)
+      rule = create(:budget_filing_rule, budget: envelope.budget, envelope: envelope, text: "loblaws")
+      bank_transaction = create(:budget_bank_transaction, :ignored, account: create(:budget_account, budget: envelope.budget))
+      bank_transaction.update_columns(filing_rule_id: rule.id)
+
+      envelope.destroy!
+
+      expect(bank_transaction.reload).to be_ignored
+      expect(bank_transaction.filing_rule_id).to be_nil
+    end
+
+    it "keeps its Filing rules when it's refused for having records" do
+      assignment = create(:budget_assignment)
+      rule = create(:budget_filing_rule, budget: assignment.envelope.budget, envelope: assignment.envelope)
+
+      expect(assignment.envelope.destroy).to be(false)
+
+      expect(Budget::FilingRule.exists?(rule.id)).to be(true)
+    end
+
+    it "doesn't have archiving blocked by its Filing rules, which go inactive and come back on unarchive" do
+      envelope = create(:budget_envelope)
+      rule = create(:budget_filing_rule, budget: envelope.budget, envelope: envelope)
+
+      envelope.archive!
+
+      expect(rule.reload).to be_inactive
+      expect(Budget::FilingRule.active).to be_empty
+
+      envelope.unarchive
+
+      expect(rule.reload).not_to be_inactive
+      expect(Budget::FilingRule.active).to contain_exactly(rule)
+    end
   end
 
   describe "database constraints" do

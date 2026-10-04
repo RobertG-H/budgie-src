@@ -33,9 +33,11 @@ RSpec.describe Budget::Import, type: :model do
       expect(import.errors.full_messages).to eq([ "CSV format must be in the same budget as the account" ])
     end
 
-    it "counts what it skipped as 0 or more" do
+    it "counts what it skipped, and what Filing rules filed and ignored, as 0 or more" do
       expect(build(:budget_import, duplicates_skipped: -1)).not_to be_valid
       expect(build(:budget_import, zero_rows_skipped: -1)).not_to be_valid
+      expect(build(:budget_import, filed_by_rules: -1)).not_to be_valid
+      expect(build(:budget_import, ignored_by_rules: -1)).not_to be_valid
     end
   end
 
@@ -400,6 +402,143 @@ RSpec.describe Budget::Import, type: :model do
 
         expect(account.bank_transactions.count).to eq(1)
         expect(transaction.reload).to have_attributes(content_key: key, occurrence: occurrence)
+      end
+    end
+
+    # Filing rules act on the rows an Import creates, inside its one database transaction, straight away (ADR 0012).
+    describe "Filing rules" do
+      let(:budget) { account.budget }
+      let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+
+      def rule(text, *traits, **attributes)
+        create(:budget_filing_rule, *traits, **{ budget: budget, envelope: groceries, text: text }.merge(attributes))
+      end
+
+      it "file and ignore the rows they fit, with the rule noted on each, and say how many in the Import" do
+        loblaws = rule("loblaws")
+        payment = rule("payment thank you", :ignore)
+
+        import = import_of("2026-09-01,Paycheck,2800.00\n2026-09-02,LOBLAWS #1234,-82.45\n2026-09-03,PAYMENT THANK YOU,-250.00\n2026-09-04,Loblaws,-10.00\n")
+
+        expect(import).to have_attributes(filed_by_rules: 2, ignored_by_rules: 1)
+        expect(import.reload).to have_attributes(filed_by_rules: 2, ignored_by_rules: 1)
+        rows = account.bank_transactions.index_by(&:description)
+        expect(rows["Paycheck"]).to be_unfiled
+        expect(rows["LOBLAWS #1234"]).to be_filed.and have_attributes(filing_rule_id: loblaws.id)
+        expect(rows["Loblaws"]).to be_filed.and have_attributes(filing_rule_id: loblaws.id)
+        expect(rows["PAYMENT THANK YOU"]).to be_ignored.and have_attributes(filing_rule_id: payment.id)
+        expect(groceries.spends.pluck(:description, :date, :amount)).to contain_exactly(
+          [ "LOBLAWS #1234", Date.new(2026, 9, 2), BigDecimal("82.45") ], [ "Loblaws", Date.new(2026, 9, 4), 10 ]
+        )
+      end
+
+      it "still count every row as added, since they're bank transactions that were filed" do
+        rule("loblaws")
+
+        import = import_of("2026-09-02,Loblaws,-82.45\n2026-09-03,Rent,-1500.00\n")
+
+        expect(import.added_count).to eq(2)
+      end
+
+      it "use the most specific rule that fits a row" do
+        household = create(:budget_envelope, budget: budget, name: "Household")
+        rule("loblaws")
+        specific = rule("loblaws #1234", envelope: household)
+
+        import_of("2026-09-02,LOBLAWS #1234 TORONTO,-82.45\n")
+
+        expect(household.spends.sole.bank_transaction.filing_rule_id).to eq(specific.id)
+        expect(groceries.spends).to be_empty
+      end
+
+      it "fit a Deposit and a Refund to money in, and a rule's sign has to suit the row" do
+        rule("payroll", :deposit)
+        rule("loblaws", :refund)
+
+        import_of("2026-09-01,ACME PAYROLL,2800.00\n2026-09-02,LOBLAWS RETURN,18.75\n2026-09-03,PAYROLL ADJUSTMENT,-50.00\n")
+
+        expect(budget.deposits.sole).to have_attributes(description: "ACME PAYROLL", amount: 2800)
+        expect(groceries.refunds.sole).to have_attributes(description: "LOBLAWS RETURN", amount: BigDecimal("18.75"))
+        expect(account.bank_transactions.find_by!(description: "PAYROLL ADJUSTMENT")).to be_unfiled
+      end
+
+      it "do nothing for a rule on an archived envelope, until it's unarchived" do
+        rule("loblaws")
+        groceries.update!(archived_at: Time.current)
+
+        import = import_of("2026-09-02,Loblaws,-82.45\n")
+
+        expect(import).to have_attributes(filed_by_rules: 0, ignored_by_rules: 0)
+        expect(account.bank_transactions.sole).to be_unfiled
+      end
+
+      it "are only the budget's own" do
+        create(:budget_filing_rule, text: "loblaws")
+
+        import_of("2026-09-02,Loblaws,-82.45\n")
+
+        expect(account.bank_transactions.sole).to be_unfiled
+      end
+
+      it "don't touch the rows an Import skipped as duplicates, which are already there, filed or not" do
+        first = import_of("2026-09-02,Loblaws,-82.45\n")
+        expect(account.bank_transactions.sole).to be_unfiled
+
+        rule("loblaws")
+        second = import_of("2026-09-02,Loblaws,-82.45\n")
+
+        expect(second).to have_attributes(duplicates_skipped: 1, filed_by_rules: 0)
+        expect(account.bank_transactions.sole).to be_unfiled
+        expect(first.bank_transactions.sole).to be_unfiled
+      end
+
+      it "don't file a file that can't be read, which creates nothing" do
+        rule("loblaws")
+
+        expect { import_of("2026-09-02,Loblaws,not an amount\n") }.not_to change(Budget::Spend, :count)
+      end
+
+      it "are undone with the Import, which deletes what they filed like any other filed records" do
+        rule("loblaws")
+        rule("payment thank you", :ignore)
+        import = import_of("2026-09-02,Loblaws,-82.45\n2026-09-03,PAYMENT THANK YOU,-250.00\n")
+
+        expect { import.undo }
+          .to change(Budget::Spend, :count).by(-1).and change(Budget::SpendLink, :count).by(-1)
+          .and change(Budget::BankTransaction, :count).by(-2).and change(Budget::Import, :count).by(-1)
+      end
+
+      it "are applied again to the same file after an Undo, since undone rows no longer count as there" do
+        rule("loblaws")
+        file = "2026-09-02,Loblaws,-82.45\n"
+        import_of(file).undo
+
+        again = import_of(file)
+
+        expect(again).to have_attributes(duplicates_skipped: 0, filed_by_rules: 1)
+        expect(groceries.spends.count).to eq(1)
+      end
+
+      it "make the same number of queries for 10 rows as for 1,000, and for 2 rules as for 100" do
+        rule("alpha")
+        rule("beta", :ignore)
+        file_of = ->(count) { (1..count).map { |n| "2026-09-#{format("%02d", (n % 28) + 1)},#{n.odd? ? "alpha" : "beta"} #{n},-#{n}.25\n" }.join }
+        warm_up, small_account, large_account, many_rules_account = Array.new(4) { create(:budget_account, budget: budget) }
+        import_of(file_of.(4), account: warm_up)
+
+        few = count_queries { import_of(file_of.(10), account: small_account) }
+        many = count_queries { import_of(file_of.(1000), account: large_account) }
+
+        # 98 more rules, half of them ignoring, and a row for each, so that every one of the 100 rules does something.
+        texts = Array.new(98) { |n| "gamma #{format("%03d", n)}" }
+        texts.each_with_index { |text, n| n.even? ? rule(text) : rule(text, :ignore) }
+        gamma = texts.map { |text| "2026-09-01,#{text} x,-1.25\n" }.join
+        with_many_rules = count_queries { import_of(gamma, account: many_rules_account) }
+
+        expect(many).to eq(few)
+        expect(with_many_rules).to eq(few)
+        expect(large_account.bank_transactions.where.not(filing_rule_id: nil).count).to eq(1000)
+        expect(many_rules_account.bank_transactions.where.not(filing_rule_id: nil).distinct.count(:filing_rule_id)).to eq(98)
       end
     end
 

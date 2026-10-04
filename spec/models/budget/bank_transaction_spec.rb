@@ -321,6 +321,80 @@ RSpec.describe Budget::BankTransaction, type: :model do
     end
   end
 
+  # Which Filing rule filed or ignored it is only ever read while it's filed or ignored: a person's filing writes none, un-filing and
+  # un-ignoring clear it, and nothing about it makes a rule act again.
+  describe "the Filing rule that filed or ignored it" do
+    let(:transaction) { create(:budget_bank_transaction) }
+    let(:rule) { create(:budget_filing_rule, :ignore, budget: transaction.account.budget) }
+
+    it "is the rule while it's filed, or ignored, and nothing otherwise" do
+      expect(transaction.filed_by_rule).to be_nil
+
+      transaction.update_columns(filing_rule_id: rule.id)
+      expect(transaction.reload.filed_by_rule).to be_nil
+
+      create(:budget_spend_link, bank_transaction: transaction)
+      expect(transaction.reload.filed_by_rule).to eq(rule)
+
+      transaction.spend_links.sole.spend.destroy!
+      expect(transaction.reload.filed_by_rule).to be_nil
+
+      transaction.update_columns(ignored_at: Time.current)
+      expect(transaction.reload.filed_by_rule).to eq(rule)
+    end
+
+    it "goes stale but inert when its last record is deleted by hand" do
+      filed = create(:budget_bank_transaction, :filed)
+      filed.update_columns(filing_rule_id: rule.id)
+
+      filed.spend_links.sole.spend.destroy!
+
+      expect(filed.reload).to be_unfiled
+      expect(filed.filing_rule_id).to eq(rule.id)
+      expect(filed.filed_by_rule).to be_nil
+    end
+
+    it "is cleared when it's un-filed, which doesn't file it again" do
+      filed = create(:budget_bank_transaction, :filed)
+      filed.update_columns(filing_rule_id: rule.id)
+
+      filed.unfile
+
+      expect(filed.reload.filing_rule_id).to be_nil
+      expect(filed).to be_unfiled
+      expect(Budget::Spend.count).to eq(0)
+    end
+
+    it "is cleared when it's un-ignored, which doesn't ignore it again" do
+      ignored = create(:budget_bank_transaction, :ignored)
+      ignored.update_columns(filing_rule_id: rule.id)
+
+      ignored.unignore
+
+      expect(ignored.reload.filing_rule_id).to be_nil
+      expect(ignored).to be_unfiled
+    end
+
+    it "is none when a person ignores it, over a value that went stale" do
+      transaction.update_columns(filing_rule_id: rule.id)
+
+      transaction.ignore
+
+      expect(transaction.reload.filing_rule_id).to be_nil
+      expect(transaction).to be_ignored
+    end
+
+    it "is left with its rule's deletion as none, and it's still filed" do
+      filed = create(:budget_bank_transaction, :filed)
+      filed.update_columns(filing_rule_id: rule.id)
+
+      rule.destroy!
+
+      expect(filed.reload.filing_rule_id).to be_nil
+      expect(filed).to be_filed
+    end
+  end
+
   describe "what it was filed as" do
     let(:transaction) { create(:budget_bank_transaction, amount: -100) }
 

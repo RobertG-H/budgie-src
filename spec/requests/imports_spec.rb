@@ -235,6 +235,28 @@ RSpec.describe "Imports", type: :request do
       expect(visible_text).to include("Rows of 0 skipped 1")
     end
 
+    it "says how many bank transactions Filing rules filed and ignored, which is none when there are no rules" do
+      get import_path(import)
+
+      expect(visible_text).to include("Filed by Filing rules 0 bank transactions", "Ignored by Filing rules 0 bank transactions")
+    end
+
+    it "says how many Filing rules filed and ignored, as the Import did them, whatever has been done to them since" do
+      groceries = create(:budget_envelope, budget: budget, name: "Groceries")
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "hydro")
+      create(:budget_filing_rule, :ignore, budget: budget, text: "coffee shop")
+
+      get import_path(import)
+
+      expect(visible_text).to include("Filed by Filing rules 2 bank transactions", "Ignored by Filing rules 1 bank transaction")
+
+      account.bank_transactions.find_by!(description: "Loblaws").unfile
+      get import_path(import)
+
+      expect(visible_text).to include("Filed by Filing rules 2 bank transactions")
+    end
+
     it "shows the first row as it was read, with its date spelled out and which way the money went, so a wrong sign or a swapped day and month is seen" do
       get import_path(import)
 

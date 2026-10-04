@@ -3,9 +3,11 @@
 <%# - unfiled: the whole row opens the filing form, which comes back to the page the list is on (`from`) %>
 <%# - filed: the records it was filed as, which are ordinary and open where they're edited, a flag when they no longer add up to it, and Un-file %>
 <%# - ignored: Un-ignore %>
+<%# A filed or ignored one says which Filing rule did it, when one did and not a person: the rule's text and what it sets. Preload the rule and its envelope too. %>
 <%# The state is said in a word, so it isn't only in what's offered. A list of nothing but unfiled ones, such as the Unfiled list, leaves it out with `show_state: false`. Preload the links and records of every one, so a list runs the same number of queries however long it is. %>
 <% state = bank_transaction.state %>
 <% records = bank_transaction.filed_records %>
+<% rule = bank_transaction.filed_by_rule %>
 <% action_class = "btn btn-ghost btn-sm -ml-3" %>
 
 <%= render "components/record_row", href: (new_bank_transaction_filing_path(bank_transaction, from: from) if state == :unfiled),
@@ -25,6 +27,8 @@
       <% end %>
     </span>
 
+    <%= render "bank_transactions/filing_rule", rule: rule if rule %>
+
     <% unless bank_transaction.adds_up? %>
       <span class="mt-1 flex flex-wrap items-center gap-2">
         <span class="badge badge-warning badge-sm">Doesn't add up</span>
@@ -37,6 +41,7 @@
             form: { class: "inline", data: { turbo_confirm: "Un-file this bank transaction? This deletes the records it was filed as." } }, class: action_class %>
     </span>
   <% elsif state == :ignored %>
+    <%= render "bank_transactions/filing_rule", rule: rule if rule %>
     <span class="mt-1 block">
       <%= button_to "Un-ignore", bank_transaction_ignore_path(bank_transaction), method: :delete, params: { from: from }.compact,
             form: { class: "inline" }, class: action_class %>

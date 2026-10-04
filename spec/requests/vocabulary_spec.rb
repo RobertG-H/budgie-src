@@ -155,6 +155,45 @@ RSpec.describe "The words on the pages", type: :request do
         expect(visible_text).not_to match(retired_terms)
       end
 
+      it "says Filing rule, and what a rule did, in words: on the filing form with the box and its message, on the summary and on an Account's page" do
+        budget_groceries = groceries
+        create(:budget_filing_rule, budget: budget, envelope: budget_groceries, text: "loblaws")
+        create(:budget_filing_rule, :ignore, budget: budget, text: "hydro")
+        hydro = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
+        Budget::FilingRule::Applier.new(budget).apply([ hydro.reload ])
+
+        get new_bank_transaction_filing_path(loblaws_row, from: "account")
+
+        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files these as Spend from Groceries now.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        get account_path(account)
+
+        expect(visible_text).to include("Filing rule: hydro → Ignore")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        get import_path(import)
+
+        expect(visible_text).to include("Filed by Filing rules", "Ignored by Filing rules")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(response.body).not_to match(/filed_by_rules|ignored_by_rules/)
+      end
+
+      it "says what's wrong with a rule in the same words, when it's refused with a filing or an ignoring" do
+        post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "lo" } } }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("Text is too short (minimum is 3 characters)")
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "costco" } } }
+
+        expect(visible_text).to include("Text must be part of the bank transaction's description, so that the rule fits it")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
       it "says what a filed record came from, on its edit page, and the confirmation for un-filing, in the same words" do
         post bank_transaction_filing_path(loblaws_row), params: file_params
         spend = loblaws_row.spend_links.sole.spend

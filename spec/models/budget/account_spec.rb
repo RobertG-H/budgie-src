@@ -116,5 +116,25 @@ RSpec.describe Budget::Account, type: :model do
 
       expect { import.account.destroy! }.to change(Budget::Account, :count).by(-1).and change(Budget::Import, :count).by(-1)
     end
+
+    it "takes the Filing rules pinned to it with it, when it has no bank transactions, and leaves the ones for any Account" do
+      account = create(:budget_account)
+      pinned = create(:budget_filing_rule, :ignore, budget: account.budget, account: account, text: "payment thank you")
+      anywhere = create(:budget_filing_rule, :ignore, budget: account.budget, text: "interest")
+
+      expect { account.destroy! }.to change(Budget::FilingRule, :count).by(-1)
+
+      expect(Budget::FilingRule.exists?(pinned.id)).to be(false)
+      expect(Budget::FilingRule.exists?(anywhere.id)).to be(true)
+    end
+
+    it "keeps the Filing rules pinned to it when it's refused for having bank transactions" do
+      transaction = create(:budget_bank_transaction)
+      rule = create(:budget_filing_rule, :ignore, budget: transaction.account.budget, account: transaction.account)
+
+      expect(transaction.account.destroy).to be(false)
+
+      expect(Budget::FilingRule.exists?(rule.id)).to be(true)
+    end
   end
 end
