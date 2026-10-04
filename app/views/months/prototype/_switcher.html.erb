@@ -1,0 +1,13 @@
+<%# PROTOTYPE (wayfinder ticket #90): the floating bar that flips between the variants. Development only. Left and right arrow keys work too. %>
+<% keys = %w[ A B C ] %>
+<% names = { "A" => "Bar under the figure", "B" => "Bar in its own column", "C" => "Bar behind the figure" } %>
+<% current = prototype_variant || "A" %>
+<% prev_key = keys[(keys.index(current) - 1) % keys.size] %>
+<% next_key = keys[(keys.index(current) + 1) % keys.size] %>
+<div data-controller="prototype-switcher" class="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+  <div class="flex items-center gap-2 rounded-full border border-base-300 bg-neutral px-2 py-1 text-neutral-content">
+    <%= link_to "←", url_for(request.query_parameters.merge(variant: prev_key)), class: "btn btn-circle btn-sm btn-ghost", aria: { label: "Previous variant" }, data: { prototype_switcher_target: "prev" } %>
+    <span class="px-1 text-sm"><strong><%= current %></strong> <%= names[current] %></span>
+    <%= link_to "→", url_for(request.query_parameters.merge(variant: next_key)), class: "btn btn-circle btn-sm btn-ghost", aria: { label: "Next variant" }, data: { prototype_switcher_target: "next" } %>
+  </div>
+</div>

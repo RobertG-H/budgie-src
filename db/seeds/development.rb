@@ -138,3 +138,18 @@ if chequing.imports.none?
 
   Budget::Filing.new(budget).file([ hydro_entry ]) or raise "The sample wasn't filed: #{(hydro_entry.errors.full_messages + hydro_entry.drafts.flat_map { |draft| draft.errors.full_messages }).to_sentence}"
 end
+
+# PROTOTYPE (wayfinder ticket #90): envelopes that put the month view's Available bar through its edge cases this month.
+# Throwaway: lives on the prototype/month-table-available-bar branch only.
+[
+  # name, assigned, spent
+  [ "Gifts", 200, 160 ],          # 20% left: a little
+  [ "Phone", 40, 30 ],            # exactly 25% left: the threshold
+  [ "Coffee", 5, 4.5 ],           # tiny: $0.50 left, 10%
+  [ "Savings goal", 500, 0 ],     # nothing spent: 100%
+  [ "Vacation", 0, 0 ]            # nothing to spend and no Spends: no bar
+].each do |name, assigned, spent|
+  envelope = budget.envelopes.find_or_create_by!(name: name) { |new_envelope| new_envelope.starting_balance = 0 }
+  envelope.assignments.find_or_create_by!(month: this_month) { |assignment| assignment.amount = assigned } if assigned.positive?
+  envelope.spends.find_or_create_by!(description: "#{name} spend", date: this_month + 1) { |spend| spend.amount = spent } if spent.positive?
+end

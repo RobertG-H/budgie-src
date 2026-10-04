@@ -1,0 +1,7 @@
+<%# locals: (line:, month:, budget:, origin_page:) %>
+<%# PROTOTYPE: the Assigned cell's content, the same in every variant. %>
+<% if line.envelope.archived? %>
+  <%= render "components/money", amount: line.assigned, budget: budget %>
+<% else %>
+  <%= render "assignments/cell", line: line, month: month, from: origin_page %>
+<% end %>

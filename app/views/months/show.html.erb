@@ -34,7 +34,11 @@
 </div>
 
 <div class="mt-8">
-  <% if @month.envelopes.any? %>
+  <% if @month.envelopes.any? && prototype_variant %>
+    <%# PROTOTYPE (wayfinder ticket #90): ?variant=A|B|C, development only. %>
+    <%= render "months/prototype/variant_#{prototype_variant.downcase}", month: @month, budget: budget, origin_page: origin_page %>
+    <%= render "months/prototype/switcher" %>
+  <% elsif @month.envelopes.any? %>
     <div class="overflow-x-auto">
       <table class="table">
         <thead>

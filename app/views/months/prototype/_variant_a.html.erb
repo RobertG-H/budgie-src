@@ -1,0 +1,67 @@
+<%# locals: (month:, budget:, origin_page:) %>
+<%# PROTOTYPE A, "Bar under the figure" (chosen, round 2): the bar sits under Available's figure and is the only level cue, so no word; an
+    Overspent envelope's full red bar carries the existing badge on a line under it, so the figures stay aligned. The toggle is a button
+    above the table; its hint is two stacked texts, one hidden with `invisible`, so the row's height is the same either way and the table
+    doesn't move. On a phone the breakdown is a second full-width row of labelled mini-figures, there only while details are on. %>
+<div data-controller="month-details">
+  <div class="mb-2 flex items-start justify-between gap-4">
+    <div class="grid text-sm text-base-content/70">
+      <p class="col-start-1 row-start-1 in-data-[details=on]:invisible">Carried over, Refunded and Reallocated are hidden, so the figures below don't add up on their own.</p>
+      <p class="invisible col-start-1 row-start-1 in-data-[details=on]:visible">Carried over, Refunded and Reallocated are shown, so Available is the sum of the figures below.</p>
+    </div>
+    <button type="button" class="btn btn-sm shrink-0 aria-pressed:btn-active" aria-pressed="false" data-month-details-target="button" data-action="month-details#toggle">
+      <span class="grid">
+        <span class="col-start-1 row-start-1 in-data-[details=on]:invisible">Show details</span>
+        <span class="invisible col-start-1 row-start-1 in-data-[details=on]:visible">Hide details</span>
+      </span>
+    </button>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Envelope</th>
+          <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Carried over</th>
+          <th scope="col" class="text-right">Assigned</th>
+          <th scope="col" class="text-right">Spent</th>
+          <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Refunded</th>
+          <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Reallocated</th>
+          <th scope="col" class="text-right">Available</th>
+        </tr>
+      </thead>
+      <% month.envelopes.each do |line| %>
+        <% level = available_level(line) %>
+        <tbody>
+          <tr id="<%= dom_id(line.envelope) %>" class="in-data-[details=on]:max-sm:border-b-0">
+            <td class="align-top">
+              <%= link_to line.envelope.name, month_envelope_path(month, line.envelope), class: "link" %>
+              <% if line.envelope.archived? %><%= render "components/archived_badge" %><% end %>
+            </td>
+            <td class="hidden text-right tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
+            <td class="text-right tabular-nums"><%= render "months/prototype/assigned_cell", line: line, month: month, budget: budget, origin_page: origin_page %></td>
+            <td class="text-right tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
+            <td class="hidden text-right tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.refunded, budget: budget %></td>
+            <td class="hidden text-right tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.reallocated, budget: budget %></td>
+            <td class="text-right align-top tabular-nums">
+              <%= render "components/money", amount: line.available, budget: budget %>
+              <% unless level == :none %>
+                <progress class="progress <%= level_bar_class(level) %> ml-auto mt-1 block w-16" value="<%= available_percent(line) %>" max="100" aria-hidden="true"></progress>
+              <% end %>
+              <% if level == :overspent %><span class="badge badge-error badge-sm mt-1">Overspent</span><% end %>
+            </td>
+          </tr>
+          <tr class="hidden in-data-[details=on]:max-sm:table-row">
+            <td colspan="7" class="pt-0">
+              <dl class="grid grid-cols-3 gap-2 text-xs">
+                <div><dt class="text-base-content/70">Carried over</dt><dd class="tabular-nums"><%= render "components/money", amount: line.carried_over, budget: budget %></dd></div>
+                <div><dt class="text-base-content/70">Refunded</dt><dd class="tabular-nums"><%= render "components/money", amount: line.refunded, budget: budget %></dd></div>
+                <div><dt class="text-base-content/70">Reallocated</dt><dd class="tabular-nums"><%= render "components/money", amount: line.reallocated, budget: budget %></dd></div>
+              </dl>
+            </td>
+          </tr>
+        </tbody>
+      <% end %>
+    </table>
+  </div>
+</div>
