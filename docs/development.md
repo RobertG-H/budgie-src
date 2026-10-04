@@ -65,7 +65,7 @@ your budget's currency, and then you land on the month view.
 docker compose run --rm web bin/rails db:seed
 ```
 
-This creates a development user with a budget, a few envelopes and two Paycheck Deposits. It's what [`/dev/sign_in`](#working-on-the-ui)
+This creates a development user with a budget, a few envelopes, two Paycheck Deposits and an Assigned amount for most envelopes in each of those two months. It's what [`/dev/sign_in`](#working-on-the-ui)
 signs in as, and it only ever runs in development.
 
 ## Everyday commands

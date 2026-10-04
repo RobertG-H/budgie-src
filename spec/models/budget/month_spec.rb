@@ -189,6 +189,19 @@ RSpec.describe Budget::Month, type: :model do
       expect(month_of(january).envelopes.last).to have_attributes(envelope: rent, assigned: 0, available: 0)
     end
 
+    it "is over-assigned only when Ready to Assign is below zero, including the cent over, and carries on into the months after" do
+      deposit 100, january
+      expect(month_of(january).ready_to_assign).not_to be_over_assigned
+
+      assign groceries, 100, january
+      expect(month_of(january).ready_to_assign).to have_attributes(amount: 0)
+      expect(month_of(january).ready_to_assign).not_to be_over_assigned
+
+      Budget::Assignment.find_by!(envelope: groceries, month: january).update!(amount: "100.01")
+      expect(month_of(january).ready_to_assign).to be_over_assigned
+      expect(month_of(february).ready_to_assign).to be_over_assigned
+    end
+
     it "assigns a Deposit marked for next month in next month, not in the month of its date" do
       september, october = Date.new(2026, 9, 1), Date.new(2026, 10, 1)
       deposit 1500, Date.new(2026, 9, 15), month: october

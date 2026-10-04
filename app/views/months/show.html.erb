@@ -2,6 +2,8 @@
 <%# Saving an Assigned amount comes back here, to the same page, and Turbo refreshes it in place: it morphs the page into the new one and keeps the scroll position, so every figure updates and the person stays where they were. %>
 <% turbo_refreshes_with method: :morph, scroll: :preserve %>
 <% budget = @month.budget %>
+<%# The current month is the home page as well as /months/YYYY-MM, and an amount edited here goes back to whichever of them it was opened from. See ReturnsToOrigin. %>
+<% origin_page = current_page?(root_path) ? "home" : "month" %>
 <% ready_to_assign = @month.ready_to_assign %>
 <%# Amounts are shown through the money partial wherever they are, so a negative one is signed and red here too. %>
 <% ready_to_assign_description = safe_join([
@@ -25,7 +27,7 @@
   <%= render "components/stat_card", title: "Ready to Assign",
         value: render("components/money", amount: ready_to_assign.amount, budget: budget),
         description: ready_to_assign_description, href: month_deposits_path(@month),
-        error: ("More was assigned than deposited." if ready_to_assign.amount.negative?) %>
+        error: ("More was assigned than deposited." if ready_to_assign.over_assigned?) %>
 </div>
 
 <div class="mt-8">
@@ -45,7 +47,7 @@
             <tr id="<%= dom_id(line.envelope) %>">
               <td><%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %></td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
-              <td class="text-right tabular-nums"><%= render "assignments/cell", line: line, month: @month %></td>
+              <td class="text-right tabular-nums"><%= render "assignments/cell", line: line, month: @month, from: origin_page %></td>
               <td class="text-right tabular-nums"><%= render "components/money", amount: line.available, budget: budget, overspent: line.overspent? %></td>
             </tr>
           <% end %>

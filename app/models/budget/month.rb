@@ -16,7 +16,16 @@ class Budget::Month
   # Money not yet assigned to an envelope: every Deposit for this month and the months before it, less everything
   # assigned in them. `carried_over` is what was left at the end of last month, `deposited` is what came in this
   # month and `assigned` is what went to envelopes this month, all of them.
-  ReadyToAssign = Data.define(:amount, :carried_over, :deposited, :assigned)
+  ReadyToAssign = Data.define(:amount, :carried_over, :deposited, :assigned) do
+    # Over-assigned: more has been assigned than there is to assign, so Ready to Assign is below zero.
+    def over_assigned?
+      amount.negative?
+    end
+  end
+
+  # What's assigned to one envelope in the months before this one, and in this one.
+  AssignedTotals = Data.define(:before, :in_month)
+  NOTHING_ASSIGNED = AssignedTotals.new(before: ZERO, in_month: ZERO)
 
   # One envelope's figures for this month: what it carries over (its Starting balance and everything assigned to it
   # in the months before), what's assigned to it this month, and the two together, which is what's Available.
@@ -70,8 +79,8 @@ class Budget::Month
   def ready_to_assign
     @ready_to_assign ||= begin
       deposited_before, deposited = deposit_totals
-      assigned_before = assignment_totals.values.sum(ZERO) { |before, _| before }
-      assigned = assignment_totals.values.sum(ZERO) { |_, in_month| in_month }
+      assigned_before = assignment_totals.values.sum(ZERO, &:before)
+      assigned = assignment_totals.values.sum(ZERO, &:in_month)
       carried_over = deposited_before - assigned_before
 
       ReadyToAssign.new(amount: carried_over + deposited - assigned, carried_over: carried_over, deposited: deposited, assigned: assigned)
@@ -81,10 +90,10 @@ class Budget::Month
   # The budget's envelopes, alphabetically.
   def envelopes
     @envelopes ||= budget.envelopes.alphabetical.map do |envelope|
-      assigned_before, assigned = assignment_totals.fetch(envelope.id) { [ ZERO, ZERO ] }
-      carried_over = envelope.starting_balance + assigned_before
+      totals = assignment_totals.fetch(envelope.id, NOTHING_ASSIGNED)
+      carried_over = envelope.starting_balance + totals.before
 
-      EnvelopeLine.new(envelope: envelope, carried_over: carried_over, assigned: assigned, available: carried_over + assigned)
+      EnvelopeLine.new(envelope: envelope, carried_over: carried_over, assigned: totals.in_month, available: carried_over + totals.in_month)
     end
   end
 
@@ -100,13 +109,13 @@ class Budget::Month
       budget.deposits.where(month: ..date).pick(sum_where("month < ?"), sum_where("month = ?"))
     end
 
-    # What's assigned to each envelope in the months before this one, and in this one, from a single query:
-    # { envelope id => [ before, in the month ] }. An envelope with nothing assigned up to this month isn't in it.
-    # The budget's own totals are added up from these, so they always agree with its envelopes'.
+    # What's assigned to each envelope, from a single query: { envelope id => AssignedTotals }. An envelope with
+    # nothing assigned up to this month isn't in it. The budget's own totals are added up from these, so they always
+    # agree with its envelopes'.
     def assignment_totals
       @assignment_totals ||= budget.assignments.where(month: ..date).group(:envelope_id)
         .pluck(:envelope_id, sum_where("month < ?"), sum_where("month = ?"))
-        .to_h { |envelope_id, before, in_month| [ envelope_id, [ before, in_month ] ] }
+        .to_h { |envelope_id, before, in_month| [ envelope_id, AssignedTotals.new(before: before, in_month: in_month) ] }
     end
 
     # One column of a query: the total amount where `condition` holds, given this month. Only for the literal

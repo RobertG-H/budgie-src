@@ -73,6 +73,48 @@ RSpec.describe Budget::Assignment, type: :model do
     end
   end
 
+  describe "#assign" do
+    it "saves a positive amount, and is true" do
+      assignment = build(:budget_assignment, amount: nil)
+
+      expect(assignment.assign("250")).to be(true)
+      expect(assignment).to be_persisted
+      expect(assignment.reload.amount).to eq(250)
+    end
+
+    it "changes the amount of an Assignment that's saved already, and is true" do
+      assignment = create(:budget_assignment, amount: 100)
+
+      expect(assignment.assign("75.50")).to be(true)
+      expect(assignment.reload.amount).to eq(BigDecimal("75.50"))
+    end
+
+    [ "", "0", "0.00" ].each do |nothing|
+      it "deletes a saved Assignment for #{nothing.inspect}, which is to assign nothing, and is true" do
+        assignment = create(:budget_assignment, amount: 100)
+
+        expect(assignment.assign(nothing)).to be(true)
+        expect(assignment).to be_destroyed
+        expect(Budget::Assignment.exists?(assignment.id)).to be(false)
+      end
+
+      it "has nothing to delete for #{nothing.inspect} on one that was never saved, which is true too" do
+        assignment = build(:budget_assignment)
+
+        expect(assignment.assign(nothing)).to be(true)
+        expect(assignment).not_to be_persisted
+      end
+    end
+
+    it "is false for an amount that's refused, with the reasons in errors, and keeps what was saved" do
+      assignment = create(:budget_assignment, amount: 100)
+
+      expect(assignment.assign("-5")).to be(false)
+      expect(assignment.errors.full_messages).to eq([ "Assigned must be greater than 0" ])
+      expect(assignment.reload.amount).to eq(100)
+    end
+  end
+
   describe "one per envelope and month" do
     let!(:existing) { create(:budget_assignment, month: Date.new(2026, 9, 1)) }
 

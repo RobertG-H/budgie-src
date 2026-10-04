@@ -73,7 +73,7 @@ shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spa
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
 page scroll at 375px: tables are the one place content can outgrow a phone, so they scroll in their own
 `overflow-x-auto` wrapper rather than the page, and their cell padding halves below `sm:` so three money
-columns fit without that. Tap targets stay comfortable at 375px (daisyUI's default button and field heights).
+columns fit without that. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row or a row of links, as the Assigned cell's and the month links' do).
 
 ## Money and numbers
 
@@ -114,8 +114,8 @@ they do the job, instead of a JS-built equivalent. No new JS libraries without a
 
 An amount edited in place, such as an envelope's Assigned on the month view (`app/views/assignments/`), is a Turbo
 Frame that swaps a button showing the amount for an input with Save and Cancel. The button is a `btn btn-sm
-font-normal` chip, so it reads as tappable at rest, nudged with `-mr-2 px-2` so its figure still lines up with the
-other amounts in its column. The input is `components/field` with `hide_label`. Its form submits to the whole page
+text-base font-normal` chip, so it reads as tappable at rest and its figure is the size of the column's others, nudged
+with `-mr-2 px-2` so it still lines up with them. The input is `components/field` with `hide_label`. Its form submits to the whole page
 (`data-turbo-frame="_top"`) so that saving refreshes every figure on the page with a morph that keeps the scroll
 position, and an amount that's refused comes back as a Turbo Stream into the frame.
 

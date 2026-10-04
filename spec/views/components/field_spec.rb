@@ -41,18 +41,12 @@ RSpec.describe "components/_field", type: :view do
       assert_select "p#envelope_name_error", text: "Name can't be blank"
     end
 
-    it "hides a checkbox's label, and a group of radio buttons' legend, too" do
-      render_field control: :checkbox, hide_label: true
-      assert_select "input.checkbox + label.sr-only", text: "Name"
+    it "hides a select's and a textarea's label too" do
+      render_field control: :select, hide_label: true
+      assert_select "label.sr-only[for=envelope_name]", text: "Name"
 
-      render inline: <<~ERB
-        <%= form_with model: Budget::Deposit.new, url: "#" do |form| %>
-          <%= render "components/field", form: form, attribute: :month, control: :radios, hide_label: true do |field| %>
-            <%= form.radio_button :month, "2026-09-01", **field %>
-          <% end %>
-        <% end %>
-      ERB
-      assert_select "fieldset > legend.sr-only", text: "Ready to Assign in"
+      render_field control: :textarea, hide_label: true
+      assert_select "label.sr-only[for=envelope_name]", text: "Name"
     end
 
     it "shows the label as usual when it isn't asked to hide it" do

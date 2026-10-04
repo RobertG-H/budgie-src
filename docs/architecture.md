@@ -136,7 +136,9 @@ worked into the same calculator: an envelope's Available is its Starting balance
 month, and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
 number of grouped queries. Changing an earlier month's Assigned therefore changes every later month. It's set in place on
 the month view: each envelope's Assigned cell is a Turbo Frame that swaps between the amount and an input, and saving
-refreshes the month view in place with Turbo's morphing, keeping the scroll position.
+refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's
+already at, and the current month is at `/` as well as `/months/YYYY-MM`, so the home page is a page name of its own, and
+saving goes back to whichever one the form was opened from.
 
 ### Frontend
 

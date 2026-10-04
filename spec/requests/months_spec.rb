@@ -206,6 +206,21 @@ RSpec.describe "Months", type: :request do
       assert_select "tbody tr#envelope_#{rent.id} td:nth-child(3) turbo-frame#assigned_envelope_#{rent.id}"
     end
 
+    it "tell the input which page it was opened from: the home page, at /, and the month view at its own address" do
+      travel_to Time.utc(2026, 9, 15, 16)
+
+      get root_path
+      assert_select "tbody form[method=get] input[type=hidden][name=from][value=home]", count: 2
+      assert_select "tbody form[method=get] input[name=from][value=month]", count: 0
+
+      get month_path("2026-09")
+      assert_select "tbody form[method=get] input[type=hidden][name=from][value=month]", count: 2
+      assert_select "tbody form[method=get] input[name=from][value=home]", count: 0
+
+      get month_path("2026-08")
+      assert_select "tbody form[method=get] input[type=hidden][name=from][value=month]", count: 2
+    end
+
     it "keeps Assigned on a phone, where only Carried over is dropped" do
       get month_path("2026-02")
 

@@ -1,10 +1,13 @@
 <%# locals: (assignment:, envelope:, month:) %>
 <%# The input that swaps into an envelope's Assigned cell, with Save and Cancel. It submits to the whole page, not the cell's frame, so that saving refreshes every figure on the month view. An amount that's refused comes back as a Turbo Stream into the frame instead (edit.turbo_stream.erb). Cancel is a link, in the frame, to the cell as it was. %>
+<%# The ids are the envelope's own, so that more than one cell can be open on the month view at once. %>
 <%= form_with model: assignment, url: month_envelope_assignment_path(month, envelope), method: :patch,
-      data: { turbo_frame: "_top" }, class: "flex flex-wrap items-start justify-end gap-2" do |form| %>
+      namespace: dom_id(envelope), data: { turbo_frame: "_top" }, class: "flex flex-wrap items-start justify-end gap-2" do |form| %>
+  <%= render "origin_fields", month: month %>
+
   <div class="w-32 sm:w-40">
     <%= render "components/field", form: form, attribute: :amount, hide_label: true,
-          label: "Assigned to #{envelope.name} in #{month.name}",
+          label: assigned_to(envelope, month),
           error: assignment.errors.full_messages.to_sentence.presence do |field| %>
       <%= form.number_field :amount, step: 0.01, placeholder: "0.00", autofocus: true, **field %>
     <% end %>
@@ -12,6 +15,6 @@
 
   <div class="flex items-center gap-2">
     <%= form.submit "Save", class: "btn btn-primary btn-sm" %>
-    <%= link_to "Cancel", month_envelope_assignment_path(month, envelope), class: "btn btn-ghost btn-sm" %>
+    <%= link_to "Cancel", month_envelope_assignment_path(month, envelope, from: origin), class: "btn btn-ghost btn-sm" %>
   </div>
 <% end %>

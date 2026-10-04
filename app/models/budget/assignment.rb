@@ -10,12 +10,14 @@ class Budget::Assignment < ApplicationRecord
   validates :amount, money: { positive: true }
 
   # Saves `amount` as what's assigned. Blank or 0, which is to assign nothing, deletes this Assignment instead, since
-  # there's no Assignment of nothing. When the amount is refused nothing changes, and the reasons are in `errors`.
+  # there's no Assignment of nothing. It's true when that worked, and false when the amount is refused, in which case
+  # nothing changes and the reasons are in `errors`.
   def assign(amount)
     self.amount = amount
 
     if assigns_nothing?
       destroy if persisted?
+      true
     else
       save
     end
