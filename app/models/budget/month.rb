@@ -142,6 +142,13 @@ class Budget::Month
     date.strftime("%Y-%m")
   end
 
+  # There's no month before January of year 1: PostgreSQL has no year 0, so /months/0000-12 is a 404. Nothing is bounded after.
+  EARLIEST = Date.new(1, 1, 1)
+
+  def earliest?
+    date == EARLIEST
+  end
+
   def previous
     self.class.new(budget, date.prev_month)
   end

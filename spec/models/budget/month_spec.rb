@@ -1029,6 +1029,22 @@ RSpec.describe Budget::Month, type: :model do
       expect((1..600).inject(month) { |moved, _| moved.previous }.date).to eq(Date.new(1976, 9, 1))
       expect((1..600).inject(month) { |moved, _| moved.next }.date).to eq(Date.new(2076, 9, 1))
     end
+
+    it "is the earliest month only in January of year 1, since PostgreSQL has no year 0 and there is no month before it" do
+      expect(Budget::Month.new(budget, Date.new(1, 1, 15))).to be_earliest
+      expect(Budget::Month.new(budget, Date.new(1, 2, 1))).not_to be_earliest
+      expect(Budget::Month.new(budget, Date.new(2, 1, 1))).not_to be_earliest
+      expect(Budget::Month.new(budget, Date.new(2026, 1, 1))).not_to be_earliest
+    end
+
+    it "works out a month as far off as a date field goes, and the earliest there is" do
+      far = Budget::Month.from_param(budget, "275760-09")
+
+      expect(far.name).to eq("September 275760")
+      expect(far.to_param).to eq("275760-09")
+      expect(far.ready_to_assign).to have_attributes(amount: 0)
+      expect(Budget::Month.from_param(budget, "0001-01").ready_to_assign).to have_attributes(amount: 0)
+    end
   end
 
   describe "the current month" do

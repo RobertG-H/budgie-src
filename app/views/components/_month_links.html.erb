@@ -1,10 +1,46 @@
-<%# locals: (month:, path:) %>
-<%# Links to the months either side of `month`, named for them, and back to the current month when viewing another. `path` turns a month into the path of the same page for it, so the links stay on the page they're on. %>
-<%# The negative margin offsets the buttons' own padding, so the first and last names line up with the page's edges. %>
-<nav aria-label="Months" class="-mx-2 flex flex-wrap items-center justify-between gap-2">
-  <%= link_to month.previous.name, path.call(month.previous), rel: "prev", class: "btn btn-ghost btn-sm px-2" %>
-  <% unless month.current? %>
-    <%= link_to "This month", path.call(month.current), class: "btn btn-ghost btn-sm px-2" %>
+<%# locals: (month:, path:, picker: false) %>
+<%# The month being viewed, between the months either side of it, as one control: Previous, the month's name and Next joined as three small buttons, with This month beside them when viewing another. `path` turns a month into the path of the same page for it, so the links stay on the page they're on. %>
+<%# Below sm: Previous and Next are only a chevron, and from sm up they also name their month. Their accessible names always carry it. There's no month before January of year 1 (PostgreSQL has no year 0), so Previous is shown there, disabled, and not a link. Next is unbounded. %>
+<%# With `picker` (the month view only), the name opens a dialog of months (components/month_picker), through the modal controller and month-picker. Until the controller reveals the button, the name is plain text, so a page without JavaScript still has Previous, Next and This month. %>
+<% previous_month = month.previous unless month.earliest? %>
+<% next_month = month.next %>
+<%# The page's own path for a month that isn't one, with its YYYY-MM made a placeholder, which is how the picker builds the link to any month it shows. %>
+<% month_template = path.call(Budget::Month.new(month.budget, Date.new(1999, 12, 1))).sub("1999-12", "{month}") if picker %>
+<%= tag.div data: (picker ? { controller: "modal month-picker", action: "turbo:morph@document->month-picker#sync",
+      month_picker_year_value: month.date.year, month_picker_month_value: month.date.month,
+      month_picker_current_year_value: month.current.date.year, month_picker_current_month_value: month.current.date.month,
+      month_picker_href_value: month_template } : nil) do %>
+  <nav aria-label="Months" class="flex flex-wrap items-center gap-2">
+    <div class="join">
+      <% if previous_month %>
+        <%= link_to path.call(previous_month), rel: "prev", class: "btn btn-sm join-item max-sm:min-w-10", aria: { label: "Previous month, #{previous_month.name}" } do %>
+          <span aria-hidden="true">‹</span><span aria-hidden="true" class="hidden sm:inline"><%= previous_month.name %></span>
+        <% end %>
+      <% else %>
+        <button type="button" disabled aria-disabled="true" aria-label="No earlier month" class="btn btn-sm join-item max-sm:min-w-10"><span aria-hidden="true">‹</span></button>
+      <% end %>
+
+      <%# What the month is called, as text a person can't act on: it's all there is without the picker, and what's there until its controller connects. %>
+      <%= tag.span month.name, class: "btn btn-sm join-item pointer-events-none font-semibold", data: (picker ? { month_picker_target: "name" } : nil) %>
+      <% if picker %>
+        <button type="button" hidden aria-haspopup="dialog" aria-label="<%= month.name %>, choose a month" class="btn btn-sm join-item font-semibold"
+                data-month-picker-target="trigger" data-action="modal#open month-picker#open">
+          <%= month.name %>
+          <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+        </button>
+      <% end %>
+
+      <%= link_to path.call(next_month), rel: "next", class: "btn btn-sm join-item max-sm:min-w-10", aria: { label: "Next month, #{next_month.name}" } do %>
+        <span aria-hidden="true" class="hidden sm:inline"><%= next_month.name %></span><span aria-hidden="true">›</span>
+      <% end %>
+    </div>
+
+    <% unless month.current? %>
+      <%= link_to "This month", path.call(month.current), class: "btn btn-ghost btn-sm" %>
+    <% end %>
+  </nav>
+
+  <% if picker %>
+    <%= render "components/month_picker", month: month, path: path %>
   <% end %>
-  <%= link_to month.next.name, path.call(month.next), rel: "next", class: "btn btn-ghost btn-sm px-2" %>
-</nav>
+<% end %>

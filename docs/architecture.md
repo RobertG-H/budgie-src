@@ -117,7 +117,12 @@ envelopes' records first so the envelopes can follow.
 
 The home page is the month view: `/` is the current month and `/months/YYYY-MM` is any other. Everything
 hangs off a month — `/months/YYYY-MM/deposits` lists the Deposits behind Ready to Assign, and
-`/months/YYYY-MM/envelopes/:id` is an envelope's page for that month. The time zone is Eastern Time (US &
+`/months/YYYY-MM/envelopes/:id` is an envelope's page for that month. Months aren't bounded in either direction up to
+a date field's own limit (a year has four to six digits, up to 275760), except that there's no month before January of
+year 1, since PostgreSQL has no year 0, where Previous is disabled. Moving between them is one control, Previous, the
+month's name and Next, and on the month view the name opens a picker (a native dialog with a year stepper and a grid of
+the year's twelve months) so a far month is one step: it's progressively enhanced, so without JavaScript Previous, Next
+and This month still work. The time zone is Eastern Time (US &
 Canada) for everyone. Records store dates, not times, so it only decides what "today" is: which month `/`
 opens on, and what a date field starts as.
 

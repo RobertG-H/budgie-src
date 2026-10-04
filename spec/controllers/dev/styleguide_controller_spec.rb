@@ -25,13 +25,27 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         end
       end
 
-      it "shows month links for the current month and for another, which can go back to this month" do
+      it "shows month links for the current month, another, the earliest and with the picker" do
         with_development_routes { get :show }
 
-        assert_select "#month-links nav[aria-label=Months]", count: 2
-        assert_select "#month-links a[rel=prev]", count: 2
-        assert_select "#month-links a[rel=next]", count: 2
-        assert_select "#month-links a", text: "This month", count: 1
+        assert_select "#month-links nav[aria-label=Months]", count: 4
+        assert_select "#month-links a[rel=prev]", count: 3
+        assert_select "#month-links a[rel=next]", count: 4
+        assert_select "#month-links nav a", text: "This month", count: 3
+      end
+
+      it "shows Previous disabled, and not a link, for the earliest month" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links nav .join > button[disabled][aria-disabled=true]", count: 1
+      end
+
+      it "shows the month picker, with its twelve months, which is live" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links [data-controller='modal month-picker']", count: 1
+        assert_select "#month-links dialog.modal [data-month-picker-target=month]", count: 12
+        assert_select "#month-links dialog.modal a[data-month-picker-target=thisMonth]", text: "This month"
       end
 
       it "shows record rows with and without notes, each a link" do

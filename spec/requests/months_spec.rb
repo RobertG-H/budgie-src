@@ -51,7 +51,7 @@ RSpec.describe "Months", type: :request do
 
       get month_path("9999-12")
       expect(response).to have_http_status(:ok)
-      assert_select "nav[aria-label=Months] a[rel=next]", text: "January 10000"
+      assert_select "nav[aria-label=Months] a[rel=next]", text: /January 10000/
 
       click_next = css_select("nav[aria-label=Months] a[rel=next]").first["href"]
       get click_next
@@ -1135,8 +1135,8 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select "a.btn.btn-primary[href='#{new_spend_path(month: "2026-09", from: "month")}']", text: "New spend"
-      assert_select "div.gap-2 a.btn-primary", count: 1
-      expect(css_select("div.gap-2 a.btn").map { |action| action.text.strip }).to eq([ "New spend", "New deposit", "New envelope" ])
+      assert_select "div.flex.flex-wrap.items-center.gap-2 a.btn-primary", count: 1
+      expect(css_select("div.flex.flex-wrap.items-center.gap-2 > a.btn").map { |action| action.text.strip }).to eq([ "New spend", "New deposit", "New envelope" ])
       assert_select "a.btn[href='#{new_deposit_path(month: "2026-09", from: "month")}']", text: "New deposit"
       assert_select "a.btn[href='#{new_envelope_path(month: "2026-09", from: "month")}']", text: "New envelope"
     end
@@ -1157,24 +1157,107 @@ RSpec.describe "Months", type: :request do
     it "go to the months either side, and stay on the month view" do
       get month_path("2026-09")
 
-      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-08")}']", text: "August 2026"
-      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-10")}']", text: "October 2026"
+      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-08")}']", text: /August 2026/
+      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-10")}']", text: /October 2026/
     end
 
     it "offer This month only when viewing another month" do
       get month_path("2026-09")
-      assert_select "a", text: "This month", count: 0
+      assert_select "nav[aria-label=Months] a", text: "This month", count: 0
 
       get month_path("2027-03")
-      assert_select "a[href='#{month_path("2026-09")}']", text: "This month"
+      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-09")}']", text: "This month"
     end
 
     it "work in both directions, however far from today" do
       get month_path("1990-01")
-      assert_select "a[href='#{month_path("1989-12")}']", text: "December 1989"
+      assert_select "a[href='#{month_path("1989-12")}']", text: /December 1989/
 
       get month_path("2100-12")
-      assert_select "a[href='#{month_path("2101-01")}']", text: "January 2101"
+      assert_select "a[href='#{month_path("2101-01")}']", text: /January 2101/
+    end
+
+    it "are one control: Previous, the month's name and Next, with the name opening the picker" do
+      get month_path("2026-09")
+
+      assert_select "nav[aria-label=Months] .join > a[rel=prev][aria-label='Previous month, August 2026']"
+      assert_select "nav[aria-label=Months] .join > a[rel=next][aria-label='Next month, October 2026']"
+      assert_select "nav[aria-label=Months] .join > button[hidden][data-month-picker-target=trigger]", text: /September 2026/
+    end
+
+    it "stop Previous in January of year 1, and Next is never stopped" do
+      get month_path("0001-01")
+
+      expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "January 0001"
+      assert_select "nav[aria-label=Months] a[rel=prev]", count: 0
+      assert_select "nav[aria-label=Months] button[disabled][aria-disabled=true]", count: 1
+      assert_select "nav[aria-label=Months] a[rel=next][href='#{month_path("0001-02")}']"
+
+      get month_path("0001-02")
+      assert_select "nav[aria-label=Months] a[rel=prev][href='#{month_path("0001-01")}']"
+    end
+
+    it "render a month as far off as a date field goes" do
+      get month_path("275760-09")
+
+      expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "September 275760"
+      assert_select "nav[aria-label=Months] a[rel=next][href='#{month_path("275760-10")}']"
+      assert_select "input[type=number][value='275760'][max='275760']"
+      assert_select "dialog a[href='#{month_path("275760-09")}'][aria-current=page]"
+    end
+  end
+
+  describe "the month picker" do
+    before { travel_to Time.utc(2026, 9, 15, 16) }
+
+    it "has twelve links to the months of the viewed year, the viewed one marked as the current page, in a dialog" do
+      get month_path("2027-03")
+
+      assert_select "dialog.modal[aria-labelledby]", count: 1
+      assert_select "dialog h2", text: "Choose a month"
+      hrefs = css_select("dialog [role=group] a").map { |link| link["href"] }
+      expect(hrefs).to eq((1..12).map { |month| month_path(format("2027-%02d", month)) })
+      assert_select "dialog [role=group] a[aria-current=page]", count: 1
+      assert_select "dialog [role=group] a[aria-current=page][href='#{month_path("2027-03")}']", text: "Mar"
+      assert_select "dialog input[type=number][value='2027'][min='1'][max='275760']"
+    end
+
+    it "marks this calendar month in a year that has it, in its name and not only by colour" do
+      get month_path("2026-03")
+
+      assert_select "dialog a[href='#{month_path("2026-09")}'][aria-label='September 2026, this month']"
+      assert_select "dialog a.btn-outline", count: 1
+    end
+
+    it "has a This month button under the grid going to the current month, and a Close button" do
+      get month_path("2027-03")
+
+      assert_select "dialog a.btn[href='#{month_path("2026-09")}']", text: "This month"
+      assert_select "dialog form[method=dialog] button", text: "Close"
+    end
+
+    it "is on the home page too, which is the current month" do
+      get root_path
+
+      assert_select "dialog [role=group] a[href='#{month_path("2026-09")}'][aria-current=page]"
+    end
+
+    it "is on the month view only: the Deposits page and an envelope's page have the same links and no dialog" do
+      envelope = create(:budget_envelope, budget: budget, name: "Groceries")
+
+      [ month_deposits_path("2026-10"), month_envelope_path("2026-10", envelope) ].each do |path|
+        get path
+
+        assert_select "nav[aria-label=Months] a[rel=prev]", text: /September 2026/
+        assert_select "nav[aria-label=Months] a[rel=next]", text: /November 2026/
+        assert_select "nav[aria-label=Months] a", text: "This month"
+        assert_select "nav[aria-label=Months] .join > span", text: "October 2026"
+        assert_select "dialog", count: 0
+        assert_select "[data-controller='modal month-picker']", count: 0
+        assert_select "nav[aria-label=Months] button", count: 0
+      end
     end
   end
 

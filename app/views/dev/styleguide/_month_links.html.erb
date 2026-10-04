@@ -1,14 +1,23 @@
 <%# locals: (budget:) %>
-<%# The links for the current month, and for a month a year on, which can also go back to this one. They go nowhere: the styleguide is drawn from sample data. %>
+<%# The links for the current month, and for a month a year on, which can also go back to this one. They go nowhere: the styleguide is drawn from sample data, except the picker's, which goes to the real month view. %>
 <% current = Budget::Month.new(budget, Date.current) %>
 <% another = Budget::Month.new(budget, Date.current.next_year) %>
+<% earliest = Budget::Month.new(budget, Budget::Month::EARLIEST) %>
 <section id="month-links" aria-labelledby="month-links-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="month-links-heading" class="text-xl font-semibold">Month links</h2>
-  <p class="text-base-content/70">Links to the months either side, named for them. This month is only offered when viewing another month. Each page passes the path that keeps the links on that page.</p>
+  <p class="text-base-content/70">Previous, the month's name and Next, joined as one control. Below sm they're only a chevron, and from sm up they name their month. This month is only offered when viewing another month. Each page passes the path that keeps the links on that page.</p>
 
   <h3 class="font-semibold">The current month</h3>
   <%= render "components/month_links", month: current, path: ->(_month) { "#" } %>
 
   <h3 class="font-semibold">Another month</h3>
   <%= render "components/month_links", month: another, path: ->(_month) { "#" } %>
+
+  <h3 class="font-semibold">The earliest month</h3>
+  <p class="text-base-content/70">There's no month before January of year 1, so Previous is shown, disabled, and not a link.</p>
+  <%= render "components/month_links", month: earliest, path: ->(_month) { "#" } %>
+
+  <h3 class="font-semibold">With the month picker</h3>
+  <p class="text-base-content/70">The month view's name opens a dialog to go to any month in one step: a year stepper (type a year, or step with the buttons or PageUp and PageDown) and a grid of the year's months, one tab stop, with the arrow keys, Home and End moving about it. The viewed month is filled, this calendar month is outlined and says so in its name. Open it with the month's name below; it's the real picker, so choosing a month goes to that month's page.</p>
+  <%= render "components/month_links", month: another, path: ->(month) { "/months/#{month.to_param}" }, picker: true %>
 </section>

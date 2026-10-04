@@ -13,7 +13,7 @@
 <% end %>
 
 <div class="mt-4">
-  <%= render "components/month_links", month: @month, path: ->(month) { month_path(month) } %>
+  <%= render "components/month_links", month: @month, path: ->(month) { month_path(month) }, picker: true %>
 </div>
 
 <div class="mt-8">
