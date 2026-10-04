@@ -9,8 +9,9 @@ RSpec.describe "Navigation", type: :request do
 
     get csv_formats_path
 
-    assert_select "header nav[aria-label=Sections] a", count: 5
+    assert_select "header nav[aria-label=Sections] a", count: 6
     assert_select "header nav[aria-label=Sections] a[href='#{root_path}']:not([aria-current])", text: "Budget"
+    assert_select "header nav[aria-label=Sections] a[href='#{records_path}']:not([aria-current])", text: "Records"
     assert_select "header nav[aria-label=Sections] a[href='#{accounts_path}']:not([aria-current])", text: "Accounts"
     assert_select "header nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}']:not([aria-current])", text: "Unfiled"
     assert_select "header nav[aria-label=Sections] a[href='#{filing_rules_path}']:not([aria-current])", text: "Filing rules"
@@ -26,6 +27,15 @@ RSpec.describe "Navigation", type: :request do
       assert_select "nav[aria-label=Sections] a[href='#{root_path}'][aria-current=page]", text: "Budget"
       assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
     end
+  end
+
+  it "says Records is the one they're on in the Records list" do
+    sign_in_as budget.user
+
+    get records_path
+
+    assert_select "nav[aria-label=Sections] a[href='#{records_path}'][aria-current=page]", text: "Records"
+    assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
   end
 
   it "says Unfiled is the one they're on in the Unfiled list" do

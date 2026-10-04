@@ -20,7 +20,7 @@ RSpec.describe Dev::StyleguideController, type: :controller do
       it "has a section for each part of the design" do
         with_development_routes { get :show }
 
-        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Link rows", "Sample grid", "Pager", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
+        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Date range filter", "Record rows", "Link rows", "Sample grid", "Pager", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
           assert_select "section > h2", text: heading
         end
       end
@@ -46,6 +46,15 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#month-links [data-controller='modal month-picker']", count: 1
         assert_select "#month-links dialog.modal [data-month-picker-target=month]", count: 12
         assert_select "#month-links dialog.modal a[data-month-picker-target=thisMonth]", text: "This month"
+      end
+
+      it "shows the date range filter with a preset marked, and one for a range that can't be used, with its alert" do
+        with_development_routes { get :show }
+
+        assert_select "#date-range-filter form[method=get] input[type=date]", count: 6
+        assert_select "#date-range-filter a[aria-current=true]", text: "This month"
+        assert_select "#date-range-filter input[type=submit][value=Apply]", count: 3
+        assert_select "#date-range-filter [role=alert]", text: /Choose a From and a To date/
       end
 
       it "shows record rows with and without notes, each a link" do

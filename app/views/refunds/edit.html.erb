@@ -4,7 +4,7 @@
   <%= render "components/page_header", title: "Edit refund" do %>
     <%= render "components/delete_button", path: refund_path(@refund),
           confirm: "Delete the #{@refund.description_was} refund?",
-          params: { from: origin, month: @month.to_param }.compact %>
+          params: origin_params(@month) %>
   <% end %>
 
   <%= render "bank_transaction_note", record: @refund %>

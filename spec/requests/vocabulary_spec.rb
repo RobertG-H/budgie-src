@@ -71,7 +71,8 @@ RSpec.describe "The words on the pages", type: :request do
     "the month view" => -> { month_path("2026-10") },
     "a month's Deposits" => -> { month_deposits_path("2026-10") },
     "the envelope page" => -> { month_envelope_path("2026-10", bills) },
-    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
+    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) },
+    "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) }
   }.each do |page, path|
     it "has no table or column names in #{page}" do
       get instance_exec(&path)
@@ -108,6 +109,12 @@ RSpec.describe "The words on the pages", type: :request do
     "the Import form" => -> { new_account_import_path(account) },
     "an Import's summary" => -> { import_path(import) },
     "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Records, filtered to Reallocations" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", kind: "reallocation" }) },
+    "the Records, of an envelope" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", envelope: bills.id.to_s }) },
+    "the Records, with a range that can't be used" => -> { records_path(filter: { date_from: "2026-10-31", date_to: "2026-10-01" }) },
+    "the Records, with nothing in the range" => -> { records_path(filter: { date_from: "2020-01-01", date_to: "2020-01-31" }) },
+    "the Records, past the last page" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }, page: 9) },
     "the Filing rules" => -> { filing_rules_path },
     "the Filing rule form" => -> { new_filing_rule_path },
     "the Filing rule edit form" => -> { edit_filing_rule_path(budget.filing_rules.find_by!(text: "loblaws")) },
@@ -120,6 +127,26 @@ RSpec.describe "The words on the pages", type: :request do
       expect(response).to have_http_status(:ok)
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  describe "Records" do
+    it "says Records, the kinds of record and the money in and out, in words" do
+      get records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" })
+
+      expect(visible_text).to include("Records", "Money in", "Money out", "Kind", "Envelope", "From", "To")
+      expect(visible_text).to include("Spend from Bills", "Refund to Bills", "Deposit", "Reallocation from Bills to Fuel", "Reallocation from Bills to Ready to Assign")
+      expect(visible_text).to include("Reallocations only change which envelope money is in, so they aren't counted.")
+      expect(visible_text).to include("This month", "Last month", "Last 3 months")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "never spells Ready to Assign with underscores in a path, a param or an id" do
+      get records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" })
+
+      expect(response.body).not_to match(/ready_to_assign/)
+      expect(response.body).to include("/reallocations/to-ready-to-assign/")
     end
   end
 

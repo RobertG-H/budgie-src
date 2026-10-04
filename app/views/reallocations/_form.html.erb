@@ -10,7 +10,7 @@
 
 <%= form_with model: record, scope: :reallocation, url: (saved_path || reallocations_path), class: "mt-8 space-y-6" do |form| %>
   <%= render "form_errors", record: record %>
-  <%= render "origin_fields", month: @month %>
+  <%= render "origin_fields", month: @month, filter: origin_filter, page: origin_page %>
   <%# The envelope whose page this was opened from, so that saving can go back to it. %>
   <%= hidden_field_tag :envelope, opened_from.id, id: nil if origin == "envelope" && opened_from %>
 

@@ -1,0 +1,21 @@
+<%# locals: (form:, filter:, path:) %>
+<%# A range of dates to filter a list by, for a page's GET form: From and To as date fields, the presets as links and an Apply button. `filter` is a DateRangeFilter, and its dates are what the fields start as (the current month, when it couldn't use what was sent). The fields are named `filter[date_from]` and `filter[date_to]`, so the form's scope is `filter`, and the page's other filters are fields of the same form, or hidden ones. %>
+<%# A preset is a link to the same page with the other filters kept and these two dates set: `path` turns a preset's params into the address. The one the range equals is marked with aria-current and filled dark, and not only coloured. Nothing is submitted until Apply is, so there's no JavaScript. %>
+<div class="space-y-4">
+  <div class="grid grid-cols-2 gap-4">
+    <%= render "components/field", form: form, attribute: :date_from, label: "From" do |field| %>
+      <%= form.date_field :date_from, value: DateRangeFilter.spell(filter.from), required: true, **field %>
+    <% end %>
+    <%= render "components/field", form: form, attribute: :date_to, label: "To" do |field| %>
+      <%= form.date_field :date_to, value: DateRangeFilter.spell(filter.to), required: true, **field %>
+    <% end %>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2">
+    <% filter.presets.each do |preset| %>
+      <% current = filter.preset == preset.key %>
+      <%= link_to preset.label, path.call(preset.params), class: class_names("btn btn-sm", "btn-neutral": current), aria: { current: ("true" if current) } %>
+    <% end %>
+    <%= form.submit "Apply", name: nil, class: "btn btn-sm btn-primary" %>
+  </div>
+</div>

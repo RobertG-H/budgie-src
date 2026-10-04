@@ -4,7 +4,7 @@
 
 <%= form_with model: deposit, class: "mt-8 space-y-6", data: { controller: "month-choice" } do |form| %>
   <%= render "form_errors", record: deposit %>
-  <%= render "origin_fields", month: @month %>
+  <%= render "origin_fields", month: @month, filter: origin_filter, page: origin_page %>
 
   <%= render "components/field", form: form, attribute: :description, hint: "Such as Paycheck" do |field| %>
     <%= form.text_field :description, required: true, autofocus: true, **field %>

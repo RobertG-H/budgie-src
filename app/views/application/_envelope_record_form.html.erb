@@ -5,7 +5,7 @@
 
 <%= form_with model: record, class: "mt-8 space-y-6" do |form| %>
   <%= render "form_errors", record: record %>
-  <%= render "origin_fields", month: @month %>
+  <%= render "origin_fields", month: @month, filter: origin_filter, page: origin_page %>
 
   <%# The error is on the envelope, which is what the select sets through its id. %>
   <%= render "components/field", form: form, attribute: :envelope_id, label: "Envelope", control: :select,

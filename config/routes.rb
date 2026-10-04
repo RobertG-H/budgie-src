@@ -25,6 +25,9 @@ Rails.application.routes.draw do
     resource :assignment, only: [ :show, :edit, :update ]
   end
 
+  # Every Deposit, Spend, Refund and Reallocation in one list, for a range of dates, from which any is opened to be changed.
+  get "records" => "records#index", as: :records
+
   resources :deposits, except: [ :index, :show ]
   resources :envelopes, except: [ :index, :show ] do
     # Putting an envelope away (create) and taking it back (destroy). It's one archive per envelope.

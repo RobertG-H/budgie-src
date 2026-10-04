@@ -229,6 +229,20 @@ everything behind the card's figures is on that page. An envelope's page lists t
 Lowering a month's Assigned and reallocating to Ready to Assign can give the same balances; that overlap is accepted,
 and the two stay separate figures: Assigned is the plan for the month, Reallocated is money moved.
 
+### The Records view
+
+`/records` lists every Deposit, Spend, Refund and Reallocation in one list, across envelopes, newest first, 50 a page, for a
+range of dates, so a record can be found without going to its month and its envelope; a row opens the record's edit page, and
+saving, deleting or cancelling there comes back to the same filtered page. The filters are one nested `filter` param so they never
+collide with `from`: the date range (`DateRangeFilter`, which defaults to the current month and turns an unusable range into an
+alert and the current month, never an empty page, and is the part the Bank transactions page shares), the Kind (a Reallocation is
+both tables) and an envelope (which leaves out Deposits, and finds a Reallocation by either of its envelopes). `Budget::RecordList`
+reads the filter and keeps only what it understands, unions the five tables into one ordered list of keys and loads each table's
+rows with their envelopes from the budget's own, so the number of queries doesn't grow with the records. Money in (Deposits and
+Refunds) and Money out (Spends) are for the whole range, not the page, and Reallocations aren't counted since they only change which
+envelope money is in. The page names `records` as a place a form can come back to (`from=records`), and rebuilds its filter through
+the same parser on the way back, so what comes back is never a URL.
+
 ### Archiving envelopes
 
 An envelope that's finished with can be archived, which keeps its history and takes it out of use
