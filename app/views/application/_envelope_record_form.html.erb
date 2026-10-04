@@ -1,19 +1,20 @@
-<%# locals: (spend:, cancel_path:) %>
+<%# locals: (record:, hint:, cancel_path:) %>
+<%# The form for a Spend or a Refund, which are the same but for what the description is hinted to be. %>
 <%# The envelope can be any of the budget's, alphabetically. Without one chosen the select starts on a prompt, so the form can't be sent by accident with the first envelope, and has the focus. With one chosen, as from an envelope's page, the description does. %>
 <% envelopes = Current.budget.envelopes.alphabetical.pluck(:name, :id) %>
 
-<%= form_with model: spend, class: "mt-8 space-y-6" do |form| %>
-  <%= render "form_errors", record: spend %>
+<%= form_with model: record, class: "mt-8 space-y-6" do |form| %>
+  <%= render "form_errors", record: record %>
   <%= render "origin_fields", month: @month %>
 
   <%# The error is on the envelope, which is what the select sets through its id. %>
   <%= render "components/field", form: form, attribute: :envelope_id, label: "Envelope", control: :select,
-        error: spend.errors.full_messages_for(:envelope).to_sentence.presence do |field| %>
-    <%= form.select :envelope_id, envelopes, { prompt: "Choose an envelope" }, required: true, autofocus: spend.envelope.nil?, **field %>
+        error: record.errors.full_messages_for(:envelope).to_sentence.presence do |field| %>
+    <%= form.select :envelope_id, envelopes, { prompt: "Choose an envelope" }, required: true, autofocus: record.envelope.nil?, **field %>
   <% end %>
 
-  <%= render "components/field", form: form, attribute: :description, hint: "Such as Loblaws" do |field| %>
-    <%= form.text_field :description, required: true, autofocus: spend.envelope.present?, **field %>
+  <%= render "components/field", form: form, attribute: :description, hint: hint do |field| %>
+    <%= form.text_field :description, required: true, autofocus: record.envelope.present?, **field %>
   <% end %>
 
   <%= render "components/field", form: form, attribute: :date do |field| %>

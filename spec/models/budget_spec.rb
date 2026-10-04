@@ -8,6 +8,7 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to have_many(:deposits).class_name("Budget::Deposit").dependent(:destroy) }
   it { is_expected.to have_many(:assignments).through(:envelopes) }
   it { is_expected.to have_many(:spends).through(:envelopes) }
+  it { is_expected.to have_many(:refunds).through(:envelopes) }
   it { is_expected.to validate_presence_of(:currency) }
   it { is_expected.to validate_inclusion_of(:currency).in_array(Budget::CURRENCIES.keys).with_message("isn't supported") }
 
@@ -35,6 +36,7 @@ RSpec.describe Budget, type: :model do
     expect(Budget::Deposit.model_name).to have_attributes(route_key: "deposits", param_key: "deposit")
     expect(Budget::Assignment.model_name).to have_attributes(route_key: "assignments", param_key: "assignment")
     expect(Budget::Spend.model_name).to have_attributes(route_key: "spends", param_key: "spend")
+    expect(Budget::Refund.model_name).to have_attributes(route_key: "refunds", param_key: "refund")
   end
 
   describe "#assignments" do
@@ -54,6 +56,16 @@ RSpec.describe Budget, type: :model do
       create(:budget_spend)
 
       expect(budget.spends).to contain_exactly(mine)
+    end
+  end
+
+  describe "#refunds" do
+    it "are the Refunds of its envelopes, and no other budget's" do
+      budget = create(:budget)
+      mine = create(:budget_refund, envelope: create(:budget_envelope, budget: budget))
+      create(:budget_refund)
+
+      expect(budget.refunds).to contain_exactly(mine)
     end
   end
 
@@ -201,6 +213,7 @@ RSpec.describe Budget, type: :model do
       [ groceries, rent ].each do |envelope|
         [ Date.new(2026, 9, 1), Date.new(2026, 10, 1) ].each { |month| create(:budget_assignment, envelope: envelope, month: month) }
         create_list(:budget_spend, 3, envelope: envelope)
+        create_list(:budget_refund, 2, envelope: envelope)
       end
       create(:budget_deposit, budget: budget)
     end
@@ -211,17 +224,20 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::Envelope, :count).by(-3)
         .and change(Budget::Assignment, :count).by(-4)
         .and change(Budget::Spend, :count).by(-6)
+        .and change(Budget::Refund, :count).by(-4)
         .and change(Budget::Deposit, :count).by(-1)
     end
 
     it "leaves another budget's records alone" do
       others = create(:budget_assignment)
       others_spend = create(:budget_spend)
+      others_refund = create(:budget_refund)
 
       budget.destroy!
 
       expect(Budget::Assignment.all).to contain_exactly(others)
       expect(Budget::Spend.all).to contain_exactly(others_spend)
+      expect(Budget::Refund.all).to contain_exactly(others_refund)
       expect(Budget::Envelope.exists?(others.envelope_id)).to be(true)
     end
   end

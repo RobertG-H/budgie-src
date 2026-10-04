@@ -1,7 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
-# them and what's spent, so the real pages have something to show. Running it again changes nothing that's already
-# there.
+# them, what's spent and what came back, so the real pages have something to show. Running it again changes nothing
+# that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
 user = User.find_or_create_by!(email: Dev::USER_EMAIL) { |new_user| new_user.name = "Dev Budgie" }
@@ -70,3 +70,8 @@ end
     end
   end
 end
+
+# Money that came back to Groceries this month, as a store refund would: it raises what's Available there, and nothing
+# else changes, Ready to Assign least of all. It's the only one, so every other envelope's page has no Refunds section.
+budget.envelopes.find_by!(name: "Groceries").refunds
+  .find_or_create_by!(description: "Loblaws return", date: this_month + 5) { |refund| refund.amount = 18.75 }

@@ -4,20 +4,17 @@ namespace :user do
     email = ENV["EMAIL"].presence or abort "Usage: bin/rails #{task.name} EMAIL=someone@example.com"
     user = User.find_by(email: email) or abort "No user has the email #{User.normalize_value_for(:email, email)}."
 
-    identities = user.identities.count
-    sessions = user.sessions.count
+    count = ->(n, noun) { "#{n} #{noun.pluralize(n)}" }
+
     budget = if user.budget
-      envelopes = user.budget.envelopes.count
-      deposits = user.budget.deposits.count
-      assignments = user.budget.assignments.count
-      spends = user.budget.spends.count
-      "their budget with #{envelopes} #{"envelope".pluralize(envelopes)}, #{deposits} #{"deposit".pluralize(deposits)}, " \
-        "#{assignments} #{"assignment".pluralize(assignments)} and #{spends} #{"spend".pluralize(spends)}"
+      "their budget with #{count.(user.budget.envelopes.count, "envelope")}, " \
+        "#{count.(user.budget.deposits.count, "deposit")}, #{count.(user.budget.assignments.count, "assignment")}, " \
+        "#{count.(user.budget.spends.count, "spend")} and #{count.(user.budget.refunds.count, "refund")}"
     else
       "no budget"
     end
     puts "This permanently deletes #{user.email} (#{user.name.presence || "no name"}), " \
-      "their #{identities} #{"identity".pluralize(identities)}, #{sessions} #{"session".pluralize(sessions)}, " \
+      "their #{count.(user.identities.count, "identity")}, #{count.(user.sessions.count, "session")}, " \
       "#{budget} and #{user.invite ? "their invite" : "no invite"}."
     print "Type the email to confirm: "
     abort "Not deleted." unless $stdin.gets.to_s.strip.downcase == user.email

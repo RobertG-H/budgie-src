@@ -6,6 +6,7 @@
 <div class="mt-4">
   <%= render "components/page_header", title: @envelope.name, description: @month.name do %>
     <%= link_to "New spend", new_spend_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn btn-primary" %>
+    <%= link_to "New refund", new_refund_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
     <%= link_to "Edit", edit_envelope_path(@envelope, month: @month, from: "envelope"), class: "btn" %>
     <%= render "components/delete_button", path: envelope_path(@envelope),
           confirm: "Delete the #{@envelope.name} envelope?", params: { month: @month.to_param } %>
@@ -16,7 +17,7 @@
   <%= render "components/month_links", month: @month, path: ->(month) { month_envelope_path(month, @envelope) } %>
 </div>
 
-<%# Assigned is only shown here: it's set on the month view, where Ready to Assign moves with it. %>
+<%# Assigned is only shown here: it's set on the month view, where Ready to Assign moves with it. Available is the result of the four above it, so it has a row of its own. %>
 <div class="mt-8 grid gap-4 sm:grid-cols-2">
   <%= render "components/stat_card", title: "Carried over",
         value: render("components/money", amount: @line.carried_over, budget: budget) %>
@@ -24,23 +25,19 @@
         value: render("components/money", amount: @line.assigned, budget: budget) %>
   <%= render "components/stat_card", title: "Spent",
         value: render("components/money", amount: @line.spent, budget: budget) %>
-  <%= render "components/stat_card", title: "Available",
-        value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
-</div>
-
-<div class="mt-8">
-  <h2 class="text-xl font-semibold">Spends</h2>
-
-  <div class="mt-4">
-    <% if @spends.any? %>
-      <%= render "components/record_list" do %>
-        <% @spends.each do |spend| %>
-          <%= render "components/record_row", href: edit_spend_path(spend, month: @month, from: "envelope"),
-                date: spend.date, description: spend.description, notes: spend.notes, amount: spend.amount, budget: budget %>
-        <% end %>
-      <% end %>
-    <% else %>
-      <%= render "components/empty_state", message: "No spends in #{@month.name}." %>
-    <% end %>
+  <%= render "components/stat_card", title: "Refunded",
+        value: render("components/money", amount: @line.refunded, budget: budget) %>
+  <div class="sm:col-span-2">
+    <%= render "components/stat_card", title: "Available",
+          value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
   </div>
 </div>
+
+<%= render "record_section", title: "Spends", records: @spends, budget: budget, empty_message: "No spends in #{@month.name}.",
+      edit_path: ->(spend) { edit_spend_path(spend, month: @month, from: "envelope") } %>
+
+<%# Refunds are rarer, so their section is only there when the month has some. %>
+<% if @refunds.any? %>
+  <%= render "record_section", title: "Refunds", records: @refunds, budget: budget,
+        edit_path: ->(refund) { edit_refund_path(refund, month: @month, from: "envelope") } %>
+<% end %>

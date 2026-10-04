@@ -25,6 +25,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::Spend, :count)
   end
 
+  it "creates no Refunds outside development" do
+    expect { run_seeds }.not_to change(Budget::Refund, :count)
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -114,7 +118,29 @@ RSpec.describe "db/seeds.rb" do
       expect(dining_out.call(Date.new(2026, 10, 1))).to have_attributes(spent: BigDecimal("708.50"), available: BigDecimal("-24.00"), overspent?: true)
     end
 
-    it "leaves Ready to Assign as it was, which Spends don't change" do
+    it "refunds Groceries this month, once, and no other envelope or month" do
+      travel_to Time.utc(2026, 10, 15, 16)
+
+      run_seeds
+
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+      refund = budget.refunds.sole
+      expect(refund).to have_attributes(description: "Loblaws return", date: Date.new(2026, 10, 6), amount: BigDecimal("18.75"))
+      expect(refund.envelope.name).to eq("Groceries")
+    end
+
+    it "raises Groceries' Available by the Refund this month, and not last month's" do
+      travel_to Time.utc(2026, 10, 15, 16)
+      run_seeds
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+
+      groceries = ->(month) { Budget::Month.new(budget, month).envelopes.find { |line| line.envelope.name == "Groceries" } }
+
+      expect(groceries.call(Date.new(2026, 9, 1))).to have_attributes(refunded: 0, available: BigDecimal("430.65"))
+      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), available: BigDecimal("996.85"))
+    end
+
+    it "leaves Ready to Assign as it was, which Spends and Refunds don't change" do
       travel_to Time.utc(2026, 10, 15, 16)
       run_seeds
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
@@ -127,7 +153,8 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
 
       expect { run_seeds }.not_to change {
-        [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count ]
+        [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
+          Budget::Refund.count ]
       }
     end
 
@@ -139,6 +166,16 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
 
       expect(spend.reload.amount).to eq(1)
+    end
+
+    it "leaves a Refund the developer has changed" do
+      run_seeds
+      refund = Budget::Refund.sole
+      refund.update!(amount: 1)
+
+      run_seeds
+
+      expect(refund.reload.amount).to eq(1)
     end
 
     it "leaves an Assigned amount the developer has changed" do

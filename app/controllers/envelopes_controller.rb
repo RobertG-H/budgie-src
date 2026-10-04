@@ -4,12 +4,13 @@ class EnvelopesController < ApplicationController
 
   before_action :set_envelope, only: %i[ edit update destroy ]
 
-  # An envelope's figures for a month, and the Spends dated in it. It's one of the month's own envelope lines, so another
-  # user's envelope, or one that doesn't exist, is a 404.
+  # An envelope's figures for a month, and the Spends and Refunds dated in it. It's one of the month's own envelope lines, so
+  # another user's envelope, or one that doesn't exist, is a 404.
   def show
     @line = @month.envelope_line(params[:id])
     @envelope = @line.envelope
     @spends = @envelope.spends.dated_in(@month.date).newest_first.load
+    @refunds = @envelope.refunds.dated_in(@month.date).newest_first.load
   end
 
   def new
