@@ -6,6 +6,7 @@ RSpec.describe Budget::Envelope, type: :model do
   it { is_expected.to belong_to(:budget) }
   it { is_expected.to have_many(:assignments).class_name("Budget::Assignment").dependent(:restrict_with_error) }
   it { is_expected.to have_many(:spends).class_name("Budget::Spend").dependent(:restrict_with_error) }
+  it { is_expected.to have_many(:refunds).class_name("Budget::Refund").dependent(:restrict_with_error) }
   it { is_expected.to validate_presence_of(:name) }
 
   it "uses the budget_envelopes table" do
@@ -219,6 +220,17 @@ RSpec.describe Budget::Envelope, type: :model do
       expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
       expect(Budget::Envelope.exists?(envelope.id)).to be(true)
       expect(Budget::Spend.exists?(spend.id)).to be(true)
+    end
+
+    it "is refused while the envelope has Refunds, with the same reason, and keeps both" do
+      refund = create(:budget_refund)
+      envelope = refund.envelope
+
+      expect(envelope.destroy).to be(false)
+
+      expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
+      expect(Budget::Envelope.exists?(envelope.id)).to be(true)
+      expect(Budget::Refund.exists?(refund.id)).to be(true)
     end
 
     it "is allowed once the records are gone" do

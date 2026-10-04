@@ -28,6 +28,7 @@ Rails.application.routes.draw do
   resources :deposits, except: [ :index, :show ]
   resources :envelopes, except: [ :index, :show ]
   resources :spends, except: [ :index, :show ]
+  resources :refunds, except: [ :index, :show ]
 
   # Local development only: the styleguide, and a shortcut that signs in as the seeded user. Testing and
   # production both run RAILS_ENV=production, so this is checked against development, never against

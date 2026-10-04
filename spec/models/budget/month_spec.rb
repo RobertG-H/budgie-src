@@ -18,6 +18,11 @@ RSpec.describe Budget::Month, type: :model do
     create(:budget_spend, envelope: envelope, amount: amount, date: date)
   end
 
+  # Money that came back to an envelope on a date.
+  def refund(envelope, amount, date)
+    create(:budget_refund, envelope: envelope, amount: amount, date: date)
+  end
+
   # A month of the budget, worked out afresh, since a month remembers the figures it has worked out.
   def month_of(date, budget: self.budget)
     Budget::Month.new(budget, date)
@@ -423,6 +428,155 @@ RSpec.describe Budget::Month, type: :model do
     end
   end
 
+  describe "Refunded" do
+    let(:january) { Date.new(2026, 1, 1) }
+    let(:february) { Date.new(2026, 2, 1) }
+    let(:march) { Date.new(2026, 3, 1) }
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 0) }
+
+    # The Groceries worked example, as for Spent: $400 is assigned in each of January to March, and $350, $480 and $300
+    # are spent.
+    def set_up_the_groceries_example
+      [ january, february, march ].each { |month| assign groceries, 400, month }
+      spend groceries, 350, Date.new(2026, 1, 20)
+      spend groceries, 480, Date.new(2026, 2, 14)
+      spend groceries, 300, Date.new(2026, 3, 3)
+    end
+
+    # What the envelope shows in each of January to March, as [ carried over, assigned, spent, refunded, available ].
+    def groceries_figures
+      [ january, february, march ].map do |month|
+        line = month_of(month).envelopes.find { |envelope_line| envelope_line.envelope == groceries }
+        [ line.carried_over, line.assigned, line.spent, line.refunded, line.available ]
+      end
+    end
+
+    it "gives the Groceries example a $50 Refund in February: Available $50, $20 and $120, so February is no longer Overspent" do
+      set_up_the_groceries_example
+      refund groceries, 50, Date.new(2026, 2, 20)
+
+      expect(groceries_figures).to eq([
+        [ 0, 400, 350, 0, 50 ],
+        [ 50, 400, 480, 50, 20 ],
+        [ 20, 400, 300, 0, 120 ]
+      ])
+      expect([ january, february, march ].map { |month| month_of(month).envelopes.first.overspent? }).to eq([ false, false, false ])
+    end
+
+    it "leaves Ready to Assign exactly as it was, in every month, with the Refund and without it" do
+      set_up_the_groceries_example
+      deposit 3000, january
+      deposit 3000, february
+      without_the_refund = [ january, february, march ].map { |month| month_of(month).ready_to_assign }
+
+      refund groceries, 50, Date.new(2026, 2, 20)
+
+      expect([ january, february, march ].map { |month| month_of(month).ready_to_assign }).to eq(without_the_refund)
+      expect(month_of(february).ready_to_assign).to have_attributes(carried_over: 2600, deposited: 3000, assigned: 400, amount: 5200)
+    end
+
+    it "counts a Refund in the month it's dated in: the 1st and the last day, and not the days either side" do
+      refund groceries, 1, Date.new(2026, 1, 31)
+      refund groceries, 10, Date.new(2026, 2, 1)
+      refund groceries, 100, Date.new(2026, 2, 28)
+      refund groceries, 1000, Date.new(2026, 3, 1)
+
+      expect(groceries_figures).to eq([
+        [ 0, 0, 0, 1, 1 ],
+        [ 1, 0, 0, 110, 111 ],
+        [ 111, 0, 0, 1000, 1111 ]
+      ])
+    end
+
+    it "carries Available into the months after, so a Refund dated at the end of a year raises the next year's too" do
+      refund groceries, 40, Date.new(2026, 12, 31)
+
+      expect(month_of(Date.new(2026, 12, 1)).envelopes.first).to have_attributes(refunded: 40, available: 40)
+      expect(month_of(Date.new(2027, 1, 1)).envelopes.first).to have_attributes(carried_over: 40, refunded: 0, available: 40)
+    end
+
+    it "has nothing Refunded in the months before it, and carries its balance forward through months with none" do
+      refund groceries, 25, Date.new(2026, 2, 3)
+
+      expect(month_of(january).envelopes.first).to have_attributes(carried_over: 0, refunded: 0, available: 0)
+      expect(month_of(Date.new(2026, 5, 1)).envelopes.first).to have_attributes(carried_over: 25, refunded: 0, available: 25)
+    end
+
+    it "brings back an envelope that was Overspent, and can take it above zero" do
+      groceries.update!(starting_balance: -30)
+
+      expect(month_of(january).envelopes.first).to have_attributes(available: -30, overspent?: true)
+
+      refund groceries, 30, Date.new(2026, 1, 10)
+      expect(month_of(january).envelopes.first).to have_attributes(available: 0, overspent?: false)
+
+      refund groceries, 5, Date.new(2026, 1, 11)
+      expect(month_of(january).envelopes.first).to have_attributes(available: 5, overspent?: false)
+    end
+
+    it "follows a Refund changed, moved to another month, or deleted, through every month after it" do
+      set_up_the_groceries_example
+      refund groceries, 50, Date.new(2026, 2, 20)
+
+      Budget::Refund.find_by!(envelope: groceries).update!(amount: 80)
+      expect(groceries_figures.map(&:last)).to eq([ 50, 50, 150 ])
+
+      Budget::Refund.find_by!(envelope: groceries).update!(date: Date.new(2026, 3, 2))
+      expect(groceries_figures).to eq([
+        [ 0, 400, 350, 0, 50 ],
+        [ 50, 400, 480, 0, -30 ],
+        [ -30, 400, 300, 80, 150 ]
+      ])
+
+      Budget::Refund.find_by!(envelope: groceries).destroy!
+      expect(groceries_figures.map(&:last)).to eq([ 50, -30, 70 ])
+    end
+
+    it "adds up each envelope's Refunds on their own" do
+      rent = create(:budget_envelope, budget: budget, name: "Rent", starting_balance: 0)
+      refund groceries, 60, Date.new(2026, 1, 5)
+      refund groceries, 40, Date.new(2026, 1, 25)
+      refund rent, 1500, Date.new(2026, 1, 1)
+
+      groceries_line, rent_line = month_of(january).envelopes
+
+      expect(groceries_line).to have_attributes(refunded: 100, available: 100)
+      expect(rent_line).to have_attributes(refunded: 1500, available: 1500)
+    end
+
+    it "doesn't count another budget's Refunds" do
+      other = create(:budget_envelope, budget: create(:budget), name: "Groceries")
+      refund other, 999, Date.new(2026, 1, 20)
+      refund groceries, 25, Date.new(2026, 1, 20)
+
+      expect(month_of(january).envelopes.sole).to have_attributes(refunded: 25, available: 25)
+    end
+
+    it "adds cents exactly, as BigDecimal" do
+      refund groceries, "0.10", Date.new(2026, 1, 5)
+      refund groceries, "0.20", Date.new(2026, 2, 5)
+
+      line = month_of(february).envelopes.first
+
+      expect(line.refunded).to be_a(BigDecimal)
+      expect(line.refunded).to eq(BigDecimal("0.20"))
+      expect(line.available).to eq(BigDecimal("0.30"))
+    end
+
+    it "is zero, and BigDecimal, for an envelope with no Refunds" do
+      line = month_of(january).envelopes.first
+
+      expect(line.refunded).to be_a(BigDecimal)
+      expect(line.refunded).to eq(0)
+    end
+
+    it "is on the envelope's line, found by its id" do
+      refund groceries, 12.5, Date.new(2026, 1, 5)
+
+      expect(month_of(january).envelope_line(groceries.id)).to have_attributes(refunded: BigDecimal("12.5"), available: BigDecimal("12.5"))
+    end
+  end
+
   describe "the month itself" do
     it "is the calendar month containing the date it's given" do
       expect(Budget::Month.new(budget, Date.new(2026, 9, 17)).date).to eq(Date.new(2026, 9, 1))
@@ -521,21 +675,23 @@ RSpec.describe Budget::Month, type: :model do
         figures = Budget::Month.new(budget, month)
         ready_to_assign = figures.ready_to_assign
         [ ready_to_assign.amount, ready_to_assign.carried_over, ready_to_assign.deposited, ready_to_assign.assigned ]
-        figures.envelopes.each { |line| [ line.carried_over, line.assigned, line.spent, line.available ] }
+        figures.envelopes.each { |line| [ line.carried_over, line.assigned, line.spent, line.refunded, line.available ] }
       end
     end
 
-    it "doesn't grow with the months of history: 1 month of Deposits, Assigned amounts and Spends costs what 36 do" do
+    it "doesn't grow with the months of history: 1 month of Deposits, Assigned amounts, Spends and Refunds costs what 36 do" do
       envelope = create(:budget_envelope, budget: budget)
       deposit 100, month
       assign envelope, 10, month
       spend envelope, 5, month
+      refund envelope, 2, month
       with_one_month = queries_for_every_figure
 
       (1..35).each do |months_ago|
         deposit 100, month << months_ago
         assign envelope, 10, month << months_ago
         spend envelope, 5, month << months_ago
+        refund envelope, 2, month << months_ago
       end
       with_thirty_six = queries_for_every_figure
 
@@ -543,16 +699,18 @@ RSpec.describe Budget::Month, type: :model do
       expect(with_thirty_six).to eq(with_one_month)
     end
 
-    it "doesn't grow with the envelopes: 1 envelope with an Assigned amount and a Spend costs what 20 do" do
+    it "doesn't grow with the envelopes: 1 envelope with an Assigned amount, a Spend and a Refund costs what 20 do" do
       envelope = create(:budget_envelope, budget: budget)
       assign envelope, 10, month
       spend envelope, 5, month
+      refund envelope, 2, month
       deposit 100, month
       with_one_envelope = queries_for_every_figure
 
       create_list(:budget_envelope, 19, budget: budget).each do |other|
         assign other, 10, month
         spend other, 5, month
+        refund other, 2, month
       end
       with_twenty = queries_for_every_figure
 
@@ -560,7 +718,7 @@ RSpec.describe Budget::Month, type: :model do
       expect(with_twenty).to eq(with_one_envelope)
     end
 
-    it "costs the same whether or not anything has been assigned or spent" do
+    it "costs the same whether or not anything has been assigned, spent or refunded" do
       create(:budget_envelope, budget: budget)
       deposit 100, month
       with_nothing_recorded = queries_for_every_figure
@@ -571,14 +729,19 @@ RSpec.describe Budget::Month, type: :model do
       spend budget.envelopes.first, 5, month
       with_something_spent = queries_for_every_figure
 
+      refund budget.envelopes.first, 2, month
+      with_something_refunded = queries_for_every_figure
+
       expect(with_something_assigned).to eq(with_nothing_recorded)
       expect(with_something_spent).to eq(with_nothing_recorded)
+      expect(with_something_refunded).to eq(with_nothing_recorded)
     end
 
     it "asks the database nothing until a figure is wanted, and only once for a figure a page reads again" do
       envelope = create(:budget_envelope, budget: budget)
       assign envelope, 10, month
       spend envelope, 5, month
+      refund envelope, 2, month
       deposit 100, month
       figures = Budget::Month.new(budget, month)
 
@@ -586,7 +749,7 @@ RSpec.describe Budget::Month, type: :model do
 
       figures.ready_to_assign
       figures.envelopes
-      expect(count_queries { figures.ready_to_assign.assigned; figures.envelopes.map { |line| [ line.assigned, line.spent ] } }).to eq(0)
+      expect(count_queries { figures.ready_to_assign.assigned; figures.envelopes.map { |line| [ line.assigned, line.spent, line.refunded ] } }).to eq(0)
     end
   end
 

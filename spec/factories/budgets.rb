@@ -27,6 +27,14 @@ FactoryBot.define do
     notes { "" }
   end
 
+  factory :budget_refund, class: "Budget::Refund" do
+    association :envelope, factory: :budget_envelope
+    sequence(:description) { |n| "Refund #{n}" }
+    date { Date.new(2026, 9, 15) }
+    amount { 100 }
+    notes { "" }
+  end
+
   factory :budget_assignment, class: "Budget::Assignment" do
     association :envelope, factory: :budget_envelope
     month { Date.new(2026, 9, 1) }

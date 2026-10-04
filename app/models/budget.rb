@@ -14,14 +14,14 @@ class Budget < ApplicationRecord
   belongs_to :user
   has_many :envelopes, dependent: :destroy
   has_many :deposits, dependent: :destroy
-  # Money assigned to the budget's envelopes, and money spent from them. They belong to the budget through their
-  # envelope, so these are only for reading.
+  # Money assigned to the budget's envelopes, money spent from them and money that came back to them. They belong to the
+  # budget through their envelope, so these are only for reading.
   has_many :assignments, through: :envelopes
   has_many :spends, through: :envelopes
+  has_many :refunds, through: :envelopes
 
   # An envelope with records can't be deleted, so the records of the budget's envelopes go before the envelopes do.
-  # `prepend` runs this ahead of the callback that `has_many :envelopes` adds, wherever it's declared. Refunds join
-  # Assignments and Spends in delete_envelope_records.
+  # `prepend` runs this ahead of the callback that `has_many :envelopes` adds, wherever it's declared.
   before_destroy :delete_envelope_records, prepend: true
 
   # The latest month that has been started, which Assigned was copied into from the month before. A new budget's first
@@ -87,5 +87,6 @@ class Budget < ApplicationRecord
     def delete_envelope_records
       Budget::Assignment.where(envelope: envelopes).delete_all
       Budget::Spend.where(envelope: envelopes).delete_all
+      Budget::Refund.where(envelope: envelopes).delete_all
     end
 end

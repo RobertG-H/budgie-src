@@ -4,6 +4,7 @@ class Budget::Envelope < ApplicationRecord
   # is the backstop. Deleting the whole budget deletes the records first (see Budget).
   has_many :assignments, dependent: :restrict_with_error
   has_many :spends, dependent: :restrict_with_error
+  has_many :refunds, dependent: :restrict_with_error
 
   normalizes :name, with: ->(name) { name.squish }
 

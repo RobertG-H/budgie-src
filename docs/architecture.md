@@ -99,7 +99,7 @@ Each user has at most one `Budget`, in a currency chosen during first-run setup;
 default currency. The `RequireBudget` concern redirects a signed-in user without one to budget setup.
 
 Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb`
-with the table `budget_envelopes`, and `Budget::Deposit` and `Budget::Spend` have `budget_deposits` and `budget_spends`. `Budget.use_relative_model_naming?`
+with the table `budget_envelopes`, and `Budget::Deposit`, `Budget::Spend` and `Budget::Refund` have `budget_deposits`, `budget_spends` and `budget_refunds`. `Budget.use_relative_model_naming?`
 drops the prefix from routes, params and DOM ids, so it's `envelopes_path` and `EnvelopesController`.
 `Current.budget` is the one way controllers and views find the budget — for now the signed-in user's — and
 controllers look records up through it, so another user's record is a 404.
@@ -109,7 +109,7 @@ Constraints live in the database as well as in the models — check constraints,
 is validated as a number under 10¹³ with at most two decimal places, and more places is an error rather than
 being rounded.
 
-An envelope with records, such as Assigned amounts or Spends, can't be deleted. The model refuses and its page says why,
+An envelope with records, such as Assigned amounts, Spends or Refunds, can't be deleted. The model refuses and its page says why,
 with `ON DELETE RESTRICT` as the backstop, and destroying a whole budget (which is what `user:delete` does) deletes its
 envelopes' records first so the envelopes can follow.
 
@@ -134,7 +134,7 @@ cancelled.
 
 Assigned is money moved from Ready to Assign into one envelope for one month, one figure per envelope per month. It is
 worked into the same calculator: an envelope's Available is its Starting balance plus everything assigned up to the
-month (less everything spent, below), and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
+month (less everything spent and plus everything refunded, below), and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
 number of grouped queries. Changing an earlier month's Assigned therefore changes every later month. It's set in place on
 the month view: each envelope's Assigned cell is a Turbo Frame that swaps between the amount and an input, and saving
 refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's
@@ -167,6 +167,16 @@ has no budget of its own, so it's found through the budget's envelopes and anoth
 Spend is saved against is looked up in the budget's own envelopes rather than taken from the form, so choosing another
 budget's envelope is a validation error and nothing is saved. A Spend is listed on its envelope's page for the month of
 its date, and an envelope's page starts a new Spend with that envelope chosen.
+
+Refunded is money that comes back to one envelope, such as a store refund, a friend paying you back or an insurance
+payout, recorded as a Refund with a date. An envelope's Refunds in a month add up to its Refunded, and Available is the
+Starting balance plus everything assigned up to the month, less every Spend and plus every Refund dated on or before
+the end of it. A Refund lands in its envelope and never touches Ready to Assign, and it isn't tied to any particular
+Spend. It is handled like a Spend: it belongs to its budget through its envelope, the envelope it's saved against is
+looked up in the budget's own envelopes, and it's listed on its envelope's page for the month of its date. The month view
+shows a Refunded column from `sm:` up and has no "New refund", since Refunds are rarer than Spends; an envelope's page
+has "New refund" beside "New spend", its Refunded, and a Refunds section when the month has any. With Refunds, the core
+of the month view is complete, and every balance on it, in a fixed number of grouped queries, comes from `Budget::Month`.
 
 ### Frontend
 

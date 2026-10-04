@@ -1,0 +1,11 @@
+<% content_for :title, "Edit refund · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "Edit refund" do %>
+    <%= render "components/delete_button", path: refund_path(@refund),
+          confirm: "Delete the #{@refund.description_was} refund?",
+          params: { from: origin, month: @month.to_param }.compact %>
+  <% end %>
+
+  <%= render "form", refund: @refund, cancel_path: return_path(@month, envelope: origin_envelope) %>
+</div>

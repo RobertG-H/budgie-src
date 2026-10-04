@@ -40,8 +40,12 @@ en:
         amount: Assigned
     errors:
       models:
-        # A Spend with no envelope is told so the way every other missing field is, not with Rails' "must exist".
+        # A Spend or a Refund with no envelope is told so the way every other missing field is, not with Rails' "must exist".
         budget/spend:
+          attributes:
+            envelope:
+              required: "can't be blank"
+        budget/refund:
           attributes:
             envelope:
               required: "can't be blank"

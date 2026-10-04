@@ -23,6 +23,11 @@ RSpec.describe "The words on the pages", type: :request do
     create(:budget_spend, envelope: bills, description: "Hydro", date: Date.new(2026, 10, 12), amount: 65.5, notes: "September's bill")
   end
 
+  # Money that came back to Bills, in the month the pages below are for.
+  let!(:refund) do
+    create(:budget_refund, envelope: bills, description: "Hydro rebate", date: Date.new(2026, 10, 20), amount: 12.25, notes: "Credited in October")
+  end
+
   before { sign_in_as budget.user }
 
   # What a person reads on the page, not its markup.
@@ -53,6 +58,8 @@ RSpec.describe "The words on the pages", type: :request do
     "the Deposit edit form" => -> { edit_deposit_path(paycheck, month: "2026-10", from: "deposits") },
     "the Spend form" => -> { new_spend_path(month: "2026-10", from: "envelope", envelope: bills.id) },
     "the Spend edit form" => -> { edit_spend_path(spend, month: "2026-10", from: "envelope") },
+    "the Refund form" => -> { new_refund_path(month: "2026-10", from: "envelope", envelope: bills.id) },
+    "the Refund edit form" => -> { edit_refund_path(refund, month: "2026-10", from: "envelope") },
     "the envelope form" => -> { new_envelope_path(month: "2026-10", from: "month") },
     "the envelope edit form" => -> { edit_envelope_path(bills, month: "2026-10", from: "envelope") },
     "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
@@ -114,6 +121,25 @@ RSpec.describe "The words on the pages", type: :request do
 
     expect(visible_text).to include("Spent")
     expect(visible_text).to include("New spend")
+  end
+
+  it "uses the same words for what went wrong when a Refund is refused" do
+    post refunds_path, params: { refund: { envelope_id: "", description: "", date: "2026-10-15", amount: "1.005" } }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(visible_text).to include("Envelope can't be blank", "Description can't be blank", "Amount can't have more than 2 decimal places")
+    expect(visible_text).not_to match(/\w+_\w+/)
+    expect(visible_text).not_to match(retired_terms)
+  end
+
+  it "says Refunded, and Refunds, on the pages where money that came back to an envelope is shown" do
+    get month_envelope_path("2026-10", bills)
+
+    expect(visible_text).to include("Refunded $12.25", "Refunds", "Hydro rebate", "New refund")
+
+    get month_path("2026-10")
+
+    expect(visible_text).to include("Refunded")
   end
 
   it "uses the same words for what went wrong when a Deposit is refused" do
