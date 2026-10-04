@@ -8,6 +8,9 @@ class Budget::Account < ApplicationRecord
   # reach, so this stays after the check that refuses. Deleting the whole budget deletes them first (see Budget).
   has_many :bank_transactions, dependent: :restrict_with_error
   has_many :imports, dependent: :destroy
+  # The Filing rules pinned to it, which fit nothing once it's gone. Only an Account without bank transactions can be deleted, so
+  # none of them is named by a bank transaction that a rule filed there.
+  has_many :filing_rules, dependent: :destroy
 
   normalizes :name, with: ->(name) { name.squish }
 

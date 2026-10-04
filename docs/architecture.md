@@ -239,7 +239,7 @@ month viewed. An archived envelope's page has Unarchive in place of Archive and 
 A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
 Refunds it was, or ignore it. The model is the `roadmap` issue
 [#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
-formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits.
+formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits, then Filing rules.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
 columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
@@ -317,7 +317,44 @@ same number of queries however many it files: it loads the budget's envelopes on
 transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Unfiled list shows
 every bank transaction across the Accounts that's still to do, and an Account's page shows each one's state.
 
-The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled and CSV formats so far.
+**Filing rules.** A Filing rule is a standing instruction, such as "anything from Loblaws goes to Groceries": when an Import creates a
+bank transaction that a rule fits, Budgie files it the way the rule says, or ignores it, straight away and with no confirmation, through the same
+filing operation a person uses ([ADR 0012](adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md)). A wrong rule is caught by what's
+shown and what can be taken back, not by a prompt: the Import's summary says how many bank transactions rules filed and how many they ignored, Undo
+takes the whole Import back, and un-filing puts one bank transaction back. A rule fits by the description (its text is contained in the bank
+transaction's, whatever the case or spacing, and it's only ever text, never a pattern) and, if it has them, by Account and by an exact amount, and it sets one
+outcome for the whole amount: a Spend from an envelope, a Refund to one, a Deposit, or Ignore, with the sign suiting it. When more than one fits, the most
+specific wins, in this order: an exact amount, then a pinned Account, then longer text, then the most recently edited, then the newer rule, so there's no ordering
+screen and the order is total. A rule for an archived envelope does nothing until it's unarchived, and archiving is never blocked by it.
+
+**Rules act on what's new, and never on what a person did.** They run on the bank transactions an Import creates, in the Import's one database
+transaction, and never when one is un-filed, un-ignored or edited: otherwise un-filing a row a rule filed would file it again at once. They only ever act on a
+bank transaction that's still unfiled, which is judged once its row is locked, so one filed since it was looked at is left alone. The rules are loaded once and
+matched in Ruby, and the records, the links, the note of which rule did it and the ignoring are each one statement, so an Import makes the same number of
+queries for 10 rows as for 1,000 and for 1 rule as for 100. A rule never fails an Import: if filing one row is refused, such as for an envelope archived a moment
+ago, it's left unfiled for a person. A bank transaction remembers which rule filed or ignored it, which an Account's page shows, and that's cleared when it's un-filed
+or un-ignored; the filed records are ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), with no rule columns, and editing or deleting a rule
+never changes what it already filed.
+
+**Always file like this.** Filing or ignoring a bank transaction by hand offers to make a rule from what was done, ticked by default: the text starts as the
+bank's whole description, and can be trimmed right there, before the wrong rule is made, and it has no Account or amount condition. A rule with identical conditions
+is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
+filing as one record and when ignoring, and never for a split, since a split has no one outcome to repeat.
+
+**Sweeping what's already there.** A rule made after an Import has nothing to act on, so saving one can also file the unfiled bank transactions it already fits. Rules still never
+run on un-filing, un-ignoring or editing; this is the one time they look back, and only at bank transactions that are unfiled, never at one that's been filed or ignored. The form
+says how many fit, and keeps that up to date as the text is edited, because a rule that's too broad is what ADR 0012 warns about, and the text is where it's trimmed. It
+sweeps the bank transactions where the new rule is the most specific one that fits, so the order rules run in doesn't change, and when a rule is made from a bank transaction it only sweeps
+the ones that went the same way, so an Ignore rule that fits money in and out doesn't act on the other way's. The rule, the filing and the sweep are one database transaction. A bank transaction that a rule fits but a more specific rule files isn't counted, and the form says so, since "no other
+bank transactions fit" would be untrue.
+
+**Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each says how
+many bank transactions it filed or ignored, counting only those that still are. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact
+amount if it needs them, and edited or deleted. Because a filed record is ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), changing or deleting a rule only
+affects what comes in from then on; fixing what it already did means un-filing and filing again. A rule for an archived envelope is flagged inactive, in words, and does nothing until the envelope is
+unarchived. Two rules with the same conditions aren't allowed, and the page says what the other one does.
+
+The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled, Filing rules and CSV formats.
 
 ### Frontend
 

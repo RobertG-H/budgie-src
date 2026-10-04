@@ -9,10 +9,11 @@ RSpec.describe "Navigation", type: :request do
 
     get csv_formats_path
 
-    assert_select "header nav[aria-label=Sections] a", count: 4
+    assert_select "header nav[aria-label=Sections] a", count: 5
     assert_select "header nav[aria-label=Sections] a[href='#{root_path}']:not([aria-current])", text: "Budget"
     assert_select "header nav[aria-label=Sections] a[href='#{accounts_path}']:not([aria-current])", text: "Accounts"
     assert_select "header nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}']:not([aria-current])", text: "Unfiled"
+    assert_select "header nav[aria-label=Sections] a[href='#{filing_rules_path}']:not([aria-current])", text: "Filing rules"
     assert_select "header nav[aria-label=Sections] a[href='#{csv_formats_path}'][aria-current=page]", text: "CSV formats"
   end
 
@@ -34,6 +35,18 @@ RSpec.describe "Navigation", type: :request do
 
     assert_select "nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}'][aria-current=page]", text: "Unfiled"
     assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+  end
+
+  it "says Filing rules is the one they're on in the list, and while making or changing one" do
+    sign_in_as budget.user
+    rule = create(:budget_filing_rule, budget: budget)
+
+    [ filing_rules_path, new_filing_rule_path, edit_filing_rule_path(rule) ].each do |path|
+      get path
+
+      assert_select "nav[aria-label=Sections] a[href='#{filing_rules_path}'][aria-current=page]", text: "Filing rules"
+      assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+    end
   end
 
   it "says CSV formats is the one they're on while building or changing one" do

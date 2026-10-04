@@ -395,6 +395,58 @@ RSpec.describe Budget::Filing do
     end
   end
 
+  # A rule is what a bank transaction is filed by when a Filing rule calls the operation, and a person calling it files by none.
+  describe "the Filing rule that filed it" do
+    let(:rule) { create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco") }
+
+    it "is written on each bank transaction, for the rule its entry names" do
+      first = bank_transaction(-100)
+      second = bank_transaction(-50)
+      other_rule = create(:budget_filing_rule, :ignore, budget: budget, text: "other")
+
+      Budget::Filing.new(budget).file([
+        Budget::Filing::Entry.new(bank_transaction: first, filing_rule: rule, drafts: [ draft("spend", "100") ]),
+        Budget::Filing::Entry.new(bank_transaction: second, filing_rule: other_rule, drafts: [ draft("spend", "50") ])
+      ])
+
+      expect(first.reload.filing_rule_id).to eq(rule.id)
+      expect(second.reload.filing_rule_id).to eq(other_rule.id)
+    end
+
+    it "is none for a person's filing, which overwrites a value that went stale" do
+      stale = bank_transaction(-100)
+      stale.update_columns(filing_rule_id: rule.id)
+
+      file(entry(stale, draft("spend", "100")))
+
+      expect(stale.reload).to be_filed
+      expect(stale.filing_rule_id).to be_nil
+    end
+
+    it "is written for none of them when one entry is refused, since nothing is filed" do
+      good = bank_transaction(-100)
+      bad = bank_transaction(-50)
+
+      Budget::Filing.new(budget).file([
+        Budget::Filing::Entry.new(bank_transaction: good, filing_rule: rule, drafts: [ draft("spend", "100") ]),
+        Budget::Filing::Entry.new(bank_transaction: bad, filing_rule: rule, drafts: [ draft("spend", "40") ])
+      ])
+
+      expect(good.reload.filing_rule_id).to be_nil
+    end
+
+    it "is written in the same number of queries however many rules there are" do
+      few_rule = [ Budget::Filing::Entry.new(bank_transaction: bank_transaction(-100), filing_rule: rule, drafts: [ draft("spend", "100") ]) ]
+      rules = Array.new(20) { |n| create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco #{n}") }
+      many_rules = rules.map { |each| Budget::Filing::Entry.new(bank_transaction: bank_transaction(-100), filing_rule: each, drafts: [ draft("spend", "100") ]) }
+
+      few = count_queries { Budget::Filing.new(budget).file(few_rule) }
+      many = count_queries { Budget::Filing.new(budget).file(many_rules) }
+
+      expect(many).to eq(few)
+    end
+  end
+
   describe "several bank transactions at once" do
     it "files them all, each as its own records" do
       out = bank_transaction(-100)

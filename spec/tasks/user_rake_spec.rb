@@ -28,6 +28,10 @@ RSpec.describe "user rake tasks", type: :task do
       create_list(:budget_bank_transaction, 5, account: accounts.first, import: import)
       create(:budget_import, account: accounts.first, csv_format: csv_formats.last)
       create(:budget_import, account: accounts.last, csv_format: csv_formats.first, zero_rows_skipped: 1)
+      # Three Filing rules: one for an Account, one for a Deposit and one that ignores.
+      create(:budget_filing_rule, :ignore, budget: budget, account: accounts.first, text: "payment thank you")
+      create(:budget_filing_rule, :deposit, budget: budget, text: "payroll")
+      create(:budget_filing_rule, :ignore, budget: budget, text: "interest")
     end
 
     # One bank transaction filed as a Spend and another as a Deposit, and one ignored, which have to go before the rest.
@@ -37,11 +41,12 @@ RSpec.describe "user rake tasks", type: :task do
       filed_out.update_column(:amount, -10)
       filed_in.update_column(:amount, 10)
       ignored.update_column(:ignored_at, Time.current)
+      ignored.update_column(:filing_rule_id, budget.filing_rules.find_by!(text: "interest").id)
       create(:budget_spend_link, bank_transaction: filed_out, spend: create(:budget_spend, envelope: budget.envelopes.first, amount: 10))
       create(:budget_deposit_link, bank_transaction: filed_in, deposit: create(:budget_deposit, budget: budget, amount: 10))
     end
 
-    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds), CSV formats, Accounts, Imports, bank transactions and invite once the email is typed to confirm" do
+    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds), CSV formats, Accounts, Imports, bank transactions, Filing rules and invite once the email is typed to confirm" do
       output = nil
       file_and_ignore_some_bank_transactions
 
@@ -57,8 +62,9 @@ RSpec.describe "user rake tasks", type: :task do
         .and change(Budget::Account, :count).by(-2)
         .and change(Budget::Import, :count).by(-3)
         .and change(Budget::BankTransaction, :count).by(-5)
+        .and change(Budget::FilingRule, :count).by(-3)
         .and change(Budget::SpendLink, :count).by(-1).and change(Budget::DepositLink, :count).by(-1)
-      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 4 deposits, 4 assignments, 7 spends, 4 refunds, 3 reallocations, 2 CSV formats, 2 accounts, 3 imports and 5 bank transactions and their invite", "Deleted robin@example.com.")
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 4 deposits, 4 assignments, 7 spends, 4 refunds, 3 reallocations, 2 CSV formats, 2 accounts, 3 imports, 5 bank transactions and 3 filing rules and their invite", "Deleted robin@example.com.")
     end
 
     it "leaves another user's budget alone" do
@@ -70,6 +76,7 @@ RSpec.describe "user rake tasks", type: :task do
       others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
       others_csv_format = create(:budget_csv_format)
       others_transaction = create(:budget_bank_transaction)
+      others_rule = create(:budget_filing_rule, text: "loblaws")
 
       run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
@@ -81,6 +88,7 @@ RSpec.describe "user rake tasks", type: :task do
       expect(Budget::CsvFormat.all).to contain_exactly(others_csv_format, others_transaction.import.csv_format)
       expect(Budget::Account.all).to contain_exactly(others_transaction.account)
       expect(Budget::BankTransaction.all).to contain_exactly(others_transaction)
+      expect(Budget::FilingRule.all).to contain_exactly(others_rule)
     end
 
     it "counts a single envelope, a single deposit, a single assignment, a single spend and a single refund in the singular" do
@@ -96,10 +104,11 @@ RSpec.describe "user rake tasks", type: :task do
       Budget::Import.where(account: user.budget.accounts).where.not(id: user.budget.bank_transactions.first.import_id).delete_all
       user.budget.accounts.where.not(id: user.budget.bank_transactions.first.account_id).destroy_all
       user.budget.csv_formats.where.not(id: user.budget.imports.first.csv_format_id).destroy_all
+      user.budget.filing_rules.where.not(id: user.budget.filing_rules.first.id).destroy_all
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment, 1 spend, 1 refund, 0 reallocations, 1 CSV format, 1 account, 1 import and 1 bank transaction and their invite")
+      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment, 1 spend, 1 refund, 0 reallocations, 1 CSV format, 1 account, 1 import, 1 bank transaction and 1 filing rule and their invite")
     end
 
     it "counts a single reallocation in the singular" do
@@ -108,7 +117,7 @@ RSpec.describe "user rake tasks", type: :task do
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("4 refunds, 1 reallocation, 2 CSV formats, 2 accounts, 3 imports and 5 bank transactions and their invite")
+      expect(output).to include("4 refunds, 1 reallocation, 2 CSV formats, 2 accounts, 3 imports, 5 bank transactions and 3 filing rules and their invite")
     end
 
     it "counts a budget that has nothing in it" do
@@ -120,13 +129,14 @@ RSpec.describe "user rake tasks", type: :task do
       user.budget.deposits.destroy_all
       Budget::BankTransaction.where(account: user.budget.accounts).delete_all
       Budget::Import.where(account: user.budget.accounts).delete_all
+      user.budget.filing_rules.destroy_all
       user.budget.accounts.destroy_all
       user.budget.csv_formats.destroy_all
       user.budget.envelopes.destroy_all
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments, 0 spends, 0 refunds, 0 reallocations, 0 CSV formats, 0 accounts, 0 imports and 0 bank transactions and their invite")
+      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments, 0 spends, 0 refunds, 0 reallocations, 0 CSV formats, 0 accounts, 0 imports, 0 bank transactions and 0 filing rules and their invite")
     end
 
     it "says when the user has no budget" do

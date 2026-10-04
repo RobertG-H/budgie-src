@@ -6,14 +6,14 @@
         description: "Turn it into the records it was, which have to add up to its amount, or ignore it." %>
 
   <%# The bank transaction as the bank gave it, which is what's being filed. %>
-  <div class="mt-6 rounded-box border border-base-300 p-4">
+  <%= render "components/panel", class: "mt-6" do %>
     <p class="text-base-content/70"><%= bank_transaction.account.name %>, <%= spelled_date(bank_transaction.date) %></p>
     <p class="font-semibold"><%= bank_transaction.description %></p>
     <p class="mt-1 tabular-nums">
       <%= render "components/money", amount: bank_transaction.amount, budget: Current.budget %>
       <%= render "components/label_badge", text: money_direction(bank_transaction.amount) %>
     </p>
-  </div>
+  <% end %>
 
-  <%= render "bank_transaction_filings/form", entry: @entry, cancel_path: origin_path %>
+  <%= render "bank_transaction_filings/form", entry: @entry, offer: @offer, cancel_path: origin_path %>
 </div>

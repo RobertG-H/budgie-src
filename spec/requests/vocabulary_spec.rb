@@ -49,6 +49,17 @@ RSpec.describe "The words on the pages", type: :request do
     account.imports.build(csv_format: plain, file_name: "sept.csv").tap { |i| i.run("2026-10-01,Paycheck,2800.00\n2026-10-02,Loblaws,-82.45\n2026-10-03,Interest,0.00\n") }
   end
 
+  # Filing rules, made after the Import above so that its rows aren't filed by them: one for a Spend, one that ignores, and one for an
+  # envelope that's archived, which is inactive.
+  let!(:filing_rules) do
+    closed = create(:budget_envelope, budget: budget, name: "Closed")
+    rules = [ create(:budget_filing_rule, budget: budget, envelope: bills, text: "loblaws", amount: -82.45, account: account),
+              create(:budget_filing_rule, :ignore, budget: budget, text: "coffee shop"),
+              create(:budget_filing_rule, budget: budget, envelope: closed, text: "gym membership") ]
+    closed.archive!
+    rules
+  end
+
   before { sign_in_as budget.user }
 
   # What a person reads on the page, not its markup.
@@ -97,6 +108,9 @@ RSpec.describe "The words on the pages", type: :request do
     "the Import form" => -> { new_account_import_path(account) },
     "an Import's summary" => -> { import_path(import) },
     "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the Filing rules" => -> { filing_rules_path },
+    "the Filing rule form" => -> { new_filing_rule_path },
+    "the Filing rule edit form" => -> { edit_filing_rule_path(budget.filing_rules.find_by!(text: "loblaws")) },
     "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "unfiled") },
     "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
   }.each do |page, path|
@@ -152,6 +166,56 @@ RSpec.describe "The words on the pages", type: :request do
         expect(visible_text).to include("Unfiled", "Filed", "Ignored", "Un-file", "Un-ignore", "Spend from Groceries", "Doesn't add up", "Its records add up to $80.00, not $82.45.")
         expect(extra).to be_unfiled
         expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says Filing rule, and what a rule did, in words: on the filing form with the box and its message, on the summary and on an Account's page" do
+        budget_groceries = groceries
+        create(:budget_filing_rule, budget: budget, envelope: budget_groceries, text: "loblaws")
+        create(:budget_filing_rule, :ignore, budget: budget, text: "hydro")
+        hydro = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
+        Budget::FilingRule::Applier.new(budget).apply([ hydro.reload ])
+        create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 5), amount: -20)
+
+        get new_bank_transaction_filing_path(loblaws_row, from: "account")
+
+        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files them as Spend from Groceries now.",
+          "1 other unfiled bank transaction fits.", "File or ignore them the same way now", "Only the ones that went the same way as this one.")
+
+        get bank_transaction_rule_preview_path(loblaws_row), params: { filing: { rule: { text: "loblaws", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
+
+        frame_text = Nokogiri::HTML(response.body).text.squish
+        expect(frame_text).to include("1 other unfiled bank transaction fits.")
+        expect(frame_text).not_to match(/\w+_\w+/)
+        expect(frame_text).not_to match(retired_terms)
+
+        get new_bank_transaction_filing_path(loblaws_row, from: "account")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        get account_path(account)
+
+        expect(visible_text).to include("Filing rule: hydro → Ignore")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        get import_path(import)
+
+        expect(visible_text).to include("Filed by Filing rules", "Ignored by Filing rules")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(response.body).not_to match(/filed_by_rules|ignored_by_rules/)
+      end
+
+      it "says what's wrong with a rule in the same words, when it's refused with a filing or an ignoring" do
+        post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "lo" } } }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("Text is too short (minimum is 3 characters)")
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "costco" } } }
+
+        expect(visible_text).to include("Text must be part of the bank transaction's description, so that the rule fits it")
         expect(visible_text).not_to match(retired_terms)
       end
 

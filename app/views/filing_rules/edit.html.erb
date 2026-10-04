@@ -1,0 +1,10 @@
+<% content_for :title, "Edit Filing rule · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "Edit Filing rule" do %>
+    <%= render "components/delete_button", path: filing_rule_path(@filing_rule),
+          confirm: "Delete the Filing rule for '#{@filing_rule.text_was}'? The bank transactions it filed or ignored stay as they are." %>
+  <% end %>
+
+  <%= render "filing_rules/form", filing_rule: @filing_rule, sweep: @sweep, cancel_path: filing_rules_path %>
+</div>

@@ -19,7 +19,7 @@
       <%= button_to "Archive", envelope_archive_path(@envelope), method: :post, params: { month: @month.to_param }, class: "btn" %>
     <% end %>
     <%= render "components/delete_button", path: envelope_path(@envelope),
-          confirm: "Delete the #{@envelope.name} envelope?", params: { month: @month.to_param } %>
+          confirm: "Delete the #{@envelope.name} envelope?#{filing_rules_deleted_with(@envelope)}", params: { month: @month.to_param } %>
   <% end %>
 </div>
 

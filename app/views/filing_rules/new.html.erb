@@ -1,0 +1,8 @@
+<% content_for :title, "New Filing rule · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "New Filing rule",
+        description: "Bank transactions that fit it are filed, or ignored, the way it says, as they come in." %>
+
+  <%= render "filing_rules/form", filing_rule: @filing_rule, sweep: nil, cancel_path: filing_rules_path %>
+</div>

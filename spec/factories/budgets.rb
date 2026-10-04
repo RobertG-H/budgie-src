@@ -125,6 +125,29 @@ FactoryBot.define do
     end
   end
 
+  # A standing instruction: bank transactions with its text in their description are filed as a Spend from an envelope of its budget
+  # unless it says otherwise, with no Account or amount condition. The traits are the other outcomes.
+  factory :budget_filing_rule, class: "Budget::FilingRule" do
+    budget
+    sequence(:text) { |n| "merchant #{n}" }
+    outcome { "spend" }
+    envelope { association :budget_envelope, budget: budget }
+
+    trait :refund do
+      outcome { "refund" }
+    end
+
+    trait :deposit do
+      outcome { "deposit" }
+      envelope { nil }
+    end
+
+    trait :ignore do
+      outcome { "ignore" }
+      envelope { nil }
+    end
+  end
+
   # The link between a bank transaction and the record it was filed as, with a record of the whole amount in the same budget
   # unless given another. A Deposit's is of money in, so its bank transaction is.
   factory :budget_deposit_link, class: "Budget::DepositLink" do

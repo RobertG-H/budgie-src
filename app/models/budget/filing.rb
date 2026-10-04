@@ -11,8 +11,8 @@
 # its draft (for a record), in the words a typed-in record would use.
 #
 # It makes the same number of queries however many bank transactions and records there are: the budget's envelopes are loaded
-# once, every record is validated in memory, the bank transactions are locked in one query, and every record and link of a kind is
-# inserted in one statement.
+# once, every record is validated in memory, the bank transactions are locked in one query, every record and link of a kind is
+# inserted in one statement, and so is the note of which Filing rule filed them, which is none when a person did.
 class Budget::Filing
   KINDS_BY_SIGN = { in: %w[ deposit refund ], out: %w[ spend ] }.freeze
   # Far more than a bank transaction is ever split into, so that one that's been sent a lot of them is refused.
@@ -103,7 +103,8 @@ class Budget::Filing
       end
     end
 
-    # Every record of a kind in one statement, and then every link of that kind, which needs the ids the records were given.
+    # Every record of a kind in one statement, and then every link of that kind, which needs the ids the records were given. Then which
+    # rule filed each bank transaction, which overwrites one that went stale when its last record was deleted by hand.
     def insert(entries)
       pairs = entries.flat_map { |entry| entry.drafts.map { |draft| [ entry.bank_transaction, draft.record ] } }
 
@@ -113,6 +114,8 @@ class Budget::Filing
 
         Budget::BankTransaction.links_by_record.fetch(record_class).insert_all!(kind_pairs.zip(ids).map { |(bank_transaction, _), id| { bank_transaction_id: bank_transaction.id, column => id } })
       end
+
+      Budget::BankTransaction.note_filing_rules(entries.to_h { |entry| [ entry.bank_transaction.id, entry.filing_rule&.id ] })
     end
 
     def money(amount)

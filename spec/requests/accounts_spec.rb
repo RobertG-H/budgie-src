@@ -257,6 +257,47 @@ RSpec.describe "Accounts", type: :request do
         end
       end
 
+      describe "the Filing rule that filed or ignored one" do
+        let(:filed_rule) { create(:budget_filing_rule, budget: budget, envelope: groceries, text: "filed one") }
+        let(:ignored_rule) { create(:budget_filing_rule, :ignore, budget: budget, text: "ignored one") }
+
+        it "is named on a filed one and on an ignored one, with what it sets" do
+          filed.update_columns(filing_rule_id: filed_rule.id)
+          ignored.update_columns(filing_rule_id: ignored_rule.id)
+
+          get account_path(account)
+
+          expect(row("Filed one").text.squish).to eq("Sep 2, 2026 Filed one Filed Spend from Groceries Filing rule: filed one → Spend from Groceries Un-file -$50.00")
+          expect(row("Ignored one").text.squish).to eq("Sep 3, 2026 Ignored one Ignored Filing rule: ignored one → Ignore Un-ignore -$30.00")
+        end
+
+        it "isn't named on one a person filed or ignored, or on one that's unfiled again, though its value went stale" do
+          unfiled.update_columns(filing_rule_id: filed_rule.id)
+
+          get account_path(account)
+
+          expect(response.body).not_to include("Filing rule:")
+        end
+
+        it "runs the same number of queries whatever the number of rules or the bank transactions they filed" do
+          filed.update_columns(filing_rule_id: filed_rule.id)
+          ignored.update_columns(filing_rule_id: ignored_rule.id)
+          get account_path(account)
+          few = count_queries { get account_path(account) }
+
+          import = create(:budget_import, account: account)
+          10.times do |n|
+            rule = create(:budget_filing_rule, budget: budget, envelope: create(:budget_envelope, budget: budget), text: "merchant #{n}")
+            bank_transaction = create(:budget_bank_transaction, account: account, import: import, description: "Merchant #{n}", amount: -10)
+            create(:budget_spend_link, bank_transaction: bank_transaction, spend: create(:budget_spend, envelope: rule.envelope, amount: 10))
+            bank_transaction.update_columns(filing_rule_id: rule.id)
+          end
+          many = count_queries { get account_path(account) }
+
+          expect(many).to eq(few)
+        end
+      end
+
       it "runs the same number of queries whatever the number of bank transactions or records, the flag included" do
         get account_path(account)
         few = count_queries { get account_path(account) }
@@ -433,6 +474,14 @@ RSpec.describe "Accounts", type: :request do
       assert_select "input[name='account[name]'][value=Chequing]"
       assert_select "form[data-turbo-confirm='Delete the Chequing account?'] input[name=_method][value=delete]"
       assert_select "a.btn[href='#{account_path(account)}']", text: "Cancel"
+    end
+
+    it "says in the question before deleting it that the Filing rules for it are deleted with it, since they'd go without a word" do
+      create(:budget_filing_rule, :ignore, budget: budget, account: account, text: "payment thank you")
+
+      get edit_account_path(account)
+
+      assert_select "form[data-turbo-confirm='Delete the Chequing account? Its 1 Filing rule is deleted with it.']"
     end
 
     it "is not found for another user's Account" do

@@ -38,6 +38,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::CsvFormat, :count)
   end
 
+  it "creates no Filing rules outside development" do
+    expect { run_seeds }.not_to change(Budget::FilingRule, :count)
+  end
+
   it "creates no Accounts, Imports or bank transactions outside development" do
     expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
   end
@@ -287,6 +291,37 @@ RSpec.describe "db/seeds.rb" do
       end
     end
 
+    describe "the Filing rules" do
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      before { travel_to Time.utc(2026, 10, 15, 16) }
+
+      it "has one that files Loblaws as a Spend from Groceries, one that ignores Coffee shop, and one for the archived envelope, which is inactive" do
+        expect(budget.filing_rules.alphabetical_by_text.map { |rule| [ rule.text, rule.outcome, rule.envelope&.name ] }).to eq([
+          [ "coffee shop", "ignore", nil ], [ "gym membership", "spend", "Old gym" ], [ "loblaws", "spend", "Groceries" ]
+        ])
+        expect(budget.filing_rules.find_by!(text: "gym membership")).to be_inactive
+      end
+
+      it "are what filed Loblaws and ignored Coffee shop, in the Import, so the Account's page and the Import's summary show them" do
+        loblaws = budget.bank_transactions.find_by!(description: "Loblaws")
+        coffee = budget.bank_transactions.find_by!(description: "Coffee shop")
+
+        expect(loblaws.filed_by_rule).to eq(budget.filing_rules.find_by!(text: "loblaws"))
+        expect(coffee.filed_by_rule).to eq(budget.filing_rules.find_by!(text: "coffee shop"))
+        expect(budget.imports.sole).to have_attributes(filed_by_rules: 1, ignored_by_rules: 1)
+        expect(budget.bank_transactions.find_by!(description: "Hydro").filed_by_rule).to be_nil
+      end
+
+      it "leaves a rule the developer has changed, and doesn't make another" do
+        budget.filing_rules.find_by!(text: "loblaws").update!(outcome: "ignore")
+
+        expect { run_seeds }.not_to change(Budget::FilingRule, :count)
+
+        expect(budget.filing_rules.find_by!(text: "loblaws").outcome).to eq("ignore")
+      end
+    end
+
     describe "the archived envelope" do
       before { travel_to Time.utc(2026, 10, 15, 16) }
 
@@ -324,7 +359,8 @@ RSpec.describe "db/seeds.rb" do
 
       expect { run_seeds }.not_to change {
         [ Budget::SpendLink.count, Budget::Spend.count, Budget::BankTransaction.where.not(ignored_at: nil).count, User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
-          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count, Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ]
+          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count, Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count,
+          Budget::FilingRule.count ]
       }
     end
 

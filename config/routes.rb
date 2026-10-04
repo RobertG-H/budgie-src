@@ -43,9 +43,16 @@ Rails.application.routes.draw do
   # it (and un-ignoring it). Every bank transaction that isn't filed or ignored, across the Accounts, is the Unfiled list.
   resources :bank_transactions, only: [] do
     resource :filing, only: [ :new, :create, :destroy ], controller: "bank_transaction_filings"
+    # What "Always file like this" would do with the text as it stands on the filing form, which the form asks for as the text is edited.
+    resource :rule_preview, only: :show, path: "filing/rule", controller: "bank_transaction_rule_previews"
     resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
   end
   get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions
+  # Standing instructions that file or ignore the bank transactions that come in, the same way each time: all of them in one place, where
+  # they're made from scratch, edited and deleted. The sweep is what a rule would do to the unfiled bank transactions that are already
+  # there, which the forms ask for as they're edited. Editing or deleting a rule never changes what it already filed.
+  resources :filing_rules, except: :show
+  resource :filing_rule_sweep, only: :show, path: "filing_rules/sweep", controller: "filing_rule_sweeps"
   post "csv_formats/preview" => "csv_format_previews#create", as: :csv_format_preview
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]

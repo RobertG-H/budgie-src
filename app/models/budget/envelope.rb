@@ -24,6 +24,9 @@ class Budget::Envelope < ApplicationRecord
   # Money moved out of this envelope back into Ready to Assign.
   has_many :ready_to_assign_reallocations, class_name: "Budget::ReadyToAssignReallocation", inverse_of: :envelope,
     dependent: :restrict_with_error
+  # The Filing rules that file into it. An envelope with no records can go, and takes its rules with it, which is why this stays
+  # after the checks above that refuse when it has records.
+  has_many :filing_rules, dependent: :destroy
 
   normalizes :name, with: ->(name) { name.squish }
 

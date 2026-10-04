@@ -4,6 +4,10 @@
 # Import that has run can be undone while it's the Account's latest (ADR 0011). One that adds no bank transactions, such as
 # the same file imported twice, is still an Import: it's the Account's latest, so an earlier one can't be undone from under the
 # rows it skipped.
+#
+# The budget's Filing rules act on the rows it creates, as they're created and in the same database transaction, so what a rule filed
+# or ignored is undone with the Import like any other filed records (ADR 0012). It says how many in `filed_by_rules` and
+# `ignored_by_rules`, which are what it did then: un-filing a row later doesn't change them.
 class Budget::Import < ApplicationRecord
   # Raised when an Import can't be undone; the message says why, for the person who asked.
   class Refused < StandardError; end
@@ -16,7 +20,8 @@ class Budget::Import < ApplicationRecord
   has_many :bank_transactions, dependent: :restrict_with_error
 
   validates :file_name, presence: true
-  validates :duplicates_skipped, :zero_rows_skipped, :money_in_count, :money_out_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :duplicates_skipped, :zero_rows_skipped, :money_in_count, :money_out_count, :filed_by_rules, :ignored_by_rules,
+    numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :csv_format_is_in_the_accounts_budget
 
   scope :latest_first, -> { order(created_at: :desc, id: :desc) }
@@ -41,7 +46,8 @@ class Budget::Import < ApplicationRecord
   #
   # The Account's rows are counted as the Account's lock is held, and the Account's other Imports take turns on it, so a double
   # submit imports once, and the second finds every row a duplicate. It's the same number of queries however many rows there
-  # are: one to lock, one to find what's already there, one to make the Import and one to insert every bank transaction.
+  # are: one to lock, one to find what's already there, one to make the Import and one to insert every bank transaction. The Filing
+  # rules add the same few again, however many rows and rules there are (see Budget::FilingRule::Applier).
   def run(file)
     return refuse("Choose a file to import.") if file.nil?
     return false unless valid?
@@ -55,7 +61,10 @@ class Budget::Import < ApplicationRecord
       self.zero_rows_skipped = reading.zero_rows
       assign_attributes(file_figures(reading.rows))
       save!
-      Budget::BankTransaction.insert_all!(rows.map { |row| row.merge(import_id: id) }) if rows.any?
+      if rows.any?
+        Budget::BankTransaction.insert_all!(rows.map { |row| row.merge(import_id: id) })
+        apply_filing_rules
+      end
     end
 
     true
@@ -112,6 +121,17 @@ class Budget::Import < ApplicationRecord
   end
 
   private
+    # Files and ignores the rows it brought in that the budget's Filing rules fit, and notes how many. A budget with no rules costs the
+    # one query that finds out.
+    def apply_filing_rules
+      applier = Budget::FilingRule::Applier.new(account.budget)
+      return if applier.rules.empty?
+
+      # Not through the association, which would keep them loaded, for Undo's restrict check to find after they're deleted.
+      result = applier.apply(Budget::BankTransaction.where(import_id: id).to_a)
+      update_columns(filed_by_rules: result.filed, ignored_by_rules: result.ignored)
+    end
+
     # What the file held, which isn't kept, so it's worked out now for the summary to say later: of every row that isn't of 0,
     # whether it was already in the Account or not.
     def file_figures(rows)

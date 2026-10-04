@@ -4,9 +4,10 @@ import { Controller } from "@hotwired/stimulus"
 // such as $60 from Groceries and $40 from Household. It adds a record from the template and removes one, numbers the records
 // and says what they add up to, against the bank transaction's amount, as they change. That's only to help: the server decides
 // whether they add up, and says so in the same words. The records are `filing[records][N]`, and a record added here is numbered
-// by the time, so it comes after every one before it and the server reads them in order.
+// by the time, so it comes after every one before it and the server reads them in order. "Always file like this" makes a Filing rule from
+// what's done, and never from a split, so while there's more than one record it's hidden and disabled, which sends none of it.
 export default class extends Controller {
-  static targets = [ "records", "template", "record", "legend", "remove", "add", "total" ]
+  static targets = [ "records", "template", "record", "legend", "remove", "add", "total", "rule" ]
   static values = { amount: String, unit: String, max: Number }
 
   connect() {
@@ -45,6 +46,10 @@ export default class extends Controller {
       legend.hidden = single
     })
     this.removeTargets.forEach((remove) => { remove.hidden = single })
+    this.ruleTargets.forEach((rule) => {
+      rule.hidden = !single
+      rule.disabled = !single
+    })
     this.addTarget.disabled = this.recordTargets.length >= this.maxValue
 
     const remaining = this.amountCents() - this.totalCents()

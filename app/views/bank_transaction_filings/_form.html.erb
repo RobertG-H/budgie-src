@@ -1,11 +1,12 @@
-<%# locals: (entry:, cancel_path:) %>
+<%# locals: (entry:, offer:, cancel_path:) %>
 <%# The records a bank transaction is filed as, in one form, and then File, which files them all or none. A bank transaction can be split into several records, such as $60 from Groceries and $40 from Household, which have to add up to its amount: the filing-split Stimulus controller adds a record from the template and removes one, and says what they add up to as it goes. Ignore is another action, sent the same form, and doesn't read what's in it. %>
+<%# "Always file like this" is a Filing rule made from what's done, whether it's filing or ignoring, and never from a split: the filing-split controller turns it off while there's more than one record. %>
 <%# Records are numbered by their place in the form, and the form sends them as a hash from each number, which the controller reads in order. A record added in the page is numbered by the time, so it's after all before it. %>
 <% bank_transaction = entry.bank_transaction %>
 <% budget = Current.budget %>
 
 <%= form_with scope: :filing, url: bank_transaction_filing_path(bank_transaction), method: :post, class: "mt-8 space-y-6" do |form| %>
-  <%= render "form_errors", messages: entry.errors.full_messages + entry.drafts.flat_map { |draft| draft.errors.full_messages } %>
+  <%= render "form_errors", messages: entry.errors.full_messages + entry.drafts.flat_map { |draft| draft.errors.full_messages } + offer.errors.full_messages %>
   <%= render "origin_fields" %>
 
   <div class="space-y-6" data-controller="filing-split" data-action="input->filing-split#update"
@@ -31,6 +32,8 @@
     <button type="button" class="btn" data-action="filing-split#addRecord" data-filing-split-target="add">Add another record</button>
 
     <p class="<%= entry.remaining.negative? ? "text-error" : "text-base-content/70" %>" data-filing-split-target="total" aria-live="polite"><%= filing_totals(entry, budget) %></p>
+
+    <%= render "filing_rules/offer", offer: offer %>
   </div>
 
   <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: "File" do %>

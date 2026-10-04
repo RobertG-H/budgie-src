@@ -24,6 +24,10 @@ class Budget::BankTransaction < ApplicationRecord
 
   belongs_to :account
   belongs_to :import
+  # The Filing rule that filed or ignored it, if one did and it's still filed or ignored: null when a person did it. It's only to
+  # be read while the bank transaction is filed or ignored (see `filed_by_rule`), since deleting its last record by hand leaves
+  # the value stale, until the next filing or ignoring writes it again.
+  belongs_to :filing_rule, optional: true
   # What it was filed as, a link for each record. A bank transaction with links can't be deleted: the model refuses, and the
   # database's ON DELETE RESTRICT is the backstop. Un-filing, Undo and deleting the Budget delete the links with their records.
   has_many :deposit_links, class_name: "Budget::DepositLink", dependent: :restrict_with_error
@@ -43,6 +47,17 @@ class Budget::BankTransaction < ApplicationRecord
   scope :newest_first, -> { order(date: :desc, id: :desc) }
   # Neither ignored nor filed as anything. Left joins, so a bank transaction with several links is still found once.
   scope :unfiled, -> { where(ignored_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
+
+  # Ignored, or filed as at least one record: what isn't unfiled. Left joins, so one with several links is still counted once, with `distinct`.
+  scope :filed_or_ignored, -> {
+    left_joins(:deposit_links, :spend_links, :refund_links)
+      .where("budget_bank_transactions.ignored_at IS NOT NULL OR budget_deposit_links.id IS NOT NULL OR budget_spend_links.id IS NOT NULL OR budget_refund_links.id IS NOT NULL")
+      .distinct
+  }
+
+  # Which way the money went: in is positive and out is negative.
+  scope :money_in, -> { where("budget_bank_transactions.amount > 0") }
+  scope :money_out, -> { where("budget_bank_transactions.amount < 0") }
 
   # The three kinds of record a bank transaction is filed as, each with the link table that holds it: the record's class, then its
   # link's. Everything that has to treat the kinds alike, such as inserting them or deleting them, goes through this.
@@ -64,6 +79,17 @@ class Budget::BankTransaction < ApplicationRecord
     end
   end
 
+  # Notes which Filing rule filed or ignored each bank transaction, which is the value for its id in `rule_ids_by_id`, or none (nil) for
+  # one that a person did. It's one statement however many there are, and `attributes` are set on them all, such as when they were
+  # ignored.
+  def self.note_filing_rules(rule_ids_by_id, **attributes)
+    return if rule_ids_by_id.empty?
+
+    # Cast, since a CASE of nothing but nulls is text to PostgreSQL, which is what it is when a person did them all.
+    rule_ids = rule_ids_by_id.reduce(Arel::Nodes::Case.new(arel_table[:id])) { |node, (id, rule_id)| node.when(id).then(rule_id) }
+    where(id: rule_ids_by_id.keys).update_all(attributes.merge(filing_rule_id: Arel::Nodes::NamedFunction.new("CAST", [ rule_ids.as("bigint") ]), updated_at: Time.current))
+  end
+
   # How many records of each kind were filed from the bank transactions in `transactions`, by the kind's plural: `{ deposits: 1,
   # spends: 2, refunds: 0 }`. What Undo says it will delete.
   def self.filed_record_counts(transactions)
@@ -82,6 +108,16 @@ class Budget::BankTransaction < ApplicationRecord
     description.squish.downcase(:fold)
   end
 
+  # The description as a Filing rule reads it: trimmed, whitespace collapsed and case folded, here in Ruby as the rule's own text is, so
+  # the two can't disagree over an unusual space or case fold the way the database's `normalized_description` could, which is only
+  # SQL's idea of the same thing. It's kept for as long as the description is the same, since an Import matches every row against
+  # every rule.
+  def description_for_matching
+    @description_for_matching = nil unless @description_matched == description
+    @description_matched = description
+    @description_for_matching ||= self.class.normalize_description(description)
+  end
+
   def ignored?
     ignored_at.present?
   end
@@ -92,6 +128,11 @@ class Budget::BankTransaction < ApplicationRecord
 
   def unfiled?
     !ignored? && !filed?
+  end
+
+  # The Filing rule that filed or ignored it, which is nothing for one that's unfiled, or that a person filed or ignored.
+  def filed_by_rule
+    filing_rule if filed? || ignored?
   end
 
   def state
@@ -124,7 +165,7 @@ class Budget::BankTransaction < ApplicationRecord
       raise Refused, "This bank transaction is filed. Un-file it before ignoring it." if filed?
       raise Refused, "This bank transaction is already ignored." if ignored?
 
-      update!(ignored_at: Time.current)
+      update!(ignored_at: Time.current, filing_rule_id: nil)
     end
   end
 
@@ -132,7 +173,7 @@ class Budget::BankTransaction < ApplicationRecord
     with_lock do
       raise Refused, "This bank transaction isn't ignored." unless ignored?
 
-      update!(ignored_at: nil)
+      update!(ignored_at: nil, filing_rule_id: nil)
     end
   end
 
@@ -142,6 +183,7 @@ class Budget::BankTransaction < ApplicationRecord
       raise Refused, "This bank transaction isn't filed." unless filed?
 
       self.class.delete_filed_records(self.class.where(id: id))
+      update!(filing_rule_id: nil)
     end
   end
 

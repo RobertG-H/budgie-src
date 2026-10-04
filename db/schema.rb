@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_190000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -46,8 +46,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "ignored_at"
+    t.bigint "filing_rule_id"
     t.index ["account_id", "content_key", "occurrence"], name: "index_budget_bank_transactions_on_content_key_and_occurrence", unique: true
     t.index ["account_id", "date", "id"], name: "index_budget_bank_transactions_on_account_id_and_date_and_id"
+    t.index ["filing_rule_id"], name: "index_budget_bank_transactions_on_filing_rule_id"
     t.index ["import_id"], name: "index_budget_bank_transactions_on_import_id"
     t.check_constraint "amount <> 0::numeric", name: "budget_bank_transactions_amount_not_zero"
     t.check_constraint "btrim(description::text) <> ''::text", name: "budget_bank_transactions_description_not_blank"
@@ -140,6 +142,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_envelopes_name_not_blank"
   end
 
+  create_table "budget_filing_rules", force: :cascade do |t|
+    t.bigint "budget_id", null: false
+    t.string "text", null: false
+    t.bigint "account_id"
+    t.decimal "amount", precision: 15, scale: 2
+    t.string "outcome", null: false
+    t.bigint "envelope_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_budget_filing_rules_on_account_id"
+    t.index ["budget_id", "text", "account_id", "amount"], name: "index_budget_filing_rules_on_conditions", unique: true, nulls_not_distinct: true
+    t.index ["envelope_id"], name: "index_budget_filing_rules_on_envelope_id"
+    t.check_constraint "(outcome::text = ANY (ARRAY['spend'::character varying, 'refund'::character varying]::text[])) = (envelope_id IS NOT NULL)", name: "budget_filing_rules_envelope_for_outcome"
+    t.check_constraint "amount IS NULL OR amount <> 0::numeric", name: "budget_filing_rules_amount_not_zero"
+    t.check_constraint "amount IS NULL OR outcome::text = 'ignore'::text OR outcome::text = 'spend'::text AND amount < 0::numeric OR (outcome::text = ANY (ARRAY['refund'::character varying, 'deposit'::character varying]::text[])) AND amount > 0::numeric", name: "budget_filing_rules_amount_suits_outcome"
+    t.check_constraint "char_length(btrim(text::text)) >= 3", name: "budget_filing_rules_text_at_least_3_characters"
+    t.check_constraint "outcome::text = ANY (ARRAY['spend'::character varying, 'refund'::character varying, 'deposit'::character varying, 'ignore'::character varying]::text[])", name: "budget_filing_rules_outcome_known"
+  end
+
   create_table "budget_imports", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.bigint "csv_format_id", null: false
@@ -157,6 +178,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
     t.date "first_row_date"
     t.string "first_row_description"
     t.decimal "first_row_amount", precision: 15, scale: 2
+    t.integer "filed_by_rules", default: 0, null: false
+    t.integer "ignored_by_rules", default: 0, null: false
     t.index ["account_id", "created_at"], name: "index_budget_imports_on_account_id_and_created_at"
     t.index ["csv_format_id"], name: "index_budget_imports_on_csv_format_id"
     t.check_constraint "(earliest_date IS NULL) = ((money_in_count + money_out_count) = 0) AND (latest_date IS NULL) = (earliest_date IS NULL) AND (earliest_date IS NULL OR earliest_date <= latest_date)", name: "budget_imports_dates_match_rows"
@@ -165,6 +188,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
     t.check_constraint "(money_out_count = 0) = (money_out_total = 0::numeric) AND money_out_total <= 0::numeric", name: "budget_imports_money_out_total_matches_count"
     t.check_constraint "btrim(file_name::text) <> ''::text", name: "budget_imports_file_name_not_blank"
     t.check_constraint "duplicates_skipped >= 0", name: "budget_imports_duplicates_skipped_not_negative"
+    t.check_constraint "filed_by_rules >= 0", name: "budget_imports_filed_by_rules_not_negative"
+    t.check_constraint "ignored_by_rules >= 0", name: "budget_imports_ignored_by_rules_not_negative"
     t.check_constraint "money_in_count >= 0 AND money_out_count >= 0", name: "budget_imports_money_counts_not_negative"
     t.check_constraint "zero_rows_skipped >= 0", name: "budget_imports_zero_rows_skipped_not_negative"
   end
@@ -281,6 +306,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
   add_foreign_key "budget_accounts", "budgets", on_delete: :restrict
   add_foreign_key "budget_assignments", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_bank_transactions", "budget_accounts", column: "account_id", on_delete: :restrict
+  add_foreign_key "budget_bank_transactions", "budget_filing_rules", column: "filing_rule_id", on_delete: :restrict
   add_foreign_key "budget_bank_transactions", "budget_imports", column: "import_id", on_delete: :restrict
   add_foreign_key "budget_csv_formats", "budgets", on_delete: :restrict
   add_foreign_key "budget_deposit_links", "budget_bank_transactions", column: "bank_transaction_id", on_delete: :restrict
@@ -289,6 +315,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "from_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "to_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelopes", "budgets", on_delete: :restrict
+  add_foreign_key "budget_filing_rules", "budget_accounts", column: "account_id", on_delete: :restrict
+  add_foreign_key "budget_filing_rules", "budget_envelopes", column: "envelope_id", on_delete: :restrict
+  add_foreign_key "budget_filing_rules", "budgets", on_delete: :restrict
   add_foreign_key "budget_imports", "budget_accounts", column: "account_id", on_delete: :restrict
   add_foreign_key "budget_imports", "budget_csv_formats", column: "csv_format_id", on_delete: :restrict
   add_foreign_key "budget_ready_to_assign_reallocations", "budget_envelopes", column: "envelope_id", on_delete: :restrict

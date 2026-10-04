@@ -4,11 +4,13 @@
 class Budget::Filing::Entry
   include ActiveModel::Model
 
-  attr_reader :bank_transaction, :drafts
+  attr_reader :bank_transaction, :drafts, :filing_rule
 
-  # Each of `drafts` is a Draft, or what one is made from.
-  def initialize(bank_transaction:, drafts:)
+  # Each of `drafts` is a Draft, or what one is made from. `filing_rule` is the Filing rule that's filing it, if one is: a person's
+  # filing has none.
+  def initialize(bank_transaction:, drafts:, filing_rule: nil)
     @bank_transaction = bank_transaction
+    @filing_rule = filing_rule
     @drafts = Array(drafts).map { |draft| draft.is_a?(Budget::Filing::Draft) ? draft : Budget::Filing::Draft.new(draft) }
   end
 

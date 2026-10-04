@@ -11,7 +11,7 @@ class AccountsController < ApplicationController
 
   # The Account's bank transactions, a page at a time, newest first, each with what it was filed as, and its latest Import.
   def show
-    @bank_transactions = paginate(@account.bank_transactions.includes(deposit_links: :deposit, spend_links: { spend: :envelope }, refund_links: { refund: :envelope }).newest_first)
+    @bank_transactions = paginate(@account.bank_transactions.includes(deposit_links: :deposit, spend_links: { spend: :envelope }, refund_links: { refund: :envelope }, filing_rule: :envelope).newest_first)
     @latest_import = @account.latest_import
   end
 
