@@ -64,7 +64,7 @@ RSpec.describe "Spends", type: :request do
     end
 
     it "doesn't choose another budget's envelope, or one that doesn't exist, or something that isn't an id" do
-      [ others_envelope.id, 0, "not-an-id", "" ].each do |envelope_id|
+      [ others_envelope.id, 0, "not-an-id", "", [ groceries.id ], { x: groceries.id } ].each do |envelope_id|
         get new_spend_path(month: "2026-09", envelope: envelope_id)
 
         expect(response).to have_http_status(:ok)
@@ -406,6 +406,20 @@ RSpec.describe "Spends", type: :request do
       assert_select "select[name='spend[envelope_id]'][aria-invalid=true]"
       expect(loblaws.reload.envelope).to eq(groceries)
       expect(others_envelope.spends).to be_empty
+    end
+
+    it "has Cancel go back to the page of the envelope the Spend is still in when a move to another is refused" do
+      patch spend_path(loblaws), params: { spend: { envelope_id: fuel.id, amount: "0" }, from: "envelope", month: "2026-09" }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "option[selected][value='#{fuel.id}']"
+      assert_select "a.btn[href='#{month_envelope_path("2026-09", groceries)}']", text: "Cancel"
+    end
+
+    it "has Cancel go back to the page of the envelope the Spend is in when the envelope it was moved to is refused" do
+      patch spend_path(loblaws), params: { spend: { envelope_id: others_envelope.id }, from: "envelope", month: "2026-09" }
+
+      assert_select "a.btn[href='#{month_envelope_path("2026-09", groceries)}']", text: "Cancel"
     end
 
     it "refuses a blank envelope, and leaves the Spend where it was" do

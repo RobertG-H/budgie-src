@@ -134,7 +134,7 @@ cancelled.
 
 Assigned is money moved from Ready to Assign into one envelope for one month, one figure per envelope per month. It is
 worked into the same calculator: an envelope's Available is its Starting balance plus everything assigned up to the
-month, and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
+month (less everything spent, below), and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
 number of grouped queries. Changing an earlier month's Assigned therefore changes every later month. It's set in place on
 the month view: each envelope's Assigned cell is a Turbo Frame that swaps between the amount and an input, and saving
 refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's

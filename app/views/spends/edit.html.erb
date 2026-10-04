@@ -7,5 +7,5 @@
           params: { from: origin, month: @month.to_param }.compact %>
   <% end %>
 
-  <%= render "form", spend: @spend, cancel_path: return_path(@month, envelope: @spend.envelope) %>
+  <%= render "form", spend: @spend, cancel_path: return_path(@month, envelope: origin_envelope) %>
 </div>

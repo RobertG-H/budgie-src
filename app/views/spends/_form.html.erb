@@ -28,8 +28,5 @@
     <%= form.text_area :notes, rows: 3, **field %>
   <% end %>
 
-  <div class="flex items-center gap-4">
-    <%= form.submit class: "btn btn-primary" %>
-    <%= link_to "Cancel", cancel_path, class: "btn btn-ghost" %>
-  </div>
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
 <% end %>

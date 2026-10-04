@@ -104,6 +104,7 @@ second use turns it into a partial. The partials:
 | `_month_links` | Links to the months either side of the one being viewed, named for them, and back to the current month when viewing another. Each page passes a `path` that turns a month into its own address, so the links stay on that page. |
 | `_record_list` | The bordered list that holds record rows. |
 | `_record_row` | One record in a `_record_list`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. The whole row links to the record's edit page, where it's also deleted. |
+| `_form_actions` | What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. |
 | `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. A form of its own, so it goes in a page's header actions. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |
 

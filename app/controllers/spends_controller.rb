@@ -4,10 +4,12 @@ class SpendsController < ApplicationController
 
   before_action :set_spend, only: %i[ edit update destroy ]
 
+  helper_method :origin_envelope
+
   # A Spend can be started for an envelope, named by its id in `envelope`, which an envelope's page does, and without one,
-  # which the month view does. An envelope that isn't the budget's is none.
+  # which the month view does. An envelope that isn't the budget's is none, and neither is anything but a plain id.
   def new
-    @spend = Budget::Spend.new(date: default_date, envelope: Current.budget.envelopes.find_by(id: params[:envelope]))
+    @spend = Budget::Spend.new(date: default_date, envelope: Current.budget.envelopes.find_by(id: params[:envelope].to_s))
   end
 
   def create
@@ -42,9 +44,10 @@ class SpendsController < ApplicationController
       @spend = Current.budget.spends.find(params[:id])
     end
 
-    # Today if it's in the month the form was opened from, and otherwise the 1st of that month.
-    def default_date
-      @month.current? ? Date.current : @month.date
+    # The envelope whose page Cancel goes back to. A Spend that's saved is still in the envelope it was found in, even when
+    # a change of envelope was refused, and a new one is in the envelope the form has chosen, if any.
+    def origin_envelope
+      @spend.persisted? ? Current.budget.envelopes.find_by(id: @spend.envelope_id_in_database) : @spend.envelope
     end
 
     # A Spend goes back to the page for the month it's dated in, since that's where it's listed.

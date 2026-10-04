@@ -8,6 +8,12 @@ module MonthScoped
   end
 
   private
+    # What a new record's date starts as: today if that's in the month the form was opened from, and otherwise the 1st of
+    # that month.
+    def default_date
+      @month.current? ? Date.current : @month.date
+    end
+
     def set_month
       @month = if params[:month].present?
         Budget::Month.from_param(Current.budget, params[:month]) || raise(ActionController::RoutingError, "Not Found")

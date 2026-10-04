@@ -3,5 +3,5 @@
 <div class="mx-auto max-w-md">
   <%= render "components/page_header", title: "New spend" %>
 
-  <%= render "form", spend: @spend, cancel_path: return_path(@month, envelope: @spend.envelope) %>
+  <%= render "form", spend: @spend, cancel_path: return_path(@month, envelope: origin_envelope) %>
 </div>
