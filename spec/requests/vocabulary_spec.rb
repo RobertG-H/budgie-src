@@ -28,6 +28,12 @@ RSpec.describe "The words on the pages", type: :request do
     create(:budget_refund, envelope: bills, description: "Hydro rebate", date: Date.new(2026, 10, 20), amount: 12.25, notes: "Credited in October")
   end
 
+  # Money moved out of Bills into another envelope, in the month the pages below are for.
+  let!(:reallocation) do
+    create(:budget_envelope_reallocation, from_envelope: bills, to_envelope: create(:budget_envelope, budget: budget, name: "Fuel"),
+      description: "Covering the gas", date: Date.new(2026, 10, 22), amount: 8.75, notes: "Only this once")
+  end
+
   before { sign_in_as budget.user }
 
   # What a person reads on the page, not its markup.
@@ -60,6 +66,8 @@ RSpec.describe "The words on the pages", type: :request do
     "the Spend edit form" => -> { edit_spend_path(spend, month: "2026-10", from: "envelope") },
     "the Refund form" => -> { new_refund_path(month: "2026-10", from: "envelope", envelope: bills.id) },
     "the Refund edit form" => -> { edit_refund_path(refund, month: "2026-10", from: "envelope") },
+    "the Reallocate form" => -> { new_reallocation_path(month: "2026-10", from: "envelope", envelope: bills.id) },
+    "the Reallocation edit form" => -> { edit_envelope_reallocation_path(reallocation, month: "2026-10", from: "envelope", envelope: bills.id) },
     "the envelope form" => -> { new_envelope_path(month: "2026-10", from: "month") },
     "the envelope edit form" => -> { edit_envelope_path(bills, month: "2026-10", from: "envelope") },
     "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
@@ -140,6 +148,31 @@ RSpec.describe "The words on the pages", type: :request do
     get month_path("2026-10")
 
     expect(visible_text).to include("Refunded")
+  end
+
+  it "uses the same words for what went wrong when a Reallocation is refused" do
+    post reallocations_path, params: { reallocation: { from_envelope_id: bills.id, to_envelope_id: bills.id, description: "", date: "2026-10-15", amount: "1.005" } }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(visible_text).to include("To can't be the same envelope as From", "Description can't be blank", "Amount can't have more than 2 decimal places")
+    expect(visible_text).not_to match(/\w+_\w+/)
+    expect(visible_text).not_to match(retired_terms)
+
+    post reallocations_path, params: { reallocation: { from_envelope_id: "", to_envelope_id: "", description: "Gas", date: "2026-10-15", amount: "5" } }
+
+    expect(visible_text).to include("From can't be blank", "To can't be blank")
+    expect(visible_text).not_to match(/\w+_\w+/)
+  end
+
+  it "says Reallocated, and Reallocations, on the pages where money moved between envelopes is shown" do
+    get month_envelope_path("2026-10", bills)
+
+    expect(visible_text).to include("Reallocated -$8.75", "Reallocations", "Covering the gas", "To Fuel", "Reallocate")
+
+    get month_path("2026-10")
+
+    expect(visible_text).to include("Reallocated")
+    expect(visible_text).not_to include("Reallocate ")
   end
 
   it "uses the same words for what went wrong when a Deposit is refused" do

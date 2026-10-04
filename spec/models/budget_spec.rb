@@ -9,6 +9,7 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to have_many(:assignments).through(:envelopes) }
   it { is_expected.to have_many(:spends).through(:envelopes) }
   it { is_expected.to have_many(:refunds).through(:envelopes) }
+  it { is_expected.to have_many(:envelope_reallocations).through(:envelopes).source(:outgoing_reallocations) }
   it { is_expected.to validate_presence_of(:currency) }
   it { is_expected.to validate_inclusion_of(:currency).in_array(Budget::CURRENCIES.keys).with_message("isn't supported") }
 
@@ -66,6 +67,17 @@ RSpec.describe Budget, type: :model do
       create(:budget_refund)
 
       expect(budget.refunds).to contain_exactly(mine)
+    end
+  end
+
+  describe "#envelope_reallocations" do
+    it "are the Reallocations between its envelopes, each once, and no other budget's" do
+      budget = create(:budget)
+      mine = create(:budget_envelope_reallocation, from_envelope: create(:budget_envelope, budget: budget))
+      back = create(:budget_envelope_reallocation, from_envelope: mine.to_envelope, to_envelope: mine.from_envelope)
+      create(:budget_envelope_reallocation)
+
+      expect(budget.envelope_reallocations).to contain_exactly(mine, back)
     end
   end
 
@@ -206,14 +218,19 @@ RSpec.describe Budget, type: :model do
   describe "being destroyed" do
     let(:budget) { create(:budget) }
 
-    # Two envelopes with records, a Deposit, and an envelope with nothing recorded against it.
+    # Two envelopes with records, a third that only has Reallocations, a Deposit, and an envelope with nothing recorded
+    # against it.
     before do
-      groceries, rent = create_list(:budget_envelope, 2, budget: budget)
+      groceries, rent, extra = create_list(:budget_envelope, 3, budget: budget)
       create(:budget_envelope, budget: budget)
       [ groceries, rent ].each do |envelope|
         [ Date.new(2026, 9, 1), Date.new(2026, 10, 1) ].each { |month| create(:budget_assignment, envelope: envelope, month: month) }
         create_list(:budget_spend, 3, envelope: envelope)
         create_list(:budget_refund, 2, envelope: envelope)
+      end
+      # Each of the three envelopes gives to the next one and receives from it, so every one has Reallocations both ways.
+      [ [ groceries, rent ], [ rent, extra ], [ extra, groceries ] ].each do |from, to|
+        create_list(:budget_envelope_reallocation, 2, from_envelope: from, to_envelope: to)
       end
       create(:budget_deposit, budget: budget)
     end
@@ -221,10 +238,11 @@ RSpec.describe Budget, type: :model do
     it "deletes its envelopes' records first, since an envelope with records can't be deleted, and then everything else" do
       expect { budget.destroy! }
         .to change(Budget, :count).by(-1)
-        .and change(Budget::Envelope, :count).by(-3)
+        .and change(Budget::Envelope, :count).by(-4)
         .and change(Budget::Assignment, :count).by(-4)
         .and change(Budget::Spend, :count).by(-6)
         .and change(Budget::Refund, :count).by(-4)
+        .and change(Budget::EnvelopeReallocation, :count).by(-6)
         .and change(Budget::Deposit, :count).by(-1)
     end
 
@@ -232,12 +250,14 @@ RSpec.describe Budget, type: :model do
       others = create(:budget_assignment)
       others_spend = create(:budget_spend)
       others_refund = create(:budget_refund)
+      others_reallocation = create(:budget_envelope_reallocation)
 
       budget.destroy!
 
       expect(Budget::Assignment.all).to contain_exactly(others)
       expect(Budget::Spend.all).to contain_exactly(others_spend)
       expect(Budget::Refund.all).to contain_exactly(others_refund)
+      expect(Budget::EnvelopeReallocation.all).to contain_exactly(others_reallocation)
       expect(Budget::Envelope.exists?(others.envelope_id)).to be(true)
     end
   end

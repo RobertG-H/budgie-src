@@ -1,6 +1,6 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
-# them, what's spent and what came back, so the real pages have something to show. Running it again changes nothing
+# them, what's spent, what came back and what was moved between envelopes, so the real pages have something to show. Running it again changes nothing
 # that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
@@ -75,3 +75,9 @@ end
 # else changes, Ready to Assign least of all. It's the only one, so every other envelope's page has no Refunds section.
 budget.envelopes.find_by!(name: "Groceries").refunds
   .find_or_create_by!(description: "Loblaws return", date: this_month + 5) { |refund| refund.amount = 18.75 }
+
+# Money moved from Groceries, which has some left, to Dining out, which is Overspent: $20 covers part of it, so Dining
+# out is still Overspent, with less to cover. Only Groceries and Dining out have a Reallocations section on their pages.
+groceries = budget.envelopes.find_by!(name: "Groceries")
+budget.envelopes.find_by!(name: "Dining out").incoming_reallocations
+  .find_or_create_by!(from_envelope: groceries, description: "Covering the takeout", date: this_month + 11) { |reallocation| reallocation.amount = 20 }

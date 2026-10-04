@@ -7,6 +7,7 @@
   <%= render "components/page_header", title: @envelope.name, description: @month.name do %>
     <%= link_to "New spend", new_spend_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn btn-primary" %>
     <%= link_to "New refund", new_refund_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
+    <%= link_to "Reallocate", new_reallocation_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
     <%= link_to "Edit", edit_envelope_path(@envelope, month: @month, from: "envelope"), class: "btn" %>
     <%= render "components/delete_button", path: envelope_path(@envelope),
           confirm: "Delete the #{@envelope.name} envelope?", params: { month: @month.to_param } %>
@@ -17,7 +18,7 @@
   <%= render "components/month_links", month: @month, path: ->(month) { month_envelope_path(month, @envelope) } %>
 </div>
 
-<%# Assigned is only shown here: it's set on the month view, where Ready to Assign moves with it. Available is the result of the four above it, so it has a row of its own. %>
+<%# Assigned is only shown here: it's set on the month view, where Ready to Assign moves with it. Available is the result of the others, so it ends the last row, beside Reallocated. %>
 <div class="mt-8 grid gap-4 sm:grid-cols-2">
   <%= render "components/stat_card", title: "Carried over",
         value: render("components/money", amount: @line.carried_over, budget: budget) %>
@@ -27,10 +28,10 @@
         value: render("components/money", amount: @line.spent, budget: budget) %>
   <%= render "components/stat_card", title: "Refunded",
         value: render("components/money", amount: @line.refunded, budget: budget) %>
-  <div class="sm:col-span-2">
-    <%= render "components/stat_card", title: "Available",
-          value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
-  </div>
+  <%= render "components/stat_card", title: "Reallocated",
+        value: render("components/money", amount: @line.reallocated, budget: budget) %>
+  <%= render "components/stat_card", title: "Available",
+        value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
 </div>
 
 <%= render "record_section", title: "Spends", records: @spends, budget: budget, empty_message: "No spends in #{@month.name}.",
@@ -40,4 +41,12 @@
 <% if @refunds.any? %>
   <%= render "record_section", title: "Refunds", records: @refunds, budget: budget,
         edit_path: ->(refund) { edit_refund_path(refund, month: @month, from: "envelope") } %>
+<% end %>
+
+<%# Reallocations are rarer still, and each is on both its envelopes' pages, so it's read from this envelope's side: where the money went or came from, and negative when it left. %>
+<% if @reallocations.any? %>
+  <%= render "record_section", title: "Reallocations", records: @reallocations, budget: budget,
+        edit_path: ->(reallocation) { edit_envelope_reallocation_path(reallocation, month: @month, from: "envelope", envelope: @envelope.id) },
+        counterpart: ->(reallocation) { reallocation.counterpart_for(@envelope) },
+        amount: ->(reallocation) { reallocation.amount_for(@envelope) } %>
 <% end %>

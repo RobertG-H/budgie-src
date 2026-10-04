@@ -23,6 +23,11 @@ RSpec.describe Budget::Month, type: :model do
     create(:budget_refund, envelope: envelope, amount: amount, date: date)
   end
 
+  # Money moved from one envelope to another on a date.
+  def reallocate(from, to, amount, date)
+    create(:budget_envelope_reallocation, from_envelope: from, to_envelope: to, amount: amount, date: date)
+  end
+
   # A month of the budget, worked out afresh, since a month remembers the figures it has worked out.
   def month_of(date, budget: self.budget)
     Budget::Month.new(budget, date)
@@ -577,6 +582,134 @@ RSpec.describe Budget::Month, type: :model do
     end
   end
 
+  describe "Reallocated" do
+    let(:january) { Date.new(2026, 1, 1) }
+    let(:february) { Date.new(2026, 2, 1) }
+    let(:march) { Date.new(2026, 3, 1) }
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 0) }
+    let!(:dining_out) { create(:budget_envelope, budget: budget, name: "Dining out", starting_balance: 0) }
+
+    # The Groceries worked example, as for Spent: $400 is assigned in each of January to March, and $350, $480 and $300
+    # are spent. Dining out has $200 assigned in each of them and nothing spent.
+    def set_up_the_example
+      [ january, february, march ].each do |month|
+        assign groceries, 400, month
+        assign dining_out, 200, month
+      end
+      spend groceries, 350, Date.new(2026, 1, 20)
+      spend groceries, 480, Date.new(2026, 2, 14)
+      spend groceries, 300, Date.new(2026, 3, 3)
+    end
+
+    def line_of(envelope, month)
+      month_of(month).envelopes.find { |line| line.envelope == envelope }
+    end
+
+    # What the envelope shows in each of January to March, as [ carried over, reallocated, available ].
+    def figures_of(envelope)
+      [ january, february, march ].map do |month|
+        line = line_of(envelope, month)
+        [ line.carried_over, line.reallocated, line.available ]
+      end
+    end
+
+    it "gives Groceries a $30 Reallocation from Dining out in February: Available $50, $0 and $100, so February is no longer Overspent" do
+      set_up_the_example
+      reallocate dining_out, groceries, 30, Date.new(2026, 2, 20)
+
+      expect(figures_of(groceries)).to eq([ [ 0, 0, 50 ], [ 50, 30, 0 ], [ 0, 0, 100 ] ])
+      expect(figures_of(dining_out)).to eq([ [ 0, 0, 200 ], [ 200, -30, 370 ], [ 370, 0, 570 ] ])
+      expect([ january, february, march ].map { |month| line_of(groceries, month).overspent? }).to eq([ false, false, false ])
+    end
+
+    it "is Reallocated $0 in every month when nothing has been reallocated, and changes no Available" do
+      set_up_the_example
+
+      expect(figures_of(groceries)).to eq([ [ 0, 0, 50 ], [ 50, 0, -30 ], [ -30, 0, 70 ] ])
+      expect(line_of(groceries, february)).to be_overspent
+    end
+
+    it "leaves Ready to Assign exactly as it was, in every month, with the Reallocation and without it" do
+      set_up_the_example
+      deposit 3000, january
+      deposit 3000, february
+      without_it = [ january, february, march ].map { |month| month_of(month).ready_to_assign.to_h }
+
+      reallocate dining_out, groceries, 30, Date.new(2026, 2, 20)
+
+      expect([ january, february, march ].map { |month| month_of(month).ready_to_assign.to_h }).to eq(without_it)
+    end
+
+    it "keeps the two envelopes' Available adding up to the same in every month" do
+      set_up_the_example
+      without_it = [ january, february, march ].map { |month| month_of(month).envelopes.sum(&:available) }
+
+      reallocate dining_out, groceries, 30, Date.new(2026, 2, 20)
+
+      expect([ january, february, march ].map { |month| month_of(month).envelopes.sum(&:available) }).to eq(without_it)
+    end
+
+    it "can leave the From envelope Overspent, and shows that" do
+      reallocate groceries, dining_out, 75, Date.new(2026, 2, 10)
+
+      expect(line_of(groceries, february)).to have_attributes(reallocated: -75, available: -75)
+      expect(line_of(groceries, february)).to be_overspent
+      expect(line_of(dining_out, february)).to have_attributes(reallocated: 75, available: 75)
+    end
+
+    it "adds up several Reallocations in and out of an envelope in the same month" do
+      other = create(:budget_envelope, budget: budget, name: "Fuel")
+      reallocate dining_out, groceries, 30, Date.new(2026, 2, 3)
+      reallocate dining_out, groceries, 12.5, Date.new(2026, 2, 28)
+      reallocate groceries, other, 4.25, Date.new(2026, 2, 15)
+
+      expect(line_of(groceries, february).reallocated).to eq(BigDecimal("38.25"))
+      expect(line_of(dining_out, february).reallocated).to eq(BigDecimal("-42.5"))
+      expect(line_of(other, february).reallocated).to eq(BigDecimal("4.25"))
+    end
+
+    it "counts in the month of its date: the 1st and the last day of it, and not the days either side" do
+      reallocate dining_out, groceries, 1, Date.new(2026, 1, 31)
+      reallocate dining_out, groceries, 10, Date.new(2026, 2, 1)
+      reallocate dining_out, groceries, 100, Date.new(2026, 2, 28)
+      reallocate dining_out, groceries, 1000, Date.new(2026, 3, 1)
+
+      expect(figures_of(groceries)).to eq([ [ 0, 1, 1 ], [ 1, 110, 111 ], [ 111, 1000, 1111 ] ])
+      expect(figures_of(dining_out)).to eq([ [ 0, -1, -1 ], [ -1, -110, -111 ], [ -111, -1000, -1111 ] ])
+    end
+
+    it "counts in every month after the one it's dated in, and in none before" do
+      reallocate dining_out, groceries, 30, Date.new(2026, 2, 20)
+
+      expect(line_of(groceries, january)).to have_attributes(carried_over: 0, reallocated: 0, available: 0)
+      expect(line_of(groceries, Date.new(2026, 12, 1))).to have_attributes(carried_over: 30, reallocated: 0, available: 30)
+    end
+
+    it "counts a Reallocation made in a month long after the others, across the end of a year" do
+      reallocate dining_out, groceries, 30, Date.new(2025, 12, 31)
+
+      expect(line_of(groceries, Date.new(2026, 1, 1))).to have_attributes(carried_over: 30, reallocated: 0)
+      expect(line_of(groceries, Date.new(2025, 12, 1))).to have_attributes(carried_over: 0, reallocated: 30)
+    end
+
+    it "adds to the Starting balance" do
+      groceries.update!(starting_balance: 20)
+      reallocate dining_out, groceries, 30, Date.new(2026, 2, 20)
+
+      expect(line_of(groceries, february)).to have_attributes(carried_over: 20, reallocated: 30, available: 50)
+    end
+
+    it "doesn't count another budget's Reallocations" do
+      other_budget = create(:budget)
+      from = create(:budget_envelope, budget: other_budget)
+      to = create(:budget_envelope, budget: other_budget)
+      reallocate from, to, 30, Date.new(2026, 2, 20)
+
+      expect(figures_of(groceries)).to eq([ [ 0, 0, 0 ] ] * 3)
+      expect(month_of(february, budget: other_budget).envelopes.map(&:reallocated)).to contain_exactly(-30, 30)
+    end
+  end
+
   describe "the month itself" do
     it "is the calendar month containing the date it's given" do
       expect(Budget::Month.new(budget, Date.new(2026, 9, 17)).date).to eq(Date.new(2026, 9, 1))
@@ -675,16 +808,18 @@ RSpec.describe Budget::Month, type: :model do
         figures = Budget::Month.new(budget, month)
         ready_to_assign = figures.ready_to_assign
         [ ready_to_assign.amount, ready_to_assign.carried_over, ready_to_assign.deposited, ready_to_assign.assigned ]
-        figures.envelopes.each { |line| [ line.carried_over, line.assigned, line.spent, line.refunded, line.available ] }
+        figures.envelopes.each { |line| [ line.carried_over, line.assigned, line.spent, line.refunded, line.reallocated, line.available ] }
       end
     end
 
-    it "doesn't grow with the months of history: 1 month of Deposits, Assigned amounts, Spends and Refunds costs what 36 do" do
+    it "doesn't grow with the months of history: 1 month of Deposits, Assigned amounts, Spends, Refunds and Reallocations costs what 36 do" do
       envelope = create(:budget_envelope, budget: budget)
+      other = create(:budget_envelope, budget: budget)
       deposit 100, month
       assign envelope, 10, month
       spend envelope, 5, month
       refund envelope, 2, month
+      reallocate envelope, other, 1, month
       with_one_month = queries_for_every_figure
 
       (1..35).each do |months_ago|
@@ -692,6 +827,8 @@ RSpec.describe Budget::Month, type: :model do
         assign envelope, 10, month << months_ago
         spend envelope, 5, month << months_ago
         refund envelope, 2, month << months_ago
+        reallocate envelope, other, 1, month << months_ago
+        reallocate other, envelope, 1, month << months_ago
       end
       with_thirty_six = queries_for_every_figure
 
@@ -699,18 +836,21 @@ RSpec.describe Budget::Month, type: :model do
       expect(with_thirty_six).to eq(with_one_month)
     end
 
-    it "doesn't grow with the envelopes: 1 envelope with an Assigned amount, a Spend and a Refund costs what 20 do" do
+    it "doesn't grow with the envelopes: 1 envelope with an Assigned amount, a Spend, a Refund and a Reallocation costs what 20 do" do
       envelope = create(:budget_envelope, budget: budget)
+      other = create(:budget_envelope, budget: budget)
       assign envelope, 10, month
       spend envelope, 5, month
       refund envelope, 2, month
+      reallocate envelope, other, 1, month
       deposit 100, month
       with_one_envelope = queries_for_every_figure
 
-      create_list(:budget_envelope, 19, budget: budget).each do |other|
-        assign other, 10, month
-        spend other, 5, month
-        refund other, 2, month
+      create_list(:budget_envelope, 18, budget: budget).each do |another|
+        assign another, 10, month
+        spend another, 5, month
+        refund another, 2, month
+        reallocate another, envelope, 1, month
       end
       with_twenty = queries_for_every_figure
 
@@ -718,7 +858,7 @@ RSpec.describe Budget::Month, type: :model do
       expect(with_twenty).to eq(with_one_envelope)
     end
 
-    it "costs the same whether or not anything has been assigned, spent or refunded" do
+    it "costs the same whether or not anything has been assigned, spent, refunded or reallocated" do
       create(:budget_envelope, budget: budget)
       deposit 100, month
       with_nothing_recorded = queries_for_every_figure
@@ -732,9 +872,13 @@ RSpec.describe Budget::Month, type: :model do
       refund budget.envelopes.first, 2, month
       with_something_refunded = queries_for_every_figure
 
+      reallocate budget.envelopes.first, create(:budget_envelope, budget: budget), 1, month
+      with_something_reallocated = queries_for_every_figure
+
       expect(with_something_assigned).to eq(with_nothing_recorded)
       expect(with_something_spent).to eq(with_nothing_recorded)
       expect(with_something_refunded).to eq(with_nothing_recorded)
+      expect(with_something_reallocated).to eq(with_nothing_recorded)
     end
 
     it "asks the database nothing until a figure is wanted, and only once for a figure a page reads again" do
@@ -742,6 +886,7 @@ RSpec.describe Budget::Month, type: :model do
       assign envelope, 10, month
       spend envelope, 5, month
       refund envelope, 2, month
+      reallocate envelope, create(:budget_envelope, budget: budget), 1, month
       deposit 100, month
       figures = Budget::Month.new(budget, month)
 
@@ -749,7 +894,7 @@ RSpec.describe Budget::Month, type: :model do
 
       figures.ready_to_assign
       figures.envelopes
-      expect(count_queries { figures.ready_to_assign.assigned; figures.envelopes.map { |line| [ line.assigned, line.spent, line.refunded ] } }).to eq(0)
+      expect(count_queries { figures.ready_to_assign.assigned; figures.envelopes.map { |line| [ line.assigned, line.spent, line.refunded, line.reallocated ] } }).to eq(0)
     end
   end
 

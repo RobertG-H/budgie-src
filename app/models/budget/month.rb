@@ -9,9 +9,9 @@
 # of history or with the number of envelopes. Amounts are BigDecimal throughout.
 #
 # Changing what's assigned in an earlier month changes Carried over, Available and Ready to Assign in every month
-# after it, since none of them is stored. That can leave a later month's Ready to Assign negative. Changing a Spend or a
-# Refund does the same to Carried over and Available, though never to Ready to Assign: money spent was already assigned,
-# and money that comes back lands in its envelope.
+# after it, since none of them is stored. That can leave a later month's Ready to Assign negative. Changing a Spend, a
+# Refund or a Reallocation does the same to Carried over and Available, though never to Ready to Assign: money spent was
+# already assigned, money that comes back lands in its envelope and money moved between envelopes nets to zero.
 class Budget::Month
   ZERO = BigDecimal(0)
 
@@ -25,14 +25,17 @@ class Budget::Month
     end
   end
 
-  # What's been assigned to, spent from or refunded to one envelope in the months before this one, and in this one.
+  # What's been assigned to, spent from, refunded to or reallocated to one envelope in the months before this one, and in
+  # this one.
   Totals = Data.define(:before, :in_month)
   NOTHING = Totals.new(before: ZERO, in_month: ZERO)
 
   # One envelope's figures for this month: what it carries over (its Starting balance and everything assigned to it
-  # in the months before, less everything spent from it and plus everything refunded to it), what's assigned to it,
-  # spent from it and refunded to it this month, and what's left, which is what's Available.
-  EnvelopeLine = Data.define(:envelope, :carried_over, :assigned, :spent, :refunded, :available) do
+  # in the months before, less everything spent from it and plus everything refunded to it and moved into it from other
+  # envelopes, less what's moved out of it), what's assigned to it, spent from it and refunded to it this month, what
+  # was moved into it less what was moved out of it (Reallocated, which is negative when more left than arrived), and
+  # what's left, which is what's Available.
+  EnvelopeLine = Data.define(:envelope, :carried_over, :assigned, :spent, :refunded, :reallocated, :available) do
     # Overspent: the envelope's Available is below zero.
     def overspent?
       available.negative?
@@ -96,11 +99,13 @@ class Budget::Month
       assigned = assignment_totals.fetch(envelope.id, NOTHING)
       spent = spend_totals.fetch(envelope.id, NOTHING)
       refunded = refund_totals.fetch(envelope.id, NOTHING)
-      carried_over = envelope.starting_balance + assigned.before - spent.before + refunded.before
+      reallocated = reallocation_totals.fetch(envelope.id, NOTHING)
+      carried_over = envelope.starting_balance + assigned.before - spent.before + refunded.before + reallocated.before
 
       EnvelopeLine.new(
         envelope: envelope, carried_over: carried_over, assigned: assigned.in_month, spent: spent.in_month,
-        refunded: refunded.in_month, available: carried_over + assigned.in_month - spent.in_month + refunded.in_month
+        refunded: refunded.in_month, reallocated: reallocated.in_month,
+        available: carried_over + assigned.in_month - spent.in_month + refunded.in_month + reallocated.in_month
       )
     end
   end
@@ -137,11 +142,27 @@ class Budget::Month
       @refund_totals ||= dated_totals(budget.refunds)
     end
 
-    # Each envelope's totals from dated records, as { envelope id => Totals }. A Spend or a Refund counts in the month
-    # its date is in, and in every month after it.
-    def dated_totals(records)
-      records.where(date: ..date.end_of_month).group(:envelope_id)
-        .pluck(:envelope_id, sum_where("date < ?"), sum_where("date >= ?"))
+    # What's moved into each envelope less what's moved out of it, from two queries: { envelope id => Totals }. An
+    # envelope with nothing moved either way up to the end of this month isn't in it. Both queries go through the
+    # budget's From envelopes, and a Reallocation's To envelope is always in the same budget.
+    def reallocation_totals
+      @reallocation_totals ||= begin
+        moved_in = dated_totals(budget.envelope_reallocations, by: :to_envelope_id)
+        moved_out = dated_totals(budget.envelope_reallocations, by: :from_envelope_id)
+
+        (moved_in.keys | moved_out.keys).to_h do |envelope_id|
+          into = moved_in.fetch(envelope_id, NOTHING)
+          out_of = moved_out.fetch(envelope_id, NOTHING)
+          [ envelope_id, Totals.new(before: into.before - out_of.before, in_month: into.in_month - out_of.in_month) ]
+        end
+      end
+    end
+
+    # Each envelope's totals from dated records, as { envelope id => Totals }, grouped by the column that names the
+    # envelope. A Spend, a Refund or a Reallocation counts in the month its date is in, and in every month after it.
+    def dated_totals(records, by: :envelope_id)
+      records.where(date: ..date.end_of_month).group(by)
+        .pluck(by, sum_where("date < ?"), sum_where("date >= ?"))
         .to_h { |envelope_id, before, in_month| [ envelope_id, Totals.new(before: before, in_month: in_month) ] }
     end
 

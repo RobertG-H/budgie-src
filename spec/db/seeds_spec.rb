@@ -29,6 +29,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::Refund, :count)
   end
 
+  it "creates no Reallocations outside development" do
+    expect { run_seeds }.not_to change(Budget::EnvelopeReallocation, :count)
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -115,7 +119,7 @@ RSpec.describe "db/seeds.rb" do
       dining_out = ->(month) { Budget::Month.new(budget, month).envelopes.find { |line| line.envelope.name == "Dining out" } }
 
       expect(dining_out.call(Date.new(2026, 9, 1))).to have_attributes(spent: BigDecimal("110.75"), available: BigDecimal("234.50"), overspent?: false)
-      expect(dining_out.call(Date.new(2026, 10, 1))).to have_attributes(spent: BigDecimal("708.50"), available: BigDecimal("-24.00"), overspent?: true)
+      expect(dining_out.call(Date.new(2026, 10, 1))).to have_attributes(spent: BigDecimal("708.50"), available: BigDecimal("-4.00"), overspent?: true)
     end
 
     it "refunds Groceries this month, once, and no other envelope or month" do
@@ -137,10 +141,33 @@ RSpec.describe "db/seeds.rb" do
       groceries = ->(month) { Budget::Month.new(budget, month).envelopes.find { |line| line.envelope.name == "Groceries" } }
 
       expect(groceries.call(Date.new(2026, 9, 1))).to have_attributes(refunded: 0, available: BigDecimal("430.65"))
-      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), available: BigDecimal("996.85"))
+      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), reallocated: -20, available: BigDecimal("976.85"))
     end
 
-    it "leaves Ready to Assign as it was, which Spends and Refunds don't change" do
+    it "reallocates $20 from Groceries to Dining out this month, once, and no other month" do
+      travel_to Time.utc(2026, 10, 15, 16)
+
+      run_seeds
+
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+      reallocation = budget.envelope_reallocations.sole
+      expect(reallocation).to have_attributes(description: "Covering the takeout", date: Date.new(2026, 10, 12), amount: 20)
+      expect([ reallocation.from_envelope.name, reallocation.to_envelope.name ]).to eq([ "Groceries", "Dining out" ])
+    end
+
+    it "covers part of Dining out's overspending with it, and leaves it Overspent, and Groceries with money left" do
+      travel_to Time.utc(2026, 10, 15, 16)
+      run_seeds
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+
+      line = ->(name, month) { Budget::Month.new(budget, month).envelopes.find { |envelope_line| envelope_line.envelope.name == name } }
+
+      expect(line.call("Dining out", Date.new(2026, 10, 1))).to have_attributes(reallocated: 20, available: BigDecimal("-4.00"), overspent?: true)
+      expect(line.call("Groceries", Date.new(2026, 10, 1))).to have_attributes(reallocated: -20, available: BigDecimal("976.85"))
+      expect(line.call("Dining out", Date.new(2026, 9, 1))).to have_attributes(reallocated: 0, available: BigDecimal("234.50"))
+    end
+
+    it "leaves Ready to Assign as it was, which Spends, Refunds and Reallocations don't change" do
       travel_to Time.utc(2026, 10, 15, 16)
       run_seeds
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
@@ -154,7 +181,7 @@ RSpec.describe "db/seeds.rb" do
 
       expect { run_seeds }.not_to change {
         [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
-          Budget::Refund.count ]
+          Budget::Refund.count, Budget::EnvelopeReallocation.count ]
       }
     end
 
@@ -176,6 +203,17 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
 
       expect(refund.reload.amount).to eq(1)
+    end
+
+    it "leaves a Reallocation the developer has changed" do
+      run_seeds
+      reallocation = Budget::EnvelopeReallocation.sole
+      reallocation.update!(amount: 1)
+
+      run_seeds
+
+      expect(reallocation.reload.amount).to eq(1)
+      expect(Budget::EnvelopeReallocation.count).to eq(1)
     end
 
     it "leaves an Assigned amount the developer has changed" do

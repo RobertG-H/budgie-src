@@ -42,6 +42,7 @@
             <th scope="col" class="text-right">Assigned</th>
             <th scope="col" class="text-right">Spent</th>
             <th scope="col" class="hidden text-right sm:table-cell">Refunded</th>
+            <th scope="col" class="hidden text-right sm:table-cell">Reallocated</th>
             <th scope="col" class="text-right">Available</th>
           </tr>
         </thead>
@@ -53,6 +54,7 @@
               <td class="text-right tabular-nums"><%= render "assignments/cell", line: line, month: @month, from: origin_page %></td>
               <td class="text-right tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.refunded, budget: budget %></td>
+              <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.reallocated, budget: budget %></td>
               <td class="text-right tabular-nums"><%= render "components/money", amount: line.available, budget: budget, overspent: line.overspent? %></td>
             </tr>
           <% end %>

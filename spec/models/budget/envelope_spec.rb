@@ -7,6 +7,8 @@ RSpec.describe Budget::Envelope, type: :model do
   it { is_expected.to have_many(:assignments).class_name("Budget::Assignment").dependent(:restrict_with_error) }
   it { is_expected.to have_many(:spends).class_name("Budget::Spend").dependent(:restrict_with_error) }
   it { is_expected.to have_many(:refunds).class_name("Budget::Refund").dependent(:restrict_with_error) }
+  it { is_expected.to have_many(:outgoing_reallocations).class_name("Budget::EnvelopeReallocation").with_foreign_key(:from_envelope_id).dependent(:restrict_with_error) }
+  it { is_expected.to have_many(:incoming_reallocations).class_name("Budget::EnvelopeReallocation").with_foreign_key(:to_envelope_id).dependent(:restrict_with_error) }
   it { is_expected.to validate_presence_of(:name) }
 
   it "uses the budget_envelopes table" do
@@ -231,6 +233,28 @@ RSpec.describe Budget::Envelope, type: :model do
       expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
       expect(Budget::Envelope.exists?(envelope.id)).to be(true)
       expect(Budget::Refund.exists?(refund.id)).to be(true)
+    end
+
+    it "is refused while the envelope has Reallocations out of it, with the same reason, and keeps both" do
+      reallocation = create(:budget_envelope_reallocation)
+      envelope = reallocation.from_envelope
+
+      expect(envelope.destroy).to be(false)
+
+      expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
+      expect(Budget::Envelope.exists?(envelope.id)).to be(true)
+      expect(Budget::EnvelopeReallocation.exists?(reallocation.id)).to be(true)
+    end
+
+    it "is refused while the envelope has Reallocations into it, with the same reason, and keeps both" do
+      reallocation = create(:budget_envelope_reallocation)
+      envelope = reallocation.to_envelope
+
+      expect(envelope.destroy).to be(false)
+
+      expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
+      expect(Budget::Envelope.exists?(envelope.id)).to be(true)
+      expect(Budget::EnvelopeReallocation.exists?(reallocation.id)).to be(true)
     end
 
     it "is allowed once the records are gone" do
