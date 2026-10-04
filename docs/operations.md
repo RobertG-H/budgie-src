@@ -1,6 +1,6 @@
 # Operating Budgie
 
-Budgie has no admin pages. Invites, users and currencies are rake tasks, run either against your local
+Budgie has no admin pages. Invites, users, currencies and new months are rake tasks, run either against your local
 development database or against a deployed host through Kamal.
 
 | | Locally | On a host |
@@ -75,6 +75,26 @@ docker compose run --rm kamal task budget:currency EMAIL=someone@example.com CUR
 The task shows the current and new currency and asks you to type the email to confirm. **Amounts aren't
 converted**: every amount keeps its number and is shown in the new currency. The supported currencies are
 listed in `Budget::CURRENCIES`.
+
+## Starting new months
+
+Each month starts with the previous month's Assigned amounts. A job does this every hour, so a month begins within an
+hour of midnight Eastern on the 1st, and a run that was missed is made up by the next one. You normally never run it
+yourself, but you can, to try the copy in development (where recurring tasks don't run) or if the job on a host stops:
+
+```sh
+docker compose run --rm web bin/rails budget:start_months
+docker compose run --rm kamal task budget:start_months -d production
+```
+
+It starts the new months of every budget that's behind and prints how many that was, or says that none had a month to
+start. Running it again does nothing, because each month is copied into once: an amount a user cleared or changed after
+their month began stays as they left it. A month begins by `config.time_zone`, so the task only does something once
+midnight Eastern on the 1st has passed.
+
+If one budget can't be started, the others still are. The log says `Couldn't start the new months of budget <id>` with
+the reason, the job (or the task) then fails with the first error, and the next hourly run tries that budget again.
+Nothing of its month is left half-copied.
 
 ## Reaching a running host
 

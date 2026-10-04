@@ -1,4 +1,13 @@
 namespace :budget do
+  desc "Start the new months of every budget that's behind, as the hourly job does"
+  task start_months: :environment do
+    behind = Budget.with_months_to_start.count
+    next puts("No budget has a month to start.") if behind.zero?
+
+    StartNewMonthsJob.perform_now
+    puts "Started the new months of #{behind} #{"budget".pluralize(behind)}."
+  end
+
   desc "Change the currency of EMAIL's budget to CURRENCY, without converting amounts (asks for confirmation)"
   task currency: :environment do |task|
     email, currency = ENV["EMAIL"].presence, ENV["CURRENCY"].presence

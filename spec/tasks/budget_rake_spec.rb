@@ -1,6 +1,49 @@
 require "rails_helper"
 
 RSpec.describe "budget rake tasks", type: :task do
+  describe "budget:start_months" do
+    let(:october) { Date.new(2026, 10, 1) }
+
+    # A budget that began in September, with $400 assigned to an envelope in it.
+    def budget_with_assigned
+      budget = travel_to(Time.zone.local(2026, 9, 5)) { create(:budget) }
+      create(:budget_assignment, envelope: create(:budget_envelope, budget: budget), month: Date.new(2026, 9, 1), amount: 400)
+      budget
+    end
+
+    def assigned_in_october(budget)
+      Budget::Month.new(budget, october).ready_to_assign.assigned
+    end
+
+    it "starts the new month of every budget that's behind, and says how many" do
+      budgets = [ budget_with_assigned, budget_with_assigned ]
+
+      travel_to Time.zone.local(2026, 10, 1, 0, 30)
+      output = run_task("budget:start_months")
+
+      expect(budgets.map { |budget| assigned_in_october(budget) }).to eq([ 400, 400 ])
+      expect(output).to eq("Started the new months of 2 budgets.\n")
+    end
+
+    it "counts a single budget in the singular" do
+      budget_with_assigned
+
+      travel_to Time.zone.local(2026, 10, 1, 0, 30)
+
+      expect(run_task("budget:start_months")).to eq("Started the new months of 1 budget.\n")
+    end
+
+    it "says so when no budget has a month to start" do
+      budget = budget_with_assigned
+
+      travel_to Time.zone.local(2026, 9, 20)
+      output = run_task("budget:start_months")
+
+      expect(assigned_in_october(budget)).to eq(0)
+      expect(output).to eq("No budget has a month to start.\n")
+    end
+  end
+
   describe "budget:currency" do
     let!(:user) { create(:user, email: "robin@example.com") }
     let!(:budget) { create(:budget, user: user, currency: "CAD") }
