@@ -6,6 +6,7 @@ RSpec.describe Budget::Account, type: :model do
   it { is_expected.to belong_to(:budget) }
   it { is_expected.to have_many(:bank_transactions).class_name("Budget::BankTransaction").dependent(:restrict_with_error) }
   it { is_expected.to have_many(:imports).class_name("Budget::Import").dependent(:destroy) }
+  it { is_expected.to belong_to(:default_csv_format).class_name("Budget::CsvFormat").optional }
 
   it "uses the budget_accounts table, and is named without the Budget prefix in routes and params" do
     expect(Budget::Account.table_name).to eq("budget_accounts")
@@ -13,7 +14,7 @@ RSpec.describe Budget::Account, type: :model do
   end
 
   it "has no balance, currency, kind or last four digits, since Budgie doesn't track what's in it" do
-    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "created_at", "updated_at")
+    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "created_at", "updated_at")
   end
 
   describe "name" do
@@ -44,6 +45,54 @@ RSpec.describe Budget::Account, type: :model do
       create(:budget_account, name: "Chequing")
 
       expect(build(:budget_account, name: "Chequing")).to be_valid
+    end
+  end
+
+  describe "its default CSV format" do
+    let(:budget) { create(:budget) }
+    let(:csv_format) { create(:budget_csv_format, budget: budget) }
+
+    it "is optional: nothing requires an Account to have one" do
+      account = build(:budget_account, budget: budget)
+
+      expect(account).to be_valid
+      expect(account.default_csv_format).to be_nil
+      expect(account.save).to be(true)
+    end
+
+    it "can be one of the Account's own budget's CSV formats" do
+      account = create(:budget_account, budget: budget, default_csv_format: csv_format)
+
+      expect(account.reload.default_csv_format).to eq(csv_format)
+    end
+
+    it "is refused when it's another budget's, with the error on default_csv_format, worded as a Filing rule's are" do
+      account = build(:budget_account, budget: budget, default_csv_format: create(:budget_csv_format))
+
+      expect(account).not_to be_valid
+      expect(account.errors[:default_csv_format]).to eq([ "isn't one of this budget's" ])
+      expect(account.errors.full_messages).to eq([ "Default CSV format isn't one of this budget's" ])
+    end
+
+    it "is refused when the id names no CSV format at all, and not left for the database's foreign key" do
+      account = build(:budget_account, budget: budget, default_csv_format_id: 0)
+
+      expect(account).not_to be_valid
+      expect(account.errors[:default_csv_format]).to eq([ "isn't one of this budget's" ])
+    end
+
+    it "is checked when it's changed, and may be cleared, since it's optional" do
+      account = create(:budget_account, budget: budget, default_csv_format: csv_format)
+
+      expect(account.update(default_csv_format: create(:budget_csv_format))).to be(false)
+      expect(account.update(default_csv_format: nil)).to be(true)
+      expect(account.reload.default_csv_format).to be_nil
+    end
+
+    it "keeps its CSV format from being deleted out from under it, in the database too" do
+      create(:budget_account, budget: budget, default_csv_format: csv_format)
+
+      expect { Budget::CsvFormat.where(id: csv_format.id).delete_all }.to raise_error(ActiveRecord::StatementInvalid, /RestrictViolation|violates foreign key/)
     end
   end
 

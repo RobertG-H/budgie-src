@@ -26,6 +26,10 @@ class Budget::CsvFormat < ApplicationRecord
   belongs_to :budget
   # A CSV format that an Import used can't be deleted, but it can still be edited, which never touches what was imported.
   has_many :imports, dependent: :restrict_with_error
+  # The Accounts it's the default of. Deleting a format that's only a default works and clears it from each of them, which is why this is
+  # declared after the check above that refuses when an Import used it: it only runs when the delete isn't refused.
+  has_many :default_for_accounts, class_name: "Budget::Account", foreign_key: :default_csv_format_id, inverse_of: :default_csv_format,
+    dependent: :nullify
 
   normalizes :name, with: ->(name) { name.squish }
   normalizes :money_in_value, with: ->(value) { value.strip }

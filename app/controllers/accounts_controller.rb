@@ -55,7 +55,9 @@ class AccountsController < ApplicationController
       @account = Current.budget.accounts.find(params[:id])
     end
 
+    # `budget_id` is never one of them. The default CSV format comes as the id the form's select sends, which the model checks is one of this
+    # budget's, so another budget's is a validation error on the field and not another budget's format on this Account.
     def account_params
-      params.expect(account: [ :name ])
+      params.expect(account: [ :name, :default_csv_format_id ])
     end
 end

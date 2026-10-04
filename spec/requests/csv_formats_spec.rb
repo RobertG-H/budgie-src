@@ -322,6 +322,18 @@ RSpec.describe "CSV formats", type: :request do
       assert_select "a.btn[href='#{csv_formats_path}']", text: "Cancel"
     end
 
+    it "says in the question before deleting it which Accounts it's the default for, which will have none" do
+      account = create(:budget_account, budget: format.budget, default_csv_format: format)
+
+      get edit_csv_format_path(format)
+      assert_select "form[data-turbo-confirm=\"Delete the CIBC CSV format? It's the default for 1 Account, which will have none.\"]"
+
+      create(:budget_account, budget: format.budget, default_csv_format: format)
+      get edit_csv_format_path(format)
+      assert_select "form[data-turbo-confirm=\"Delete the CIBC CSV format? It's the default for 2 Accounts, which will have none.\"]"
+      expect(account.reload.default_csv_format).to eq(format)
+    end
+
     it "is not found for another user's CSV format" do
       get edit_csv_format_path(others_format)
 
@@ -384,6 +396,16 @@ RSpec.describe "CSV formats", type: :request do
       assert_select "[role=status]", text: "CSV format deleted."
     end
 
+    it "deletes a format that's only some Accounts' default, which are left with none" do
+      first = create(:budget_account, budget: budget, default_csv_format: format)
+      second = create(:budget_account, budget: budget, default_csv_format: format)
+
+      expect { delete csv_format_path(format) }.to change(budget.csv_formats, :count).by(-1)
+
+      expect(response).to redirect_to(csv_formats_path)
+      expect([ first, second ].map { |account| account.reload.default_csv_format }).to eq([ nil, nil ])
+    end
+
     it "is not found for another user's CSV format, which it doesn't delete" do
       others_format
 
@@ -394,6 +416,14 @@ RSpec.describe "CSV formats", type: :request do
 
     describe "once an Import has used it" do
       before { create(:budget_import, account: create(:budget_account, budget: budget), csv_format: format) }
+
+      it "is refused even when it's an Account's default, which keeps it" do
+        account = create(:budget_account, budget: budget, default_csv_format: format)
+
+        expect { delete csv_format_path(format) }.not_to change(Budget::CsvFormat, :count)
+
+        expect(account.reload.default_csv_format).to eq(format)
+      end
 
       it "is refused, saying why on its edit page, and keeps the format" do
         expect { delete csv_format_path(format) }.not_to change(Budget::CsvFormat, :count)

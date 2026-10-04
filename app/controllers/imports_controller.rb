@@ -2,9 +2,10 @@ class ImportsController < ApplicationController
   before_action :set_account, only: %i[ new create ]
   before_action :set_import, only: %i[ show destroy ]
 
-  # The CSV format of the Account's most recent Import is chosen to start with, since it's most likely the same bank's.
+  # The CSV format of the Account's most recent Import is chosen to start with, since it's most likely the same bank's, and before its
+  # first Import, the Account's default, if it has one.
   def new
-    @import = @account.imports.build(csv_format: @account.latest_import&.csv_format)
+    @import = @account.imports.build(csv_format: @account.latest_import&.csv_format || @account.default_csv_format)
   end
 
   # The file is read in the request: if it can't be read nothing is created, and the form comes back with the first row

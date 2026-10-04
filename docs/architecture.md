@@ -293,7 +293,10 @@ with the grid and the preview, so the sample only exists for a request, and ther
 in step with the real one. Saving a format never imports the sample: the person chooses the file again to import it.
 
 **Accounts, Imports and bank transactions.** An Account is a real bank or card account, with only a name: Budgie doesn't track what's
-in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). A person imports a CSV file into one with a CSV format,
+in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). It can also remember which CSV format its bank's
+files use, its default CSV format, which is optional and is set by hand on the Account's form or by the first Import into it (an Import never
+changes one that's there). It's what lets an Import from the header tell which Account a file is for, and the Account's own Import form starts on
+it before its first Import. A CSV format that's some Accounts' default can still be deleted, which clears it from them. A person imports a CSV file into one with a CSV format,
 and each row becomes a bank transaction, which is the bank's record of money moving in or out, with a signed amount. Bank
 transactions are read-only, and are found through their Account, as a Spend is through its envelope. The file isn't kept, only its
 name, and the Import commits straight away: a file that can't be read creates nothing, and says which row and why.

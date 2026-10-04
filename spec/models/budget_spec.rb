@@ -322,6 +322,9 @@ RSpec.describe Budget, type: :model do
       create_list(:budget_bank_transaction, 3, account: busy, import: import)
       create(:budget_import, account: busy, csv_format: budget.csv_formats.last)
       create(:budget_import, account: quiet, csv_format: budget.csv_formats.first, zero_rows_skipped: 2)
+      # Accounts' default CSV formats, which keep a CSV format from being deleted before the Accounts are.
+      busy.update!(default_csv_format: budget.csv_formats.last)
+      quiet.update!(default_csv_format: budget.csv_formats.first)
       # A bank transaction filed as a Spend and another as a Deposit, whose records keep them from being deleted first.
       filed_out, filed_in = import.bank_transactions.first(2)
       filed_out.update_column(:amount, -10)
@@ -353,6 +356,15 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::SpendLink, :count).by(-1)
         .and change(Budget::DepositLink, :count).by(-1)
         .and change(Budget::FilingRule, :count).by(-3)
+    end
+
+    it "deletes its Accounts before its CSV formats, since an Account's default CSV format keeps its format from being deleted" do
+      expect(budget.accounts.where.not(default_csv_format_id: nil).count).to eq(2)
+
+      expect { budget.destroy! }.not_to raise_error
+
+      expect(Budget::Account.where(budget_id: budget.id)).to be_empty
+      expect(Budget::CsvFormat.where(budget_id: budget.id)).to be_empty
     end
 
     it "leaves another budget's records alone" do

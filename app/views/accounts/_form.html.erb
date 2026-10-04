@@ -6,5 +6,15 @@
     <%= form.text_field :name, required: true, autofocus: true, **field %>
   <% end %>
 
+  <%# Which CSV format its bank's files use, which a file from the header is recognised by and the Account's Import form starts on. There's nothing to choose when the budget has none. Another budget's is refused by the model, on this field. %>
+  <% csv_formats = Current.budget.csv_formats.alphabetical.pluck(:name, :id) %>
+  <% if csv_formats.any? %>
+    <%= render "components/field", form: form, attribute: :default_csv_format_id, control: :select, label: "Default CSV format",
+          hint: "Used to recognise which Account a file is for when you Import from the header.",
+          error: account.errors.full_messages_for(:default_csv_format).to_sentence.presence do |field| %>
+      <%= form.select :default_csv_format_id, csv_formats, { include_blank: "None" }, **field %>
+    <% end %>
+  <% end %>
+
   <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
 <% end %>

@@ -25,7 +25,7 @@ RSpec.describe "A Guess on the filing form", type: :request do
       filed("COSTCO #12", groceries)
       row = unfiled("COSTCO #123", amount: -100)
 
-      get new_bank_transaction_filing_path(row, from: "unfiled")
+      get new_bank_transaction_filing_path(row, from: "bank_transactions")
 
       expect(response).to have_http_status(:ok)
       expect(selected_envelope).to eq([ "Groceries" ])

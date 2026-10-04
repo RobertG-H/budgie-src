@@ -138,6 +138,84 @@ RSpec.describe Budget::Import, type: :model do
       CSV
     end
 
+    describe "the Account's default CSV format" do
+      let(:other_format) { create(:budget_csv_format, budget: account.budget) }
+
+      it "is set to the Import's when the Account has none and the Import worked" do
+        expect(account.default_csv_format).to be_nil
+
+        import_of(september)
+
+        expect(account.reload.default_csv_format).to eq(csv_format)
+      end
+
+      it "is left alone when the Account already has one, whatever format the Import used" do
+        account.update!(default_csv_format: csv_format)
+
+        import_of(september, csv_format: other_format)
+
+        expect(account.reload.default_csv_format).to eq(csv_format)
+      end
+
+      it "is set by a later Import into an Account that was left without one" do
+        import_of(september)
+        account.update!(default_csv_format: nil)
+
+        import_of("2026-10-01,Rent,-1200.00\n", csv_format: other_format, file_name: "october.csv")
+
+        expect(account.reload.default_csv_format).to eq(other_format)
+      end
+
+      it "is set by an Import that adds nothing, since it worked: the same file again" do
+        import_of(september)
+        account.update!(default_csv_format: nil)
+
+        import = import_of(september)
+
+        expect(import.duplicates_skipped).to eq(4)
+        expect(account.reload.default_csv_format).to eq(csv_format)
+      end
+
+      it "is set by an Import of nothing but rows of 0" do
+        import_of("2026-09-01,Interest,0.00\n")
+
+        expect(account.reload.default_csv_format).to eq(csv_format)
+      end
+
+      it "is not set by an Import that's refused: a file that can't be read, or no file" do
+        import_of("2026-09-01,Paycheck\n")
+        import_of(nil)
+
+        expect(account.reload.default_csv_format).to be_nil
+        expect(account.imports.count).to eq(0)
+      end
+
+      it "is not set by another budget's CSV format, which the Import refuses" do
+        foreign = create(:budget_csv_format)
+
+        import = import_of(september, csv_format: foreign)
+
+        expect(import).not_to be_persisted
+        expect(account.reload.default_csv_format).to be_nil
+      end
+
+      it "is set in the same lock as the Import, so two Imports sharing an Account can't disagree" do
+        import_of(september)
+        import_of("2026-10-01,Rent,-1200.00\n", csv_format: other_format, file_name: "october.csv")
+
+        expect(account.reload.default_csv_format).to eq(csv_format)
+      end
+
+      it "adds a statement only when it sets one, and never more for more rows" do
+        account && csv_format # made before counting
+        few = count_queries { import_of("2026-09-01,A,-1.00\n") }
+        account.update!(default_csv_format: csv_format)
+        many = count_queries { import_of((1..200).map { |n| "2026-09-02,Merchant #{n},-#{n}.00" }.join("\n"), file_name: "many.csv") }
+
+        expect(many).to eq(few - 1)
+      end
+    end
+
     describe "a file that's read" do
       it "creates an Import, with the file's name, and a bank transaction for each row, signed" do
         import = nil

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_190000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -19,7 +19,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_190000) do
     t.string "name", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "default_csv_format_id"
     t.index "budget_id, lower((name)::text)", name: "index_budget_accounts_on_budget_id_and_lower_name", unique: true
+    t.index ["default_csv_format_id"], name: "index_budget_accounts_on_default_csv_format_id"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_accounts_name_not_blank"
   end
 
@@ -303,6 +305,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_190000) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "budget_accounts", "budget_csv_formats", column: "default_csv_format_id", on_delete: :restrict
   add_foreign_key "budget_accounts", "budgets", on_delete: :restrict
   add_foreign_key "budget_assignments", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_bank_transactions", "budget_accounts", column: "account_id", on_delete: :restrict

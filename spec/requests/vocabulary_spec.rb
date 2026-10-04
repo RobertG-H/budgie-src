@@ -162,6 +162,26 @@ RSpec.describe "The words on the pages", type: :request do
       expect("A transaction").to match(retired_terms)
     end
 
+    it "says Default CSV format, and what it's for, on the Account's form and page, in words" do
+      account.update!(default_csv_format: csv_format)
+
+      get edit_account_path(account)
+
+      expect(visible_text).to include("Default CSV format", "None", "Used to recognise which Account a file is for when you Import from the header.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+
+      get account_path(account)
+
+      expect(visible_text).to include("Default CSV format: CIBC")
+      expect(visible_text).not_to match(retired_terms)
+
+      patch account_path(account), params: { account: { name: "Chequing", default_csv_format_id: create(:budget_csv_format).id } }
+
+      expect(visible_text).to include("Default CSV format isn't one of this budget's")
+      expect(visible_text).not_to match(retired_terms)
+    end
+
     it "says Bank transactions, and Import, on an Account's page, in words" do
       get account_path(account)
 

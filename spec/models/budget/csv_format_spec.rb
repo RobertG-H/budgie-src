@@ -17,6 +17,42 @@ RSpec.describe Budget::CsvFormat, type: :model do
     expect(build(:budget_csv_format, :direction)).to be_valid
   end
 
+  it { is_expected.to have_many(:default_for_accounts).class_name("Budget::Account").with_foreign_key(:default_csv_format_id).dependent(:nullify) }
+
+  describe "deleting one that's some Accounts' default" do
+    let(:budget) { create(:budget) }
+    let(:csv_format) { create(:budget_csv_format, budget: budget) }
+
+    it "works when it's only a default, and clears the default of each Account that had it" do
+      first = create(:budget_account, budget: budget, default_csv_format: csv_format)
+      second = create(:budget_account, budget: budget, default_csv_format: csv_format)
+      other = create(:budget_account, budget: budget, default_csv_format: create(:budget_csv_format, budget: budget))
+
+      expect(csv_format.destroy).to be_truthy
+
+      expect(Budget::CsvFormat.exists?(csv_format.id)).to be(false)
+      expect([ first, second ].map { |account| account.reload.default_csv_format }).to eq([ nil, nil ])
+      expect(other.reload.default_csv_format).not_to be_nil
+    end
+
+    it "is still refused when an Import used it, and then clears nothing" do
+      account = create(:budget_account, budget: budget, default_csv_format: csv_format)
+      create(:budget_import, account: account, csv_format: csv_format)
+
+      expect(csv_format.destroy).to be(false)
+
+      expect(csv_format.errors.full_messages).to eq([ "This CSV format can't be deleted because an Import used it." ])
+      expect(account.reload.default_csv_format).to eq(csv_format)
+    end
+
+    it "lists the Accounts it's the default for, for the question before deleting" do
+      create(:budget_account, budget: budget, default_csv_format: csv_format)
+      create(:budget_account, budget: budget)
+
+      expect(csv_format.default_for_accounts.count).to eq(1)
+    end
+  end
+
   describe "name" do
     it { is_expected.to validate_presence_of(:name) }
 

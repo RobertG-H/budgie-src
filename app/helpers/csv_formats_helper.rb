@@ -23,4 +23,13 @@ module CsvFormatsHelper
   def spelled_time(time)
     time.strftime("%b %-d, %Y at %-l:%M %p")
   end
+
+  # What's added to the question before deleting a CSV format that's some Accounts' default, which are left with none: " It's the default for 2
+  # Accounts, which will have none." Nothing when it's no Account's, since nothing changes then.
+  def default_for_accounts_note(csv_format)
+    count = csv_format.default_for_accounts.count
+    return "" if count.zero?
+
+    " It's the default for #{pluralize(count, "Account")}, which will have none."
+  end
 end

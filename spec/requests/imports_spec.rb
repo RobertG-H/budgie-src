@@ -73,8 +73,58 @@ RSpec.describe "Imports", type: :request do
       assert_select "option[selected]", count: 1
     end
 
-    it "has no default format stored on the Account" do
-      expect(Budget::Account.column_names).not_to include("csv_format_id")
+    it "starts with the Account's default CSV format chosen before its first Import" do
+      amex = create(:budget_csv_format, budget: budget, name: "Amex")
+      account.update!(default_csv_format: amex)
+
+      get new_account_import_path(account)
+
+      assert_select "option[selected][value='#{amex.id}']", text: "Amex"
+      assert_select "option[selected]", count: 1
+    end
+
+    it "starts with the CSV format of the latest Import when there are Imports, whatever the default is" do
+      amex = create(:budget_csv_format, budget: budget, name: "Amex")
+      account.update!(default_csv_format: amex)
+      create(:budget_import, account: account, csv_format: csv_format, created_at: 1.hour.ago)
+
+      get new_account_import_path(account)
+
+      assert_select "option[selected][value='#{csv_format.id}']", text: "Sample bank"
+      assert_select "option[selected]", count: 1
+    end
+
+    it "starts with nothing chosen for an Account with no Import and no default" do
+      get new_account_import_path(account)
+
+      assert_select "option[selected]", count: 0
+    end
+
+    it "makes the format of a first Import the Account's default, so the next form starts on it" do
+      expect(account.default_csv_format).to be_nil
+
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format.id, file: upload } }
+      expect(account.reload.default_csv_format).to eq(csv_format)
+
+      account.latest_import.undo
+      get new_account_import_path(account)
+      assert_select "option[selected][value='#{csv_format.id}']"
+    end
+
+    it "leaves the default alone when the Account has one and the Import used another format" do
+      amex = create(:budget_csv_format, budget: budget, name: "Amex")
+      account.update!(default_csv_format: amex)
+
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format.id, file: upload } }
+
+      expect(account.reload.default_csv_format).to eq(amex)
+    end
+
+    it "sets no default from a refused Import" do
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format.id, file: upload_text("nonsense") } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(account.reload.default_csv_format).to be_nil
     end
 
     it "says to build a CSV format first when there are none, instead of a form" do

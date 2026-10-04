@@ -170,8 +170,20 @@ the importer's other pages join it. It's left out until the person has a budget.
 #### Accounts, Imports and bank transactions
 
 `Budget::Account` (`budget_accounts`, `budget_id`) is a real bank or card account that bank transactions come from, and has only a
-name, unique per budget ignoring case: no balance, currency, kind or last four digits (ADR 0001), and no default CSV format, since
-the Import form pre-selects the format of the Account's `latest_import`. `Budget::Import` (`budget_imports`) is one CSV file read
+name, unique per budget ignoring case: no balance, currency, kind or last four digits (ADR 0001). It can have a **default CSV format**
+(`budget_accounts.default_csv_format_id`, `Budget::Account belongs_to :default_csv_format`), which is optional (inside the importer tables' "nulls where absence is real"),
+has an index and a foreign key `ON DELETE RESTRICT`, and says which format its bank's files use, so that an Import from the header can tell which Account a file is for (the roadmap's
+"Import from the header") and so that the Account's own Import form starts on the right format even before its first Import (`ImportsController#new` starts on
+`account.latest_import&.csv_format || account.default_csv_format`). The model checks it is one of the Account's own budget's ("isn't one of this budget's", on `default_csv_format`, worded as a Filing
+rule's is, and the same for an id that names no format at all), and `budget_id` is still never a permitted param: the form's "Default CSV format" select (None first, with the hint "Used to recognise
+which Account a file is for when you Import from the header.") sends the id, which the model checks. It's set in two places: by hand on the Account's form, and by `Budget::Import#run`, which sets it
+when the Account has none and the Import worked, inside the Account's row lock it already holds and as one statement, so a first Import into an Account sets it, and so does any later one into an Account
+that was left without; an Account that has one is never changed by an Import, and a refused Import sets nothing. The migration backfilled it from each Account's latest Import's format (`created_at`, then
+`id`, in SQL, `AddDefaultCsvFormatToBudgetAccounts::BACKFILL`, which `spec/db/default_csv_format_backfill_spec.rb` runs); an Account without an Import has none. A CSV format that is some Account's default
+can still be deleted: `Budget::CsvFormat has_many :default_for_accounts, dependent: :nullify`, declared after `has_many :imports, dependent: :restrict_with_error` so it only runs when the delete isn't refused
+(`ON DELETE RESTRICT` is the backstop), which clears the default, and its delete question says so ("It's the default for 2 Accounts, which will have none.", `CsvFormatsHelper#default_for_accounts_note`).
+`Budget#delete_importer_records` deletes Accounts before CSV formats, which the new key needs, and `spec/models/budget_spec.rb` has a spec so a change in that order is caught. The Account's page shows its
+default under the title ("Default CSV format: Chequing CSV") as a muted line; the Accounts list is unchanged. `Budget::Import` (`budget_imports`) is (`budget_imports`) is one CSV file read
 into one Account: `csv_format_id`, `file_name` (the file isn't kept), `duplicates_skipped` and `zero_rows_skipped`, and the figures of the file as it
 was read (below), with `created_at` as when it ran and no `user_id`. `Budget::BankTransaction` (`budget_bank_transactions`) is the bank's record of money
 moving: `date`, `description` (as the bank gave it, trimmed), a signed `amount` that's never 0, `import_id` (not null while an
