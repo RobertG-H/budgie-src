@@ -1,10 +1,17 @@
-<%# locals: (scope:, count:, checked:, others: false) %>
-<%# What a Filing rule would do to the unfiled bank transactions that are already there, which it can do when it's saved: how many it fits, and a box to file or ignore them the same way now, ticked to start with. Saving a rule from the filing form sweeps only the other ones, which went the same way as the one being filed. With none it says so, and has no box. %>
-<% noun = "#{"other " if others}unfiled bank #{count == 1 ? "transaction" : "transactions"}" %>
-<% if count.zero? %>
-  <p class="text-base-content/70">No <%= noun %> fit.</p>
+<%# locals: (scope:, sweep:, checked:, others: false) %>
+<%# What a Filing rule would do to the unfiled bank transactions that are already there, which it can do when it's saved: how many it fits, and a box to file or ignore them the same way now, ticked to start with. Saving a rule from the filing form sweeps only the other ones, which went the same way as the one being filed. A bank transaction that a more specific rule is the one to file isn't counted, and is said so, since "no other fit" wouldn't be true. With none to file there's no box. %>
+<% count = sweep.count %>
+<% left = sweep.left_to_other_rules.size %>
+<% noun = ->(number) { "#{"other " if others}unfiled bank #{number == 1 ? "transaction" : "transactions"}" } %>
+<% if count.zero? && left.zero? %>
+  <p class="text-base-content/70">No <%= noun.(0) %> fit.</p>
+<% elsif count.zero? %>
+  <p class="text-base-content/70"><%= left %> <%= noun.(left) %> <%= left == 1 ? "fits" : "fit" %>, but a more specific Filing rule files <%= left == 1 ? "it" : "them" %>.</p>
 <% else %>
-  <p><%= count %> <%= noun %> <%= count == 1 ? "fits" : "fit" %>.</p>
+  <p><%= count %> <%= noun.(count) %> <%= count == 1 ? "fits" : "fit" %>.</p>
+  <% if left.positive? %>
+    <p class="text-base-content/70"><%= left %> more <%= left == 1 ? "fits" : "fit" %>, but a more specific Filing rule files <%= left == 1 ? "it" : "them" %>.</p>
+  <% end %>
   <%= fields_for scope, FilingRulesHelper::SweepChoice.new(sweep: checked) do |sweep_form| %>
     <%= render "components/field", form: sweep_form, attribute: :sweep, control: :checkbox, label: "File or ignore them the same way now",
           hint: (others ? "Only the ones that went the same way as this one." : nil) do |field| %>

@@ -65,6 +65,9 @@ en:
       # An Import's CSV format is what the form calls it.
       budget/import:
         csv_format: CSV format
+      # What the Filing rule form calls what a rule does with the bank transactions it fits.
+      budget/filing_rule:
+        outcome: How to file them
     errors:
       models:
         # A Spend or a Refund with no envelope is told so the way every other missing field is, not with Rails' "must exist".

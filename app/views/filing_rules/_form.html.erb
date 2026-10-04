@@ -1,0 +1,49 @@
+<%# locals: (filing_rule:, sweep:, cancel_path:) %>
+<%# A Filing rule: the text to look for in a bank transaction's description, which Account and what amount it has to be if it's to be one of those, and what to do with it: a Spend from an envelope, a Refund to one, a Deposit, or Ignore. The filing-record controller shows the envelope for a Spend or a Refund only, as it does on the filing form, and the sweep-preview controller asks for how many unfiled bank transactions the rule would file or ignore as it's edited, which the box under it does when it's saved. Without JavaScript they all show, and the server leaves out an envelope that an outcome doesn't have. %>
+<%# The envelope is any of the budget's in use, alphabetically, and the one a saved rule is already for, even when it's archived. %>
+<% accounts = Current.budget.accounts.alphabetical.pluck(:name, :id) %>
+<% envelopes = envelope_options(keeping: [ filing_rule.envelope_id_in_database ].compact) %>
+<%# A saved amount is shown to the cent, as a bank transaction's is, and one that's been entered is shown as it was typed, even when it was refused. %>
+<% amount = filing_rule.amount_changed? ? filing_rule.amount_before_type_cast : (format("%.2f", filing_rule.amount) if filing_rule.amount) %>
+
+<%= form_with model: filing_rule, class: "mt-8 space-y-6",
+      data: { controller: "filing-record sweep-preview", action: "input->sweep-preview#update",
+              sweep_preview_url_value: filing_rule_sweep_path(id: filing_rule.id), sweep_preview_scope_value: "filing_rule" } do |form| %>
+  <%= render "form_errors", record: filing_rule %>
+
+  <%= render "components/field", form: form, attribute: :text, label: "Text to look for",
+        hint: "Bank transactions with this text in their description. Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
+    <%= form.text_field :text, required: true, autofocus: filing_rule.new_record?, **field %>
+  <% end %>
+
+  <%# The error is on the Account, which is what the select sets through its id. %>
+  <%= render "components/field", form: form, attribute: :account_id, label: "Account", control: :select,
+        hint: "Leave it as Any account to fit them all.", error: filing_rule.errors.full_messages_for(:account).to_sentence.presence do |field| %>
+    <%= form.select :account_id, accounts, { include_blank: "Any account" }, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :amount,
+        hint: "Leave it blank for any amount. Money out is negative, such as -82.45." do |field| %>
+    <%= form.number_field :amount, step: 0.01, value: amount, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :outcome, control: :radios, hint: "A Spend is money out, and a Refund and a Deposit are money in. Ignore fits either." do |field| %>
+    <% { "spend" => "Spend", "refund" => "Refund", "deposit" => "Deposit", "ignore" => "Ignore" }.each do |outcome, name| %>
+      <label class="flex items-center gap-3">
+        <%= form.radio_button :outcome, outcome, data: { filing_record_target: "kind", action: "change->filing-record#toggle" }, **field %>
+        <span><%= name %></span>
+      </label>
+    <% end %>
+  <% end %>
+
+  <div data-filing-record-target="group" data-kinds="refund spend">
+    <%= render "components/field", form: form, attribute: :envelope_id, label: "Envelope", control: :select,
+          error: filing_rule.errors.full_messages_for(:envelope).to_sentence.presence do |field| %>
+      <%= form.select :envelope_id, envelopes, { include_blank: "Choose an envelope" }, **field %>
+    <% end %>
+  </div>
+
+  <%= render "filing_rules/sweep", sweep: sweep, checked: true %>
+
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
+<% end %>

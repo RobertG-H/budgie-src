@@ -18,12 +18,12 @@ export default class extends Controller {
   }
 
   refresh() {
-    const params = new URLSearchParams()
+    const url = new URL(this.urlValue, window.location.origin)
     for (const [ name, value ] of new FormData(this.element.closest("form"))) {
-      if (name.startsWith(`${this.scopeValue}[`)) params.append(name, value)
+      if (name.startsWith(`${this.scopeValue}[`)) url.searchParams.append(name, value)
     }
 
-    this.frameTarget.src = `${this.urlValue}?${params}`
+    this.frameTarget.src = url.pathname + url.search
   }
 
   disconnect() {

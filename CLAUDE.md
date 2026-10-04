@@ -154,7 +154,7 @@ Saving a format needs a sample, so that `column_count` is known; editing without
 and `rows_to_skip` at most 1000, in the model and in check constraints. Another user's format is a
 404, `budget_id` is never a permitted param, and the notices are "CSV format added.", "CSV format updated." and "CSV format deleted.".
 
-The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Accounts and CSV formats now, and
+The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Accounts, Unfiled, Filing rules and CSV formats now, and
 the importer's other pages join it. It's left out until the person has a budget. The "Main" nav stays only Sign out.
 
 #### Accounts, Imports and bank transactions
@@ -338,6 +338,22 @@ the `sweep-preview` Stimulus controller sends the form's `filing[rule]` fields, 
 (`BankTransactionRulePreviewsController`, which changes nothing), whose Turbo Frame `#filing-rule-preview` holds the update-in-place note, the count and the box,
 and that frame is where the box sits, so its ticked state travels with the request. `Offer` runs the sweep after saving the rule, in the same database transaction, and
 the notice says what it did: "Bank transaction filed. The Filing rule also filed 2 other bank transactions." A form that doesn't send the box sweeps nothing.
+
+**The Filing rules page.** `/filing_rules` (`FilingRulesController`, in the header's section links; no `show`) lists every rule grouped by what it sets: one section per envelope that has a
+rule, alphabetically as in the month view (an archived envelope's section has the "Archived" badge), then Deposit, then Ignore, each only if it has rules, and each rule a `components/link_row`
+to its edit page whose detail (`filing_rule_detail`) says what it does, "Spend from Groceries. In Chequing. Exactly -$82.45. 3 bank transactions filed or ignored.", with an
+"Inactive" badge and "Inactive while its envelope is archived." for one on an archived envelope, in words. The count is how many bank transactions it filed or ignored *that still are*
+(`BankTransaction.filed_or_ignored`, grouped by `filing_rule_id`), so one un-filed since isn't counted, and the page runs a fixed number of queries however many rules there are. A rule is made from
+scratch, edited and deleted there (notices "Filing rule added.", "Filing rule updated." and "Filing rule deleted."); the Account picker has Any account first, the envelope picker is `envelope_options(keeping:)`
+(envelopes in use, and a rule's own, even when it's archived), and the form's `filing-record` controller shows the envelope for a Spend or a Refund only. The amount is entered signed, as a bank
+transaction shows it (money out negative, such as -82.45), and the model's error says which sign suits the outcome; leaving it blank is any amount. The Account and envelope come from the form as ids and
+the model refuses another budget's ("isn't one of this budget's"), and `budget_id` is never a permitted param; another user's rule is a 404. A rule with the same text, Account and amount as another is a
+validation error that says what the other one does, and unlike the filing form it doesn't update in place. Saving with the sweep box ticked (the form's `filing_rule[sweep]`) sweeps the
+unfiled bank transactions the rule now fits, in both directions, since there's no bank transaction it's made from, in the same database transaction, and the notice says so: "Filing rule added.
+It also filed 2 bank transactions." The count and the box are the Turbo Frame `#filing-rule-sweep`, which `GET /filing_rules/sweep` (`FilingRuleSweepsController`, which changes nothing) answers with for the rule as
+it's entered, a new rule or the one being edited (`id`) with the form's changes in place of itself, with no count for a rule that isn't valid yet; the same `sweep-preview` controller as the filing form's
+sends the form's `filing_rule` fields. Editing or deleting a rule never changes what it already filed or ignored: deleting nullifies `filing_rule_id` on what it filed, and moving a rule to another envelope
+affects what comes in from then on, so fixing past ones means un-filing and filing again. A filed or ignored bank transaction's "Filing rule: loblaws → Spend from Groceries" links to the rule's edit page.
 
 **Deleting.** `Budget::Envelope` and `Budget::Account` have `has_many :filing_rules, dependent: :destroy`, declared after the checks that refuse, so deleting an envelope
 with no records, or an Account with no bank transactions, takes its rules with it, and keeps them when it's refused. Archiving is never blocked by rules. `Budget#delete_importer_records`

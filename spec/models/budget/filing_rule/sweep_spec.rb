@@ -133,6 +133,31 @@ RSpec.describe Budget::FilingRule::Sweep do
       expect(sweep.run).to have_attributes(filed: 3)
     end
 
+    it "have #left_to_other_rules, which the rule fits but a more specific rule files, so a form can say why they aren't counted" do
+      rule("loblaws #1234", envelope: household)
+      specific = bank_transaction("LOBLAWS #1234 TORONTO")
+      mine = bank_transaction("LOBLAWS ON KING")
+      bank_transaction("COSTCO")
+      create(:budget_bank_transaction, :filed, account: account, description: "LOBLAWS #1234 FILED")
+      loblaws = rule("loblaws")
+
+      sweep = described_class.new(loblaws)
+
+      expect(sweep.bank_transactions).to eq([ mine ])
+      expect(sweep.left_to_other_rules).to eq([ specific ])
+    end
+
+    it "have none left to other rules for a rule on an archived envelope, which fits nothing in effect, or when no other rule is more specific" do
+      row = bank_transaction("LOBLAWS")
+      loblaws = rule("loblaws")
+      expect(described_class.new(loblaws).left_to_other_rules).to be_empty
+
+      rule("loblaws toronto", envelope: household)
+      groceries.update!(archived_at: Time.current)
+      expect(described_class.new(loblaws.reload).left_to_other_rules).to be_empty
+      expect(row.reload).to be_unfiled
+    end
+
     it "count only the unfiled ones, never a filed or an ignored one" do
       create(:budget_bank_transaction, :filed, account: account, description: "LOBLAWS FILED")
       create(:budget_bank_transaction, :ignored, account: account, description: "LOBLAWS IGNORED")

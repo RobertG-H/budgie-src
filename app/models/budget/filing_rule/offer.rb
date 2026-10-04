@@ -61,14 +61,17 @@ class Budget::FilingRule::Offer
     normalized_text.length >= Budget::FilingRule::MIN_TEXT_LENGTH && bank_transaction.normalized_description.include?(normalized_text)
   end
 
-  # How many other unfiled bank transactions the rule would file or ignore if it were made as the text stands, as the form says before
-  # it's saved. What it will be is only known once it's done, and it's the same for either: a Spend, a Refund, a Deposit or Ignore fit
-  # the bank transactions that went the same way, which is all that's swept, so it's counted as the one that fits either.
-  def sweep_count
-    rule = existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)
-    rule.assign_attributes(outcome: "ignore", envelope: nil)
+  # What the rule would do to the other unfiled bank transactions if it were made as the text stands, as the form says before it's saved: how many it
+  # would file or ignore, and how many it fits but a more specific rule files. What it will be is only known once it's done, and it's the same for
+  # either: a Spend, a Refund, a Deposit or Ignore fit the bank transactions that went the same way, which is all that's swept, so it's worked out
+  # as the one that fits either.
+  def sweep_preview
+    @sweep_preview ||= begin
+      rule = existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)
+      rule.assign_attributes(outcome: "ignore", envelope: nil)
 
-    Budget::FilingRule::Sweep.new(rule, like: bank_transaction).count
+      Budget::FilingRule::Sweep.new(rule, like: bank_transaction)
+    end
   end
 
   # Files the entry, which is one record, and makes the rule it says: what the person chose, and the text. True when both were done.

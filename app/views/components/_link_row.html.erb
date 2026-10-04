@@ -1,9 +1,9 @@
-<%# locals: (href:, name:, detail: nil) %>
-<%# One thing in a list that's opened by choosing it, such as a CSV format: its name, with an optional muted line under it saying more. The whole row links to where it's opened. Put rows in components/record_list. %>
+<%# locals: (href:, name:, detail: nil, badge: nil) %>
+<%# One thing in a list that's opened by choosing it, such as a CSV format: its name, with an optional muted line under it saying more, and an optional `badge`, a short word beside the name that says what it is, such as Inactive. The whole row links to where it's opened. Put rows in components/record_list. %>
 <li>
   <%= link_to href, class: "list-row hover:bg-base-200" do %>
     <span class="list-col-grow">
-      <span class="block font-semibold"><%= name %></span>
+      <span class="block font-semibold"><%= name %><% if badge %> <%= render "components/label_badge", text: badge %><% end %></span>
       <% if detail.present? %>
         <span class="block text-base-content/70"><%= detail %></span>
       <% end %>

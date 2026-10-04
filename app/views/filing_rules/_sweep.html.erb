@@ -1,0 +1,7 @@
+<%# locals: (sweep:, checked: true) %>
+<%# What saving the rule would do to the unfiled bank transactions that are already there, which the form asks for again as it's edited (the sweep-preview controller sets the frame's address): how many it fits, and the box that files or ignores them when it's saved, ticked to start with. A rule that isn't valid yet, or a new one with nothing in it, has no sweep to say anything about. %>
+<turbo-frame id="filing-rule-sweep" class="block space-y-4" data-sweep-preview-target="frame">
+  <% unless sweep.nil? %>
+    <%= render "filing_rules/sweep_option", scope: "filing_rule", sweep: sweep, checked: checked %>
+  <% end %>
+</turbo-frame>

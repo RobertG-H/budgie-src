@@ -48,6 +48,13 @@ class Budget::BankTransaction < ApplicationRecord
   # Neither ignored nor filed as anything. Left joins, so a bank transaction with several links is still found once.
   scope :unfiled, -> { where(ignored_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
 
+  # Ignored, or filed as at least one record: what isn't unfiled. Left joins, so one with several links is still counted once, with `distinct`.
+  scope :filed_or_ignored, -> {
+    left_joins(:deposit_links, :spend_links, :refund_links)
+      .where("budget_bank_transactions.ignored_at IS NOT NULL OR budget_deposit_links.id IS NOT NULL OR budget_spend_links.id IS NOT NULL OR budget_refund_links.id IS NOT NULL")
+      .distinct
+  }
+
   # The three kinds of record a bank transaction is filed as, each with the link table that holds it: the record's class, then its
   # link's. Everything that has to treat the kinds alike, such as inserting them or deleting them, goes through this.
   def self.links_by_record

@@ -48,6 +48,11 @@ Rails.application.routes.draw do
     resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
   end
   get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions
+  # Standing instructions that file or ignore the bank transactions that come in, the same way each time: all of them in one place, where
+  # they're made from scratch, edited and deleted. The sweep is what a rule would do to the unfiled bank transactions that are already
+  # there, which the forms ask for as they're edited. Editing or deleting a rule never changes what it already filed.
+  resources :filing_rules, except: :show
+  resource :filing_rule_sweep, only: :show, path: "filing_rules/sweep", controller: "filing_rule_sweeps"
   post "csv_formats/preview" => "csv_format_previews#create", as: :csv_format_preview
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]

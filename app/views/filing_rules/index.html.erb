@@ -1,0 +1,28 @@
+<% content_for :title, "Filing rules · Budgie" %>
+<% budget = Current.budget %>
+
+<%= render "components/page_header", title: "Filing rules",
+      description: "Standing instructions that file or ignore the bank transactions that come in, the same way each time. They never change what's already filed or ignored." do %>
+  <%= link_to "New Filing rule", new_filing_rule_path, class: "btn btn-primary" %>
+<% end %>
+
+<%# One section for each thing a rule sets, so everything that goes to Groceries is the Groceries section: the envelopes alphabetically as in the month view, then Deposit, then Ignore. %>
+<div class="mt-8 space-y-8">
+  <% if @sections.any? %>
+    <% @sections.each do |section| %>
+      <section class="space-y-4">
+        <h2 class="text-xl font-semibold"><%= section.title %><% if section.envelope&.archived? %> <span class="align-middle"><%= render "components/archived_badge" %></span><% end %></h2>
+        <%= render "components/record_list" do %>
+          <% section.rules.each do |rule| %>
+            <%= render "components/link_row", href: edit_filing_rule_path(rule), name: rule.text, badge: ("Inactive" if rule.inactive?),
+                  detail: filing_rule_detail(rule, @counts.fetch(rule.id, 0), budget) %>
+          <% end %>
+        <% end %>
+      </section>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "You don't have any Filing rules yet." do %>
+      <%= link_to "New Filing rule", new_filing_rule_path, class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+</div>

@@ -334,12 +334,21 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         expect(visible_text).to include("No other unfiled bank transactions fit.")
       end
 
-      it "doesn't count a bank transaction that a more specific Filing rule fits, which is its rule's" do
+      it "doesn't count a bank transaction that a more specific Filing rule fits, which is its rule's, and says so" do
         create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale #123 ottawa")
 
         get new_bank_transaction_filing_path(money_out)
 
-        expect(visible_text).to include("1 other unfiled bank transaction fits.")
+        expect(visible_text).to include("1 other unfiled bank transaction fits.", "1 more fits, but a more specific Filing rule files it.")
+      end
+
+      it "says so even when there's nothing else left to file, with no box to tick" do
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco", account: account)
+
+        get new_bank_transaction_filing_path(money_out)
+
+        expect(visible_text).to include("2 other unfiled bank transactions fit, but a more specific Filing rule files them.")
+        assert_select "input[name='filing[rule][sweep]']", count: 0
       end
     end
 
@@ -376,12 +385,13 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         assert_select "input[type=checkbox][name='filing[rule][sweep]'][checked]"
       end
 
-      it "says nothing of a count for text that isn't one a rule can have: too short, or not in the bank's description" do
-        preview(text: "co")
-        expect(response.body).not_to include("unfiled bank transaction")
+      it "says nothing of a count for text that isn't one a rule can have: too short, or not in the bank's description, and says why" do
+        [ "co", "loblaws" ].each do |text|
+          preview(text: text)
 
-        preview(text: "loblaws")
-        expect(response.body).not_to include("unfiled bank transaction")
+          expect(response.body).not_to include("unfiled bank transaction")
+          expect(response.body).to include("The text has to be at least 3 characters, and part of this bank transaction's description.")
+        end
       end
 
       it "says when the text is one that a rule already has, which it would update" do

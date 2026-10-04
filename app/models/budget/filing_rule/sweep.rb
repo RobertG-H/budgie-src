@@ -31,6 +31,12 @@ class Budget::FilingRule::Sweep
     bank_transactions.size
   end
 
+  # The unfiled bank transactions the rule fits but a more specific rule is the one to file, which a sweep leaves to that rule. They aren't in
+  # `bank_transactions`, so a form says why they aren't counted, which "No other unfiled bank transactions fit" wouldn't.
+  def left_to_other_rules
+    @left_to_other_rules ||= @rule.inactive? ? [] : candidates.select { |bank_transaction| @rule.fits?(bank_transaction) } - bank_transactions
+  end
+
   # Files and ignores them, in one database transaction, and says how many (a Budget::FilingRule::Applier::Result).
   def run
     applier.apply(candidates, only: @rule)

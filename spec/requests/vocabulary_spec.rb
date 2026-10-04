@@ -49,6 +49,17 @@ RSpec.describe "The words on the pages", type: :request do
     account.imports.build(csv_format: plain, file_name: "sept.csv").tap { |i| i.run("2026-10-01,Paycheck,2800.00\n2026-10-02,Loblaws,-82.45\n2026-10-03,Interest,0.00\n") }
   end
 
+  # Filing rules, made after the Import above so that its rows aren't filed by them: one for a Spend, one that ignores, and one for an
+  # envelope that's archived, which is inactive.
+  let!(:filing_rules) do
+    closed = create(:budget_envelope, budget: budget, name: "Closed")
+    rules = [ create(:budget_filing_rule, budget: budget, envelope: bills, text: "loblaws", amount: -82.45, account: account),
+              create(:budget_filing_rule, :ignore, budget: budget, text: "coffee shop"),
+              create(:budget_filing_rule, budget: budget, envelope: closed, text: "gym membership") ]
+    closed.archive!
+    rules
+  end
+
   before { sign_in_as budget.user }
 
   # What a person reads on the page, not its markup.
@@ -97,6 +108,9 @@ RSpec.describe "The words on the pages", type: :request do
     "the Import form" => -> { new_account_import_path(account) },
     "an Import's summary" => -> { import_path(import) },
     "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the Filing rules" => -> { filing_rules_path },
+    "the Filing rule form" => -> { new_filing_rule_path },
+    "the Filing rule edit form" => -> { edit_filing_rule_path(budget.filing_rules.find_by!(text: "loblaws")) },
     "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "unfiled") },
     "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
   }.each do |page, path|
