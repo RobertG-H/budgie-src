@@ -1,0 +1,7 @@
+<% content_for :title, "New account · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "New account" %>
+
+  <%= render "form", account: @account, cancel_path: accounts_path %>
+</div>

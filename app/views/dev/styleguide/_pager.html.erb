@@ -1,0 +1,14 @@
+<%# locals: () %>
+<section id="pager" aria-labelledby="pager-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="pager-heading" class="text-xl font-semibold">Pager</h2>
+  <p class="text-base-content/70">Links to the pages either side of the one being looked at, for a list that's shown a page at a time, newest first, so the next page is the older one. It's nothing when the list is only one page.</p>
+
+  <h3 class="font-semibold">First page</h3>
+  <%= render "components/pager", page: 1, more: true, path: ->(number) { "#page-#{number}" } %>
+
+  <h3 class="font-semibold">Middle page</h3>
+  <%= render "components/pager", page: 2, more: true, path: ->(number) { "#page-#{number}" } %>
+
+  <h3 class="font-semibold">Last page</h3>
+  <%= render "components/pager", page: 3, more: false, path: ->(number) { "#page-#{number}" } %>
+</section>

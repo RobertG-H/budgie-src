@@ -33,6 +33,12 @@ Rails.application.routes.draw do
   # How each bank lays out its CSV download, built from a sample file. The preview is sent the whole form, sample included, and
   # answers with how the sample reads, so the sample never has to be kept.
   resources :csv_formats, except: :show
+  # The real accounts that bank transactions come from, and the CSV files read into them. An Import has no page of its own
+  # until it's made, and then it's its summary.
+  resources :accounts do
+    resources :imports, only: [ :new, :create ]
+  end
+  resources :imports, only: :show
   post "csv_formats/preview" => "csv_format_previews#create", as: :csv_format_preview
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]

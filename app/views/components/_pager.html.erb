@@ -1,0 +1,14 @@
+<%# locals: (page:, more:, path:) %>
+<%# Links to the pages either side of the one being looked at, for a list that's shown a page at a time, newest first: the next page is the older one. `path` turns a page number into the address of that page. It's nothing when the list is only one page. %>
+<% if page > 1 || more %>
+  <nav aria-label="Pages" class="-mx-2 flex items-center justify-between gap-2">
+    <% if page > 1 %>
+      <%= link_to "Newer", path.call(page - 1), rel: "prev", class: "btn btn-ghost btn-sm px-2" %>
+    <% else %>
+      <span></span>
+    <% end %>
+    <% if more %>
+      <%= link_to "Older", path.call(page + 1), rel: "next", class: "btn btn-ghost btn-sm px-2" %>
+    <% end %>
+  </nav>
+<% end %>

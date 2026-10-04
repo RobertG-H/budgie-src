@@ -9,8 +9,9 @@ RSpec.describe "Navigation", type: :request do
 
     get csv_formats_path
 
-    assert_select "header nav[aria-label=Sections] a", count: 2
+    assert_select "header nav[aria-label=Sections] a", count: 3
     assert_select "header nav[aria-label=Sections] a[href='#{root_path}']:not([aria-current])", text: "Budget"
+    assert_select "header nav[aria-label=Sections] a[href='#{accounts_path}']:not([aria-current])", text: "Accounts"
     assert_select "header nav[aria-label=Sections] a[href='#{csv_formats_path}'][aria-current=page]", text: "CSV formats"
   end
 
@@ -33,6 +34,19 @@ RSpec.describe "Navigation", type: :request do
       get path
 
       assert_select "nav[aria-label=Sections] a[href='#{csv_formats_path}'][aria-current=page]", text: "CSV formats"
+    end
+  end
+
+  it "says Accounts is the one they're on at an Account, its Import's form, and an Import's summary" do
+    sign_in_as budget.user
+    account = create(:budget_account, budget: budget)
+    import = create(:budget_import, account: account)
+
+    [ accounts_path, new_account_path, account_path(account), edit_account_path(account), new_account_import_path(account), import_path(import) ].each do |path|
+      get path
+
+      assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
+      assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
     end
   end
 

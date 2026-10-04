@@ -1,18 +1,24 @@
-<%# locals: (href:, date:, description:, amount:, budget:, counterpart: nil, notes: nil) %>
-<%# One record in a list, such as a Deposit: its date, its description with any notes as a muted second line under it, and its amount. A record between two envelopes also says where the money went or came from, such as "To Groceries", in a muted line of its own under the description. The whole row links to the record's edit page. Put rows in components/record_list. The description is the second column, which daisyUI's list lets grow. %>
+<%# locals: (href:, date:, description:, amount:, budget:, counterpart: nil, notes: nil, with_year: false) %>
+<%# One record in a list, such as a Deposit: its date, its description with any notes as a muted second line under it, and its amount. A record between two envelopes also says where the money went or came from, such as "To Groceries", in a muted line of its own under the description. The whole row links to the record's edit page, or isn't a link when `href` is nil, for a record that's only read, such as a bank transaction. Put rows in components/record_list. The description is the second column, which daisyUI's list lets grow. %>
+<%# The date is the month and day, which is enough in a list of one month. A list that goes back further passes `with_year`, which spells it out. %>
+<% row = capture do %>
+  <%# A fixed width, so descriptions line up whichever dates the rows have. %>
+  <span class="<%= with_year ? "w-24" : "w-12" %> tabular-nums text-base-content/70"><%= date.strftime(with_year ? "%b %-d, %Y" : "%b %-d") %></span>
+  <span class="list-col-grow">
+    <span class="block"><%= description %></span>
+    <% if counterpart.present? %>
+      <span class="block text-base-content/70"><%= counterpart %></span>
+    <% end %>
+    <% if notes.present? %>
+      <span class="block whitespace-pre-line text-base-content/70"><%= notes %></span>
+    <% end %>
+  </span>
+  <span class="text-right tabular-nums"><%= render "components/money", amount: amount, budget: budget %></span>
+<% end %>
 <li>
-  <%= link_to href, class: "list-row items-baseline hover:bg-base-200" do %>
-    <%# A fixed width, so descriptions line up whichever dates the rows have. %>
-    <span class="w-12 tabular-nums text-base-content/70"><%= date.strftime("%b %-d") %></span>
-    <span class="list-col-grow">
-      <span class="block"><%= description %></span>
-      <% if counterpart.present? %>
-        <span class="block text-base-content/70"><%= counterpart %></span>
-      <% end %>
-      <% if notes.present? %>
-        <span class="block whitespace-pre-line text-base-content/70"><%= notes %></span>
-      <% end %>
-    </span>
-    <span class="text-right tabular-nums"><%= render "components/money", amount: amount, budget: budget %></span>
+  <% if href %>
+    <%= link_to href, class: "list-row items-baseline hover:bg-base-200" do %><%= row %><% end %>
+  <% else %>
+    <div class="list-row items-baseline"><%= row %></div>
   <% end %>
 </li>

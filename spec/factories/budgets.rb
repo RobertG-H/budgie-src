@@ -90,4 +90,27 @@ FactoryBot.define do
       money_in_value { "Credit" }
     end
   end
+
+  factory :budget_account, class: "Budget::Account" do
+    budget
+    sequence(:name) { |n| "Account #{n}" }
+  end
+
+  # Of an Account, with a CSV format of its budget unless given another. The file is gone, so only its name is kept.
+  factory :budget_import, class: "Budget::Import" do
+    association :account, factory: :budget_account
+    csv_format { association :budget_csv_format, budget: account&.budget }
+    sequence(:file_name) { |n| "import-#{n}.csv" }
+    duplicates_skipped { 0 }
+    zero_rows_skipped { 0 }
+  end
+
+  # Money out of $10 by default, which is the sign a Spend would be filed from, in the Account of its Import.
+  factory :budget_bank_transaction, class: "Budget::BankTransaction" do
+    account { association :budget_account }
+    import { association :budget_import, account: account }
+    sequence(:description) { |n| "Merchant #{n}" }
+    date { Date.new(2026, 9, 15) }
+    amount { -10 }
+  end
 end

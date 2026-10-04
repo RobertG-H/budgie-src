@@ -24,6 +24,8 @@ class Budget::CsvFormat < ApplicationRecord
   MAX_ROWS_TO_SKIP = 1000
 
   belongs_to :budget
+  # A CSV format that an Import used can't be deleted, but it can still be edited, which never touches what was imported.
+  has_many :imports, dependent: :restrict_with_error
 
   normalizes :name, with: ->(name) { name.squish }
   normalizes :money_in_value, with: ->(value) { value.strip }

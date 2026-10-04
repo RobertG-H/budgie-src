@@ -53,4 +53,29 @@ RSpec.describe "components/_record_row", type: :view do
     assert_select "script", count: 0
     assert_select "span", text: "<b>Bonus</b>"
   end
+
+  describe "without anywhere to go" do
+    it "is a row that isn't a link, for a record that's only read" do
+      render_row href: nil
+
+      assert_select "li a", count: 0
+      assert_select "li .list-row", count: 1
+      assert_select "span", text: "Paycheck"
+      assert_select "span.text-right.tabular-nums", text: "$3,000.00"
+    end
+  end
+
+  describe "with the year" do
+    it "spells the date out with its year, for a list that goes back past the year" do
+      render_row with_year: true, date: Date.new(2025, 12, 5)
+
+      assert_select "span", text: "Dec 5, 2025"
+    end
+
+    it "leaves the year out by default" do
+      render_row date: Date.new(2025, 12, 5)
+
+      assert_select "span", text: "Dec 5"
+    end
+  end
 end

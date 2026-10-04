@@ -4,7 +4,7 @@ require "rails_helper"
 # GLOSSARY.md says to avoid.
 RSpec.describe "The words on the pages", type: :request do
   let(:retired_terms) do
-    /\b(categor(y|ies)|income|inflow|outflow|budgeted|spending|expense|purchase|payment|transfer|move|reimbursement|repayment|wallet|transaction|payee|payer)\b/i
+    /\b(categor(y|ies)|income|inflow|outflow|budgeted|spending|expense|purchase|payment|transfer|move|reimbursement|repayment|wallet|(?<!bank\s)transaction|payee|payer)\b/i
   end
   let(:budget) { create(:budget) }
   let!(:bills) { create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30) }
@@ -41,6 +41,13 @@ RSpec.describe "The words on the pages", type: :request do
 
   # How one of the budget's banks lays out its CSV download.
   let!(:csv_format) { create(:budget_csv_format, budget: budget, name: "CIBC", description_columns: [ 2, 1 ]) }
+
+  # Where bank transactions come from, with an Import of three rows, one of them of 0.
+  let!(:account) { create(:budget_account, budget: budget, name: "Chequing") }
+  let!(:import) do
+    plain = create(:budget_csv_format, budget: budget, name: "Plain")
+    account.imports.build(csv_format: plain, file_name: "sept.csv").tap { |i| i.run("2026-10-01,Paycheck,2800.00\n2026-10-02,Loblaws,-82.45\n2026-10-03,Interest,0.00\n") }
+  end
 
   before { sign_in_as budget.user }
 
@@ -82,13 +89,82 @@ RSpec.describe "The words on the pages", type: :request do
     "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) },
     "the CSV formats" => -> { csv_formats_path },
     "the CSV format form" => -> { new_csv_format_path },
-    "the CSV format edit form" => -> { edit_csv_format_path(csv_format) }
+    "the CSV format edit form" => -> { edit_csv_format_path(csv_format) },
+    "the Accounts" => -> { accounts_path },
+    "the Account form" => -> { new_account_path },
+    "the Account edit form" => -> { edit_account_path(account) },
+    "an Account's page" => -> { account_path(account) },
+    "the Import form" => -> { new_account_import_path(account) },
+    "an Import's summary" => -> { import_path(import) }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
       get instance_exec(&path)
 
       expect(response).to have_http_status(:ok)
       expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  describe "Accounts and Imports" do
+    it "tells a bare transaction from a Bank transaction, which is a term" do
+      expect("Bank transaction").not_to match(retired_terms)
+      expect("No bank transactions yet.").not_to match(retired_terms)
+      expect("Every transaction was already here").to match(retired_terms)
+      expect("A transaction").to match(retired_terms)
+    end
+
+    it "says Bank transactions, and Import, on an Account's page, in words" do
+      get account_path(account)
+
+      expect(visible_text).to include("Chequing", "Import", "Latest Import: sept.csv", "Oct 1, 2026", "Paycheck", "$2,800.00", "Loblaws", "-$82.45")
+      expect(visible_text).not_to include("Interest")
+    end
+
+    it "says what an Import did in words a person uses, with no column names" do
+      get import_path(import)
+
+      expect(visible_text).to include("Added 2 bank transactions", "Money in $2,800.00 1 bank transaction", "Money out -$82.45 1 bank transaction",
+        "Duplicates skipped 0", "Rows of 0 skipped 1", "First row", "Oct 1, 2026 Paycheck Money in $2,800.00")
+      expect(response.body).not_to match(/budget_|zero_rows|duplicates_skipped|content_key|occurrence/)
+    end
+
+    it "uses the same words for what went wrong when a file is refused" do
+      post account_imports_path(account), params: { import: { csv_format_id: "", file: Rack::Test::UploadedFile.new(StringIO.new("2026-13-45,Paycheck,2800.00\n"), "text/csv", original_filename: "bad.csv") } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("CSV format can't be blank")
+
+      csv_format_id = Budget::CsvFormat.find_by!(name: "Plain").id
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format_id, file: Rack::Test::UploadedFile.new(StringIO.new("2026-13-45,Paycheck,2800.00\n"), "text/csv", original_filename: "bad.csv") } }
+
+      expect(visible_text).to include("Line 1: the date \"2026-13-45\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format_id } }
+
+      expect(visible_text).to include("Choose a file to import.")
+    end
+
+    it "uses the same words for what went wrong when an Account is refused" do
+      post accounts_path, params: { account: { name: "" } }
+
+      expect(visible_text).to include("Name can't be blank")
+      expect(visible_text).not_to match(/\w+_\w+/)
+    end
+
+    it "uses the same words when an Account with bank transactions can't be deleted, and when a CSV format an Import used can't be" do
+      delete account_path(account)
+      follow_redirect!
+
+      expect(visible_text).to include("This account can't be deleted because it has bank transactions.")
+      expect(visible_text).not_to match(retired_terms)
+
+      delete csv_format_path(import.csv_format)
+      follow_redirect!
+
+      expect(visible_text).to include("This CSV format can't be deleted because an Import used it.")
       expect(visible_text).not_to match(retired_terms)
     end
   end

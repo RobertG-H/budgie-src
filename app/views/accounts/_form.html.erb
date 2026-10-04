@@ -1,0 +1,10 @@
+<%# locals: (account:, cancel_path:) %>
+<%= form_with model: account, class: "mt-8 space-y-6" do |form| %>
+  <%= render "form_errors", record: account %>
+
+  <%= render "components/field", form: form, attribute: :name, hint: "Such as Chequing, or the name of a card." do |field| %>
+    <%= form.text_field :name, required: true, autofocus: true, **field %>
+  <% end %>
+
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
+<% end %>

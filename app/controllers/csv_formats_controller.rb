@@ -32,9 +32,13 @@ class CsvFormatsController < ApplicationController
     end
   end
 
+  # A CSV format that an Import used can't be deleted: its edit page says why, and stays.
   def destroy
-    @csv_format.destroy!
-    redirect_to csv_formats_path, status: :see_other, notice: "CSV format deleted."
+    if @csv_format.destroy
+      redirect_to csv_formats_path, status: :see_other, notice: "CSV format deleted."
+    else
+      redirect_to edit_csv_format_path(@csv_format), status: :see_other, alert: @csv_format.errors.full_messages.to_sentence
+    end
   end
 
   private

@@ -238,7 +238,8 @@ month viewed. An archived envelope's page has Unarchive in place of Archive and 
 
 A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
 Refunds it was, or ignore it. The model is the `roadmap` issue
-[#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far.
+[#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
+formats, then Accounts, Imports and bank transactions.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
 columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
@@ -259,7 +260,27 @@ rows. A row of 0 is skipped and counted, not refused.
 with the grid and the preview, so the sample only exists for a request, and there's no reader written in JavaScript to keep
 in step with the real one. Saving a format never imports the sample: the person uploads the file again to import it.
 
-The header has a second row of links to the pages that aren't a month's, which the importer's pages join as they're built.
+**Accounts, Imports and bank transactions.** An Account is a real bank or card account, with only a name: Budgie doesn't track what's
+in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). A person imports a CSV file into one with a CSV format,
+and each row becomes a bank transaction, which is the bank's record of money moving in or out, with a signed amount. Bank
+transactions are read-only, and are found through their Account, as a Spend is through its envelope. The file isn't kept, only its
+name, and the Import commits straight away: a file that can't be read creates nothing, and says which row and why.
+
+**Overlapping files** are the normal case, so a row is recognised by what it is, not by an ID the bank doesn't give it
+([ADR 0010](adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md)). Each row has a content key, a digest of its
+Account, date, signed amount and description (trimmed, whitespace collapsed, case folded), and an occurrence number for each time
+the same key is in the Account. For each key an Import adds as many rows as the file has beyond those the Account already has, so
+two identical coffees on one day both come in, while the same file again, or one that overlaps, adds only what's new. The key and
+occurrence are written when the row is made and never recomputed, because they record how it first looked. The description as a
+Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place.
+
+**One request, one Import.** It runs in the request, holds the Account's row lock and inserts every row at once, so it makes the same
+number of queries for 10 rows as for 1,000, a double submit imports once, and there's no job to wait for. Its summary is a page of
+its own, worked out from the rows it added: the dates, the money in and money out, and the first row as it was read, so a wrong
+sign or a swapped day and month, which both read without error, is noticed straight away. An Account's page lists its bank
+transactions a page at a time, since one Import can bring in 5,000.
+
+The header has a second row of links to the pages that aren't a month's: the budget, Accounts and CSV formats so far.
 
 ### Frontend
 

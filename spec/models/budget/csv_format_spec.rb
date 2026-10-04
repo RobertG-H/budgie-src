@@ -4,6 +4,7 @@ RSpec.describe Budget::CsvFormat, type: :model do
   subject { build(:budget_csv_format) }
 
   it { is_expected.to belong_to(:budget) }
+  it { is_expected.to have_many(:imports).class_name("Budget::Import").dependent(:restrict_with_error) }
 
   it "uses the budget_csv_formats table, and is named without the Budget prefix in routes and params" do
     expect(Budget::CsvFormat.table_name).to eq("budget_csv_formats")

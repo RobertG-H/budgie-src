@@ -1,7 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
 # them, what's spent, what came back, what was moved between envelopes and back to Ready to Assign, an archived
-# envelope with history and a CSV format, so the real pages have something to show. Running it again changes nothing that's
+# envelope with history, a CSV format and an Account with an Import, so the real pages have something to show. Running it again changes nothing that's
 # already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
@@ -104,7 +104,16 @@ old_gym.archive! if old_gym.previously_new_record?
 # A CSV format that reads spec/fixtures/files/signed-sample.csv, so a developer can build a format from that file to see
 # the builder's grid and preview, and import it. It's the bank's header row to skip, then the date, the description and one
 # signed amount. It's only made when there isn't one by its name, so a developer's changes to it stay.
-budget.csv_formats.find_or_create_by!(name: "Sample bank") do |csv_format|
+sample_bank = budget.csv_formats.find_or_create_by!(name: "Sample bank") do |csv_format|
   csv_format.assign_attributes(rows_to_skip: 1, column_count: 3, date_column: 1, date_format: "YYYY-MM-DD", description_columns: [ 2 ],
     amount_style: "signed", amount_column: 3)
+end
+
+# An Account with the sample file imported into it with that format: five bank transactions, money in and money out, and a
+# sixth row of 0 that's skipped. It's only imported while the Account has no Import, so what a developer has done to it, such
+# as undoing it, isn't redone by seeding again.
+chequing = budget.accounts.find_or_create_by!(name: "Chequing")
+if chequing.imports.none?
+  sample = Rails.root.join("spec/fixtures/files/signed-sample.csv")
+  sample.open { |file| chequing.imports.build(csv_format: sample_bank, file_name: sample.basename.to_s).run(file) or raise "The sample file wasn't imported." }
 end

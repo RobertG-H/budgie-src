@@ -1,6 +1,6 @@
-<%# locals: (form:, cancel_path:) %>
-<%# What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. %>
+<%# locals: (form:, cancel_path:, submit: nil) %>
+<%# What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. The button says "Create Spend" or "Update Spend" unless `submit` says something else, such as "Import". %>
 <div class="flex items-center gap-4">
-  <%= form.submit class: "btn btn-primary" %>
+  <%= submit ? form.submit(submit, class: "btn btn-primary") : form.submit(class: "btn btn-primary") %>
   <%= link_to "Cancel", cancel_path, class: "btn btn-ghost" %>
 </div>

@@ -1,0 +1,42 @@
+<% content_for :title, "#{@account.name} · Budgie" %>
+<% budget = @account.budget %>
+
+<%= link_to "Back to accounts", accounts_path, class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: @account.name do %>
+    <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>
+    <%= link_to "Edit", edit_account_path(@account), class: "btn" %>
+  <% end %>
+</div>
+
+<%# The Import that ran last, which is the one whose summary can still be looked at here. %>
+<% if @latest_import %>
+  <p class="mt-4 text-base-content/70">
+    Latest Import: <%= link_to @latest_import.file_name, import_path(@latest_import), class: "link" %>,
+    <%= @latest_import.created_at.strftime("%b %-d, %Y") %>.
+  </p>
+<% end %>
+
+<div class="mt-8">
+  <% if @bank_transactions.any? %>
+    <%= render "components/record_list" do %>
+      <% @bank_transactions.each do |bank_transaction| %>
+        <%= render "components/record_row", href: nil, date: bank_transaction.date, description: bank_transaction.description,
+              amount: bank_transaction.amount, budget: budget, with_year: true %>
+      <% end %>
+    <% end %>
+
+    <div class="mt-4">
+      <%= render "components/pager", page: page, more: more_pages?, path: ->(number) { account_path(@account, page: (number unless number == 1)) } %>
+    </div>
+  <% elsif page > 1 %>
+    <%= render "components/empty_state", message: "There are no more bank transactions." do %>
+      <%= link_to "Back to the first page", account_path(@account), class: "btn" %>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "No bank transactions yet." do %>
+      <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+</div>

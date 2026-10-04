@@ -2,10 +2,10 @@ require "rails_helper"
 
 RSpec.describe "components/_form_actions", type: :view do
   # Rendered inside a real form, since the submit button is the form's own.
-  def render_actions(cancel_path: "/months/2026-09")
-    render inline: <<~ERB, locals: { cancel_path: cancel_path }
+  def render_actions(cancel_path: "/months/2026-09", submit: nil)
+    render inline: <<~ERB, locals: { cancel_path: cancel_path, submit: submit }
       <%= form_with model: Budget::Spend.new, url: "/spends" do |form| %>
-        <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
+        <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: submit %>
       <% end %>
     ERB
   end
@@ -14,6 +14,13 @@ RSpec.describe "components/_form_actions", type: :view do
     render_actions
 
     assert_select "form input[type=submit].btn.btn-primary[value='Create Spend']"
+  end
+
+  it "says what it's told to instead, such as Import" do
+    render_actions(submit: "Import")
+
+    assert_select "form input[type=submit].btn.btn-primary[value=Import]"
+    assert_select "form input[type=submit]", count: 1
   end
 
   it "is a Cancel link to where the form was opened from" do

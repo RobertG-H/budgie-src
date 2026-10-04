@@ -112,7 +112,7 @@ Every form carries `from` (`home`, `month`, `deposits` or `envelope`) and `month
 
 A person imports the CSV their bank lets them download into an Account (see the `roadmap` issue #67 for the whole model and its
 sliced build tickets); each row becomes a bank transaction that they file as Deposits, Spends and Refunds, or ignore. The tables
-are namespaced like the rest, and are in the order of the build: CSV formats first.
+are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions.
 
 #### CSV formats and the reader
 
@@ -151,8 +151,50 @@ answer is the whole page. The sample is read for the request and never kept: sav
 Saving a format needs a sample, so that `column_count` is known; editing without one keeps the format's. Another user's format is a
 404, `budget_id` is never a permitted param, and the notices are "CSV format added.", "CSV format updated." and "CSV format deleted.".
 
-The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget and CSV formats now, and
+The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Accounts and CSV formats now, and
 the importer's other pages join it. It's left out until the person has a budget. The "Main" nav stays only Sign out.
+
+#### Accounts, Imports and bank transactions
+
+`Budget::Account` (`budget_accounts`, `budget_id`) is a real bank or card account that bank transactions come from, and has only a
+name, unique per budget ignoring case: no balance, currency, kind or last four digits (ADR 0001), and no default CSV format, since
+the Import form pre-selects the format of the Account's `latest_import`. `Budget::Import` (`budget_imports`) is one CSV file read
+into one Account: `csv_format_id`, `file_name` (the file isn't kept), `duplicates_skipped` and `zero_rows_skipped`, with
+`created_at` as when it ran and no `user_id`. `Budget::BankTransaction` (`budget_bank_transactions`) is the bank's record of money
+moving: `date`, `description` (as the bank gave it, trimmed), a signed `amount` that's never 0, `import_id` (not null while an
+Import is the only way one is made) and `account_id`, and no `budget_id`: it belongs to its budget through its Account, as a Spend
+does through its envelope, so `Current.budget.bank_transactions`, `.imports` and `.accounts` (`has_many :through`, for reading
+only) find them and another user's is a 404. They're read-only to the person: nothing edits a bank transaction. An Account with
+bank transactions can't be deleted (`restrict_with_error`, worded like an envelope's); one with only Imports of nothing but rows of
+0 can, and takes them with it. A CSV format that an Import used can't be deleted, but can still be edited. Destroying a Budget
+deletes its bank transactions, then Imports, then Accounts and CSV formats in `delete_importer_records`, ahead of its envelopes'
+records, and `user:delete`'s confirmation counts them.
+
+**Duplicates (ADR 0010).** A row's `content_key` is a SHA-256 digest of its Account, date, signed amount (as `%.2f`) and
+normalised description (squished and case folded), and its `occurrence` numbers the same key's rows in the Account from 1; both are
+written once, when the row is made, and never recomputed, and `(account_id, content_key, occurrence)` is unique. For each key an
+Import adds `max(0, rows in the file - rows already in the Account)`, whatever has been done with the existing rows, taking the
+file's later rows as the new ones and numbering them on from the last occurrence; the rest are `duplicates_skipped`. The
+normalised description is also stored, as a generated column (`normalized_description`, `lower(regexp_replace(btrim(description),
+'\s+', ' ', 'g'))`, stored), so it follows `description` when bank sync updates it in place and needs no backfill: a Filing rule
+(#69) matches it and a Guess (#70) can index it, and the key, which records how a row first looked, is what stays put.
+
+`Budget::Import#run(file)` does an Import, and is true when it worked: `file` is read with the CSV format's reader, a refusal creates
+nothing and is the first error (by line), and otherwise, holding the Account's row lock so that a double submit imports once and the
+second finds every row a duplicate, it counts what's already there with one grouped query, saves the Import and inserts every
+bank transaction with one `insert_all!`, so the query count is the same for 10 rows as for 1,000 (a spec checks it). There is no
+background job. An Import that adds no bank transactions, such as the same file again, is kept: it's the Account's latest, so
+an earlier Import can't be undone from under the rows it skipped, and its summary says what it skipped. The CSV format is only ever
+looked up in the budget's own, so another budget's is "CSV format can't be blank", and anything sent as the file that isn't an upload is no file.
+
+An Import's summary is a page of its own, `/imports/:id` (`ImportsController#show`), which Importing redirects to and the Account's
+page links to for its latest. It's worked out from the Import's own bank transactions in two queries, plus `zero_rows_skipped`, so it
+needs nothing else stored: the dates, the count and total of money in and of money out, the first row as it was read (its date
+spelled out, and "Money in" or "Money out" in words), and the duplicates and rows of 0 skipped, or "Nothing new was added." The
+figures are of what the Import added, which is what Undo would delete. Pages: `/accounts` (add, rename, delete; "Account added.",
+"Account updated.", "Account deleted."), an Account's page (`/accounts/:id`: Import, Edit, its latest Import and its bank
+transactions newest first, 50 a page through the `Paginated` concern and `components/pager`, with a fixed number of queries), and
+`/accounts/:account_id/imports/new`. Accounts are in the header's section links.
 
 ### Production
 
@@ -166,7 +208,7 @@ Cloudflare terminates TLS, so `assume_ssl` makes every request count as HTTPS, a
 Request, model, service and job specs use FactoryBot and shoulda-matchers; there are no system specs yet.
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
 In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
-A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given, a Spend is `create(:budget_spend, envelope:, date:, amount:)`, a Refund is `create(:budget_refund, envelope:, date:, amount:)`, a Reallocation is `create(:budget_envelope_reallocation, from_envelope:, to_envelope:, date:, amount:)`, between two envelopes of one budget unless given others, and a Reallocation to Ready to Assign is `create(:budget_ready_to_assign_reallocation, envelope:, date:, amount:)`. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
+A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given, a Spend is `create(:budget_spend, envelope:, date:, amount:)`, a Refund is `create(:budget_refund, envelope:, date:, amount:)`, a Reallocation is `create(:budget_envelope_reallocation, from_envelope:, to_envelope:, date:, amount:)`, between two envelopes of one budget unless given others, and a Reallocation to Ready to Assign is `create(:budget_ready_to_assign_reallocation, envelope:, date:, amount:)`. An Account is `create(:budget_account, budget:)`, an Import `create(:budget_import, account:)` (with a CSV format of the Account's budget unless given another) and a bank transaction `create(:budget_bank_transaction, account:, date:, amount:)` (in a new Import of that Account unless given one). The sample files for the reader are in `spec/fixtures/files/`, one per amount style, and read the same bank transactions. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
 Eastern Time has daylight saving, so `30.days` is a span of calendar days there. A spec a minute either side of such a limit travels from `Time.current` (`travel_to Time.current + 30.days`) rather than with `travel 30.days`, which adds exact hours and fails on some dates. To check "today" itself, `travel_to Time.utc(2026, 10, 1, 0, 30)` is still September 30 in Eastern time.
 
 ### Frontend
@@ -197,7 +239,7 @@ After a UI change:
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
-- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and only CSV formats and the reader exist so far; the rest of its model is the `roadmap` issue #67.
+- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports and bank transactions exist so far, and the rest of its model is the `roadmap` issue #67.
 - A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Neither is built yet: their models are the `roadmap` issues #69 (Filing rules) and #70 (Filing guesses).
 
 ## Agent skills

@@ -1,0 +1,47 @@
+<% content_for :title, "Import of #{@import.file_name} · Budgie" %>
+<% budget = @account.budget %>
+<% summary = @summary %>
+
+<%= link_to "Back to #{@account.name}", account_path(@account), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: "Import",
+        description: "#{@import.file_name}, into #{@account.name}, #{@import.created_at.strftime("%b %-d, %Y at %-l:%M %p")}" %>
+</div>
+
+<%# What the Import brought in, so a wrong sign or a swapped day and month, which both read without error, is seen here, straight away. %>
+<% if summary.count.zero? %>
+  <div class="mt-8">
+    <%= render "components/empty_state", message: "Nothing new was added. Every row in the file was already in this account, or was a row of 0." %>
+  </div>
+<% else %>
+  <div class="mt-8 grid gap-4 sm:grid-cols-2">
+    <%= render "components/stat_card", title: "Added", value: summary.count, description: "bank transaction".pluralize(summary.count) %>
+    <%# A range of dates is longer than a figure, so it's set smaller than the others' numbers. %>
+    <%= render "components/stat_card", title: "Dates",
+          value: tag.span((summary.first_date == summary.last_date ? spelled_date(summary.first_date) : "#{spelled_date(summary.first_date)} to #{spelled_date(summary.last_date)}"), class: "text-xl") %>
+    <%= render "components/stat_card", title: "Money in", value: render("components/money", amount: summary.money_in_total, budget: budget),
+          description: pluralize(summary.money_in_count, "bank transaction") %>
+    <%= render "components/stat_card", title: "Money out", value: render("components/money", amount: summary.money_out_total, budget: budget),
+          description: pluralize(summary.money_out_count, "bank transaction") %>
+  </div>
+<% end %>
+
+<div class="mt-4 grid gap-4 sm:grid-cols-2">
+  <%= render "components/stat_card", title: "Duplicates skipped", value: @import.duplicates_skipped, description: "Already in this account" %>
+  <%= render "components/stat_card", title: "Rows of 0 skipped", value: @import.zero_rows_skipped, description: "Not kept" %>
+</div>
+
+<% if summary.first_row %>
+  <div class="mt-8">
+    <h2 class="text-xl font-semibold">First row</h2>
+    <p class="mt-2 text-base-content/70">As it was read.</p>
+
+    <div class="mt-4">
+      <%= render "components/record_list" do %>
+        <%= render "components/record_row", href: nil, date: summary.first_row.date, description: summary.first_row.description,
+              counterpart: (summary.first_row.amount.negative? ? "Money out" : "Money in"), amount: summary.first_row.amount, budget: budget, with_year: true %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

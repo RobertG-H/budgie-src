@@ -1,0 +1,22 @@
+<% content_for :title, "Accounts · Budgie" %>
+
+<%= render "components/page_header", title: "Accounts",
+      description: "The real bank and card accounts your bank transactions come from. Budgie doesn't track what's in them." do %>
+  <%= link_to "New account", new_account_path, class: "btn btn-primary" %>
+<% end %>
+
+<div class="mt-8">
+  <% if @accounts.any? %>
+    <%= render "components/record_list" do %>
+      <% @accounts.each do |account| %>
+        <% count = @transaction_counts.fetch(account.id, 0) %>
+        <%= render "components/link_row", href: account_path(account), name: account.name,
+              detail: (count.zero? ? "No bank transactions yet." : pluralize(count, "bank transaction")) %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "You don't have any accounts yet." do %>
+      <%= link_to "New account", new_account_path, class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+</div>

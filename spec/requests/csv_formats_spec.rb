@@ -335,5 +335,36 @@ RSpec.describe "CSV formats", type: :request do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    describe "once an Import has used it" do
+      before { create(:budget_import, account: create(:budget_account, budget: budget), csv_format: format) }
+
+      it "is refused, saying why on its edit page, and keeps the format" do
+        expect { delete csv_format_path(format) }.not_to change(Budget::CsvFormat, :count)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(edit_csv_format_path(format))
+        follow_redirect!
+        assert_select "[role=alert]", text: "This CSV format can't be deleted because an Import used it."
+      end
+
+      it "can still be edited, which changes nothing that was imported" do
+        transaction = create(:budget_bank_transaction, account: Budget::Import.sole.account, import: Budget::Import.sole, description: "Coffee shop")
+
+        patch csv_format_path(format), params: { csv_format: { name: "CIBC Visa", date_format: "DD/MM/YYYY" } }
+
+        expect(format.reload).to have_attributes(name: "CIBC Visa", date_format: "DD/MM/YYYY")
+        expect(response).to redirect_to(csv_formats_path)
+        expect(transaction.reload).to have_attributes(description: "Coffee shop", date: Date.new(2026, 9, 15), amount: -10)
+      end
+
+      it "can't be deleted by deleting its budget's other formats, which leave it alone" do
+        other = create(:budget_csv_format, budget: budget, name: "Unused")
+
+        expect { delete csv_format_path(other) }.to change(Budget::CsvFormat, :count).by(-1)
+
+        expect(Budget::CsvFormat.exists?(format.id)).to be(true)
+      end
+    end
   end
 end

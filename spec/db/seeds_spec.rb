@@ -38,6 +38,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::CsvFormat, :count)
   end
 
+  it "creates no Accounts, Imports or bank transactions outside development" do
+    expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -227,6 +231,32 @@ RSpec.describe "db/seeds.rb" do
       end
     end
 
+    describe "the Account" do
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      it "is Chequing, with one Import of the sample file, read with the seeded CSV format" do
+        account = budget.accounts.sole
+
+        expect(account.name).to eq("Chequing")
+        expect(account.imports.sole).to have_attributes(file_name: "signed-sample.csv", csv_format: budget.csv_formats.sole, duplicates_skipped: 0, zero_rows_skipped: 1)
+      end
+
+      it "has the sample's five bank transactions, money in and money out, all of them as the file had them" do
+        expect(budget.accounts.sole.bank_transactions.order(:id).pluck(:date, :description, :amount)).to eq([
+          [ Date.new(2026, 9, 1), "Paycheck", 2800 ], [ Date.new(2026, 9, 2), "Loblaws", BigDecimal("-82.45") ],
+          [ Date.new(2026, 9, 3), "Hydro", BigDecimal("-65.50") ], [ Date.new(2026, 9, 5), "Coffee shop", BigDecimal("-4.25") ],
+          [ Date.new(2026, 9, 9), "Hydro rebate", BigDecimal("12.25") ]
+        ])
+      end
+
+      it "changes nothing when it's run again, and leaves a bank transaction the developer has changed" do
+        budget.accounts.sole.bank_transactions.first.update!(description: "Changed")
+
+        expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
+        expect(budget.accounts.sole.bank_transactions.first.description).to eq("Changed")
+      end
+    end
+
     describe "the archived envelope" do
       before { travel_to Time.utc(2026, 10, 15, 16) }
 
@@ -264,7 +294,7 @@ RSpec.describe "db/seeds.rb" do
 
       expect { run_seeds }.not_to change {
         [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
-          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count ]
+          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count, Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ]
       }
     end
 

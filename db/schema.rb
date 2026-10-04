@@ -10,9 +10,18 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_160000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "budget_accounts", force: :cascade do |t|
+    t.bigint "budget_id", null: false
+    t.string "name", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index "budget_id, lower((name)::text)", name: "index_budget_accounts_on_budget_id_and_lower_name", unique: true
+    t.check_constraint "btrim(name::text) <> ''::text", name: "budget_accounts_name_not_blank"
+  end
 
   create_table "budget_assignments", force: :cascade do |t|
     t.bigint "envelope_id", null: false
@@ -23,6 +32,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_150000) do
     t.index ["envelope_id", "month"], name: "index_budget_assignments_on_envelope_id_and_month", unique: true
     t.check_constraint "EXTRACT(day FROM month) = 1::numeric", name: "budget_assignments_month_first_of_month"
     t.check_constraint "amount > 0::numeric", name: "budget_assignments_amount_positive"
+  end
+
+  create_table "budget_bank_transactions", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "import_id", null: false
+    t.date "date", null: false
+    t.string "description", null: false
+    t.decimal "amount", precision: 15, scale: 2, null: false
+    t.string "content_key", null: false
+    t.integer "occurrence", null: false
+    t.virtual "normalized_description", type: :text, as: "lower(regexp_replace(btrim((description)::text), '\\s+'::text, ' '::text, 'g'::text))", stored: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "content_key", "occurrence"], name: "index_budget_bank_transactions_on_content_key_and_occurrence", unique: true
+    t.index ["account_id", "date", "id"], name: "index_budget_bank_transactions_on_account_id_and_date_and_id"
+    t.index ["import_id"], name: "index_budget_bank_transactions_on_import_id"
+    t.check_constraint "amount <> 0::numeric", name: "budget_bank_transactions_amount_not_zero"
+    t.check_constraint "btrim(description::text) <> ''::text", name: "budget_bank_transactions_description_not_blank"
+    t.check_constraint "content_key::text ~ '^[0-9a-f]{64}$'::text", name: "budget_bank_transactions_content_key_format"
+    t.check_constraint "occurrence >= 1", name: "budget_bank_transactions_occurrence_positive"
   end
 
   create_table "budget_csv_formats", force: :cascade do |t|
@@ -97,6 +126,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_150000) do
     t.index "budget_id, lower((name)::text)", name: "index_budget_envelopes_on_budget_id_and_lower_name", unique: true
     t.index ["budget_id"], name: "index_budget_envelopes_on_budget_id"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_envelopes_name_not_blank"
+  end
+
+  create_table "budget_imports", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "csv_format_id", null: false
+    t.string "file_name", null: false
+    t.integer "duplicates_skipped", default: 0, null: false
+    t.integer "zero_rows_skipped", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "created_at"], name: "index_budget_imports_on_account_id_and_created_at"
+    t.index ["csv_format_id"], name: "index_budget_imports_on_csv_format_id"
+    t.check_constraint "btrim(file_name::text) <> ''::text", name: "budget_imports_file_name_not_blank"
+    t.check_constraint "duplicates_skipped >= 0", name: "budget_imports_duplicates_skipped_not_negative"
+    t.check_constraint "zero_rows_skipped >= 0", name: "budget_imports_zero_rows_skipped_not_negative"
   end
 
   create_table "budget_ready_to_assign_reallocations", force: :cascade do |t|
@@ -190,12 +234,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_150000) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "budget_accounts", "budgets", on_delete: :restrict
   add_foreign_key "budget_assignments", "budget_envelopes", column: "envelope_id", on_delete: :restrict
+  add_foreign_key "budget_bank_transactions", "budget_accounts", column: "account_id", on_delete: :restrict
+  add_foreign_key "budget_bank_transactions", "budget_imports", column: "import_id", on_delete: :restrict
   add_foreign_key "budget_csv_formats", "budgets", on_delete: :restrict
   add_foreign_key "budget_deposits", "budgets", on_delete: :restrict
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "from_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "to_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelopes", "budgets", on_delete: :restrict
+  add_foreign_key "budget_imports", "budget_accounts", column: "account_id", on_delete: :restrict
+  add_foreign_key "budget_imports", "budget_csv_formats", column: "csv_format_id", on_delete: :restrict
   add_foreign_key "budget_ready_to_assign_reallocations", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_refunds", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_spends", "budget_envelopes", column: "envelope_id", on_delete: :restrict
