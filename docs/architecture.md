@@ -312,7 +312,7 @@ Spends, money in any mix of Deposits and Refunds, and one invalid record means n
 wherever a bank transaction shows what it was filed as, its records are listed together.
 
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
-or none. The filing form calls it for one bank transaction, and Filing rules and a Guess will call the same operation, so it makes the
+or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
 transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Unfiled list shows
 every bank transaction across the Accounts that's still to do, and an Account's page shows each one's state.
@@ -353,6 +353,20 @@ many bank transactions it filed or ignored, counting only those that still are. 
 amount if it needs them, and edited or deleted. Because a filed record is ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), changing or deleting a rule only
 affects what comes in from then on; fixing what it already did means un-filing and filing again. A rule for an archived envelope is flagged inactive, in words, and does nothing until the envelope is
 unarchived. Two rules with the same conditions aren't allowed, and the page says what the other one does.
+
+**Guesses.** When no Filing rule fits an unfiled bank transaction, Budgie can still guess: the filing form starts on the kind and envelope that the Budget's most similar bank
+transactions were filed as, and says why, such as "Guess: like LOBLAWS #1234 → Groceries" ([ADR 0013](adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md)).
+It comes from the Budget's own filing history, so no bank description leaves the server, it gives the same answer for the same history, and it can name the bank transaction it was
+like. It's worked out when it's shown and stored nowhere, so there's no table of Guesses to go stale: edit or move a filed record and the next Guess follows. A Guess only suggests
+([ADR 0012](adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md)): the form is where it starts, the person files it or changes it, and a Filing rule can still be made from
+it, but nothing is ever filed without them, however sure it is.
+
+Two descriptions are alike when they share their words, ignoring numbers in them, such as store numbers and reference codes, and a word counts for less the more different envelopes
+it's been filed in, so that "pre-authorized payment" in front of every merchant doesn't make two of them alike. Below half alike there's no Guess, so a merchant that hasn't been filed
+before gets none. Only bank transactions filed as one record count (a split's records are in different envelopes), and never ones that were ignored, since a Guess never proposes Ignore,
+or filed into an archived envelope, since it never proposes one. When several outcomes are equally alike, the one filed most often wins, then the most recent. It makes the same number
+of queries however much the Budget has filed, because the history is counted in the database in one query and compared in Ruby, which needs no extension. Where the Guess comes from is
+behind one seam, so an LLM call or a bank-sync provider's category can be added later as another source, each with its own decision.
 
 The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled, Filing rules and CSV formats.
 

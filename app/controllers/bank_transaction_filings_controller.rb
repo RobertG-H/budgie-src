@@ -6,9 +6,12 @@ class BankTransactionFilingsController < ApplicationController
 
   before_action :require_unfiled, only: %i[ new create ]
 
-  # Starts as the bank transaction would be filed with nothing changed: its date and description, and all of its amount.
+  # Starts as the bank transaction would be filed with nothing changed: its date and description, and all of its amount. When no active
+  # Filing rule fits it and the Budget has filed something like it, it starts as that Guess, which is only where the form starts: nothing
+  # is made until it's filed, and it can be changed as any other form (ADR 0013).
   def new
-    @entry = Budget::Filing::Entry.new(bank_transaction: @bank_transaction, drafts: [ Budget::Filing::Draft.for(@bank_transaction) ])
+    @guess = Budget::Guesser.new(Current.budget).guess(@bank_transaction)
+    @entry = Budget::Filing::Entry.new(bank_transaction: @bank_transaction, drafts: [ Budget::Filing::Draft.for(@bank_transaction, **(@guess ? @guess.draft_attributes : {})) ])
     @offer = filing_rule_offer(sent: false)
   end
 

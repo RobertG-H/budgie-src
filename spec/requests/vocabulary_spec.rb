@@ -206,6 +206,23 @@ RSpec.describe "The words on the pages", type: :request do
         expect(response.body).not_to match(/filed_by_rules|ignored_by_rules/)
       end
 
+      it "says Guess, and which bank transaction it was like, on the filing form, in words" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        later_paycheck = create(:budget_bank_transaction, account: account, description: "Paycheck", date: Date.new(2026, 10, 15), amount: 2800)
+        similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
+
+        get new_bank_transaction_filing_path(similar.reload, from: "unfiled")
+
+        expect(visible_text).to include("Guess: like Loblaws → Groceries")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+        expect(response.body).not_to match(/guess_|_guess|draft_attributes/)
+
+        get new_bank_transaction_filing_path(later_paycheck.reload, from: "unfiled")
+
+        expect(visible_text).not_to include("Guess")
+      end
+
       it "says what's wrong with a rule in the same words, when it's refused with a filing or an ignoring" do
         post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "lo" } } }
 
