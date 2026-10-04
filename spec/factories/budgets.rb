@@ -18,4 +18,10 @@ FactoryBot.define do
     amount { 100 }
     notes { "" }
   end
+
+  factory :budget_assignment, class: "Budget::Assignment" do
+    association :envelope, factory: :budget_envelope
+    month { Date.new(2026, 9, 1) }
+    amount { 100 }
+  end
 end

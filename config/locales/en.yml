@@ -35,3 +35,12 @@ en:
       # What the form calls the month a Deposit counts toward.
       budget/deposit:
         month: Ready to Assign in
+      # An Assignment has one amount, and it's what the month view calls Assigned.
+      budget/assignment:
+        amount: Assigned
+    errors:
+      models:
+        # What's shown when an envelope with records is deleted. The reason is the same whatever the records are.
+        budget/envelope:
+          restrict_dependent_destroy:
+            has_many: "This envelope can't be deleted because it has records."

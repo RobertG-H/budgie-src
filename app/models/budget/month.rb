@@ -7,12 +7,29 @@
 # It works on the calendar month containing the date it's given, and runs a fixed number of grouped SUM queries,
 # each split into "before the month" and "in the month", so the number of queries doesn't grow with the months
 # of history or with the number of envelopes. Amounts are BigDecimal throughout.
+#
+# Changing what's assigned in an earlier month changes Carried over, Available and Ready to Assign in every month
+# after it, since none of them is stored. That can leave a later month's Ready to Assign negative.
 class Budget::Month
-  # Money not yet assigned to an envelope: every Deposit for this month and the months before it.
-  ReadyToAssign = Data.define(:amount, :carried_over, :deposited)
+  ZERO = BigDecimal(0)
 
-  # One envelope's figures for this month.
-  EnvelopeLine = Data.define(:envelope, :carried_over, :available) do
+  # Money not yet assigned to an envelope: every Deposit for this month and the months before it, less everything
+  # assigned in them. `carried_over` is what was left at the end of last month, `deposited` is what came in this
+  # month and `assigned` is what went to envelopes this month, all of them.
+  ReadyToAssign = Data.define(:amount, :carried_over, :deposited, :assigned) do
+    # Over-assigned: more has been assigned than there is to assign, so Ready to Assign is below zero.
+    def over_assigned?
+      amount.negative?
+    end
+  end
+
+  # What's assigned to one envelope in the months before this one, and in this one.
+  AssignedTotals = Data.define(:before, :in_month)
+  NOTHING_ASSIGNED = AssignedTotals.new(before: ZERO, in_month: ZERO)
+
+  # One envelope's figures for this month: what it carries over (its Starting balance and everything assigned to it
+  # in the months before), what's assigned to it this month, and the two together, which is what's Available.
+  EnvelopeLine = Data.define(:envelope, :carried_over, :assigned, :available) do
     # Overspent: the envelope's Available is below zero.
     def overspent?
       available.negative?
@@ -61,17 +78,29 @@ class Budget::Month
 
   def ready_to_assign
     @ready_to_assign ||= begin
-      carried_over, deposited = deposit_totals
-      ReadyToAssign.new(amount: carried_over + deposited, carried_over: carried_over, deposited: deposited)
+      deposited_before, deposited = deposit_totals
+      assigned_before = assignment_totals.values.sum(ZERO, &:before)
+      assigned = assignment_totals.values.sum(ZERO, &:in_month)
+      carried_over = deposited_before - assigned_before
+
+      ReadyToAssign.new(amount: carried_over + deposited - assigned, carried_over: carried_over, deposited: deposited, assigned: assigned)
     end
   end
 
-  # The budget's envelopes, alphabetically. Nothing moves money in or out of an envelope yet, so each one's
-  # Available is its Starting balance in every month, and what it carries over is the same.
+  # The budget's envelopes, alphabetically.
   def envelopes
     @envelopes ||= budget.envelopes.alphabetical.map do |envelope|
-      EnvelopeLine.new(envelope: envelope, carried_over: envelope.starting_balance, available: envelope.starting_balance)
+      totals = assignment_totals.fetch(envelope.id, NOTHING_ASSIGNED)
+      carried_over = envelope.starting_balance + totals.before
+
+      EnvelopeLine.new(envelope: envelope, carried_over: carried_over, assigned: totals.in_month, available: carried_over + totals.in_month)
     end
+  end
+
+  # One envelope's line, found by its id like any other record of the budget: another budget's envelope, or one that
+  # doesn't exist, is ActiveRecord::RecordNotFound.
+  def envelope_line(id)
+    envelopes.find { |line| line.envelope.id == id.to_i } or raise ActiveRecord::RecordNotFound
   end
 
   private
@@ -80,9 +109,18 @@ class Budget::Month
       budget.deposits.where(month: ..date).pick(sum_where("month < ?"), sum_where("month = ?"))
     end
 
+    # What's assigned to each envelope, from a single query: { envelope id => AssignedTotals }. An envelope with
+    # nothing assigned up to this month isn't in it. The budget's own totals are added up from these, so they always
+    # agree with its envelopes'.
+    def assignment_totals
+      @assignment_totals ||= budget.assignments.where(month: ..date).group(:envelope_id)
+        .pluck(:envelope_id, sum_where("month < ?"), sum_where("month = ?"))
+        .to_h { |envelope_id, before, in_month| [ envelope_id, AssignedTotals.new(before: before, in_month: in_month) ] }
+    end
+
     # One column of a query: the total amount where `condition` holds, given this month. Only for the literal
     # conditions above, never for anything a person typed.
     def sum_where(condition)
-      Arel.sql(Budget::Deposit.sanitize_sql_array([ "COALESCE(SUM(amount) FILTER (WHERE #{condition}), 0)", date ]))
+      Arel.sql(ApplicationRecord.sanitize_sql_array([ "COALESCE(SUM(amount) FILTER (WHERE #{condition}), 0)", date ]))
     end
 end

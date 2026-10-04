@@ -4,4 +4,10 @@ module ApplicationHelper
   def money(amount, budget:)
     number_to_currency(amount, unit: budget.currency_unit)
   end
+
+  # What an envelope's Assigned in a month is called to someone who can't see where it sits on the page, such as
+  # "Assigned to Groceries in September 2026". It names the Assigned cell's button and the input it opens.
+  def assigned_to(envelope, month)
+    "Assigned to #{envelope.name} in #{month.name}"
+  end
 end

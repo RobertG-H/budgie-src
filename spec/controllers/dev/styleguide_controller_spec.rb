@@ -49,6 +49,20 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#cards a.stats[href] .stat-title", text: "Ready to Assign"
       end
 
+      it "shows a stat card that says in words what's wrong with its number" do
+        with_development_routes { get :show }
+
+        assert_select "#cards .stat-value .text-error", text: "-$150.00"
+        assert_select "#cards .stat-desc.text-error", text: "More was assigned than deposited."
+      end
+
+      it "shows a field whose label is hidden from sight but not from assistive technology" do
+        with_development_routes { get :show }
+
+        assert_select "#fields label.sr-only", text: "Assigned to Groceries in September 2026"
+        assert_select "#fields input[type=number][aria-describedby$=_hint]"
+      end
+
       it "shows every theme role next to its content colour" do
         with_development_routes { get :show }
 

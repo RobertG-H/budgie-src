@@ -108,6 +108,10 @@ Constraints live in the database as well as in the models — check constraints,
 is validated as a number under 10¹³ with at most two decimal places, and more places is an error rather than
 being rounded.
 
+An envelope with records can't be deleted. The model refuses and its page says why, with `ON DELETE RESTRICT` as the
+backstop, and destroying a whole budget (which is what `user:delete` does) deletes its envelopes' records first so the
+envelopes can follow.
+
 ### The month view and balances
 
 The home page is the month view: `/` is the current month and `/months/YYYY-MM` is any other. Everything
@@ -126,6 +130,15 @@ A Deposit counts toward Ready to Assign in its `month`, which is the month of it
 so someone living on last month's money can mark each paycheck for next month. Every form remembers the page
 it was opened from, as a page name rather than a URL, and goes back there when it's saved, deleted or
 cancelled.
+
+Assigned is money moved from Ready to Assign into one envelope for one month, one figure per envelope per month. It is
+worked into the same calculator: an envelope's Available is its Starting balance plus everything assigned up to the
+month, and Ready to Assign is the Deposits for the months up to it less everything assigned in them, still in a fixed
+number of grouped queries. Changing an earlier month's Assigned therefore changes every later month. It's set in place on
+the month view: each envelope's Assigned cell is a Turbo Frame that swaps between the amount and an input, and saving
+refreshes the month view in place with Turbo's morphing, keeping the scroll position. Turbo only refreshes the address it's
+already at, and the current month is at `/` as well as `/months/YYYY-MM`, so the home page is a page name of its own, and
+saving goes back to whichever one the form was opened from.
 
 ### Frontend
 

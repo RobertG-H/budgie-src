@@ -1,11 +1,15 @@
-<%# locals: (title:, value:, description: nil, href: nil) %>
+<%# locals: (title:, value:, description: nil, href: nil, error: nil) %>
 <%# One headline number, such as Ready to Assign. Given an `href`, the whole card links to the records behind the number. daisyUI mutes stat text to 60%, which is under AA here, so it's set back to 70%. %>
+<%# An `error` says in words what's wrong with the number, in the error colour, so colour isn't the only cue. daisyUI won't let the number or what's under it wrap, which a long description needs on a phone and a badge beside the number (Overspent) needs in a narrow card, so they can. Cards in a row stretch to the tallest, so what's in each is packed to the top, which keeps their numbers level. %>
 <%= content_tag (href ? :a : :div), href: href, class: [ "stats w-full border border-base-300", ("hover:bg-base-200" if href) ] do %>
-  <div class="stat">
+  <div class="stat content-start">
     <div class="stat-title text-base-content/70"><%= title %></div>
-    <div class="stat-value"><%= value %></div>
+    <div class="stat-value whitespace-normal"><%= value %></div>
     <% if description %>
-      <div class="stat-desc text-base-content/70"><%= description %></div>
+      <div class="stat-desc whitespace-normal text-base-content/70"><%= description %></div>
+    <% end %>
+    <% if error %>
+      <div class="stat-desc whitespace-normal font-medium text-error"><%= error %></div>
     <% end %>
   </div>
 <% end %>

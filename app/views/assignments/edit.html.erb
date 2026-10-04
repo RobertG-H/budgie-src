@@ -1,0 +1,5 @@
+<% content_for :title, "Assigned to #{@envelope.name} · #{@month.name} · Budgie" %>
+
+<%= turbo_frame_tag dom_id(@envelope, :assigned) do %>
+  <%= render "form", assignment: @assignment, envelope: @envelope, month: @month %>
+<% end %>

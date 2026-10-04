@@ -65,7 +65,7 @@ your budget's currency, and then you land on the month view.
 docker compose run --rm web bin/rails db:seed
 ```
 
-This creates a development user with a budget, a few envelopes and two Paycheck Deposits. It's what [`/dev/sign_in`](#working-on-the-ui)
+This creates a development user with a budget, a few envelopes, two Paycheck Deposits and an Assigned amount for most envelopes in each of those two months. It's what [`/dev/sign_in`](#working-on-the-ui)
 signs in as, and it only ever runs in development.
 
 ## Everyday commands
@@ -146,7 +146,9 @@ Two things to know:
   the `schema.rb` it writes. Never hand-edit that file — CI rebuilds it from the migrations and fails on
   any difference. See [the schema drift check](ci.md#the-schema-drift-check).
 - **Give every new user-owned table a `dependent:` option.** Foreign keys are `ON DELETE RESTRICT`, and
-  `user:delete` relies on Rails deleting children first.
+  `user:delete` relies on Rails deleting children first. A table that references envelopes also goes in
+  `Budget#delete_envelope_records`, and its envelope refuses deletion while it has records
+  (`has_many …, dependent: :restrict_with_error`).
 
 ## Working on the UI
 

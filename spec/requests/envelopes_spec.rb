@@ -24,13 +24,30 @@ RSpec.describe "Envelopes", type: :request do
       end
     end
 
-    it "shows what it carried over and what's Available in the month" do
+    it "shows what it carried over, what's Assigned to it in the month, and what's Available, in that order" do
       get month_envelope_path("2026-09", groceries)
 
-      assert_select ".stat-title", text: "Carried over"
-      assert_select ".stat-title", text: "Available"
-      assert_select ".stat-value", text: "$250.00", count: 2
+      expect(css_select(".stat-title").map { |title| title.text.strip }).to eq([ "Carried over", "Assigned", "Available" ])
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$250.00", "$0.00", "$250.00" ])
       assert_select ".badge", count: 0
+    end
+
+    it "shows the month's own Assigned, and what it adds to Available, with what was assigned before it carried over" do
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 8, 1), amount: 40)
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 1234.5)
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 10, 1), amount: 999)
+
+      get month_envelope_path("2026-09", groceries)
+
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$290.00", "$1,234.50", "$1,524.50" ])
+    end
+
+    it "shows what's Assigned, with a way back to the month view to change it, and no input of its own for it" do
+      get month_envelope_path("2026-09", groceries)
+
+      assert_select "a[href='#{month_path("2026-09")}']", text: "Back to September 2026"
+      assert_select "input[name='assignment[amount]']", count: 0
+      assert_select "turbo-frame", count: 0
     end
 
     it "says Overspent when Available is below zero" do
@@ -41,6 +58,16 @@ RSpec.describe "Envelopes", type: :request do
       assert_select ".stat-value", text: "-$30.00", count: 1
       assert_select ".stat-value", text: /-\$30\.00\s+Overspent/, count: 1
       assert_select ".badge", text: "Overspent", count: 1
+    end
+
+    it "stops saying Overspent once enough is assigned to cover it" do
+      bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
+      create(:budget_assignment, envelope: bills, month: Date.new(2031, 12, 1), amount: 30)
+
+      get month_envelope_path("2031-12", bills)
+
+      assert_select ".badge", count: 0
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "-$30.00", "$30.00", "$0.00" ])
     end
 
     it "has month links that stay on this envelope, and a link back to the month view" do
@@ -250,6 +277,50 @@ RSpec.describe "Envelopes", type: :request do
       expect(response).to redirect_to(month_path("2027-03"))
       follow_redirect!
       assert_select "[role=status]", text: "Envelope deleted."
+    end
+
+    it "refuses to delete an envelope with Assigned amounts, says why on the envelope's page, and keeps both" do
+      envelope = create(:budget_envelope, budget: budget, name: "Groceries")
+      create(:budget_assignment, envelope: envelope, month: Date.new(2026, 9, 1), amount: 100)
+
+      expect { delete envelope_path(envelope), params: { month: "2026-09" } }
+        .to not_change(Budget::Envelope, :count).and not_change(Budget::Assignment, :count)
+
+      expect(response).to have_http_status(:see_other)
+      expect(response).to redirect_to(month_envelope_path("2026-09", envelope))
+      follow_redirect!
+      assert_select "[role=alert]", text: "This envelope can't be deleted because it has records."
+      assert_select "[role=status]", count: 0
+      assert_select "h1", text: "Groceries"
+    end
+
+    it "stays on the same month's page for the envelope when it refuses" do
+      envelope = create(:budget_envelope, budget: budget)
+      create(:budget_assignment, envelope: envelope, month: Date.new(2026, 9, 1), amount: 100)
+
+      delete envelope_path(envelope), params: { from: "envelope", month: "2027-03" }
+
+      expect(response).to redirect_to(month_envelope_path("2027-03", envelope))
+    end
+
+    it "deletes it once its Assigned amounts are cleared" do
+      envelope = create(:budget_envelope, budget: budget)
+      assignment = create(:budget_assignment, envelope: envelope, month: Date.new(2026, 9, 1), amount: 100)
+
+      assignment.destroy!
+
+      expect { delete envelope_path(envelope), params: { month: "2026-09" } }.to change(Budget::Envelope, :count).by(-1)
+      expect(response).to redirect_to(month_path("2026-09"))
+    end
+
+    it "doesn't let the database's own refusal become the way an envelope with records is turned down" do
+      envelope = create(:budget_envelope, budget: budget)
+      create(:budget_assignment, envelope: envelope, month: Date.new(2026, 9, 1), amount: 100)
+
+      delete envelope_path(envelope), params: { month: "2026-09" }
+
+      expect(response).to have_http_status(:see_other)
+      expect(response.body).not_to include("PG::")
     end
 
     it "goes to the month view even when it was opened from the envelope's own page, which is gone" do

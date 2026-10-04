@@ -22,4 +22,12 @@
         description: safe_join([ "Carried over", render("components/money", amount: -30, budget: budget), "·",
                                  "Deposited", render("components/money", amount: 1280, budget: budget) ], " "),
         href: "#" %>
+
+  <h3 class="font-semibold">Stat card with an error</h3>
+  <p class="text-base-content/70">An error says in words what's wrong with the number, under the description, so a negative isn't only red.</p>
+  <%= render "components/stat_card", title: "Ready to Assign", value: render("components/money", amount: -150, budget: budget),
+        description: safe_join([ "Carried over", render("components/money", amount: 0, budget: budget), "·",
+                                 "Deposited", render("components/money", amount: 100, budget: budget), "·",
+                                 "Assigned", render("components/money", amount: 250, budget: budget) ], " "),
+        error: "More was assigned than deposited." %>
 </section>

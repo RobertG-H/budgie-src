@@ -15,9 +15,12 @@
   <%= render "components/month_links", month: @month, path: ->(month) { month_envelope_path(month, @envelope) } %>
 </div>
 
-<div class="mt-8 grid gap-4 sm:grid-cols-2">
+<%# Assigned is only shown here: it's set on the month view, where Ready to Assign moves with it. %>
+<div class="mt-8 grid gap-4 sm:grid-cols-3">
   <%= render "components/stat_card", title: "Carried over",
         value: render("components/money", amount: @line.carried_over, budget: budget) %>
+  <%= render "components/stat_card", title: "Assigned",
+        value: render("components/money", amount: @line.assigned, budget: budget) %>
   <%= render "components/stat_card", title: "Available",
         value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
 </div>
