@@ -34,6 +34,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::ReadyToAssignReallocation, :count)
   end
 
+  it "creates no CSV formats outside development" do
+    expect { run_seeds }.not_to change(Budget::CsvFormat, :count)
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -199,6 +203,30 @@ RSpec.describe "db/seeds.rb" do
       expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign.amount).to eq(110)
     end
 
+    describe "the CSV format" do
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      it "reads the signed sample file, so a developer can import it, with its header skipped" do
+        csv_format = budget.csv_formats.sole
+
+        reading = csv_format.read(Rails.root.join("spec/fixtures/files/signed-sample.csv").open)
+
+        expect(csv_format.name).to eq("Sample bank")
+        expect(reading.refusal).to be_nil
+        expect(reading.rows.map(&:description)).to eq([ "Paycheck", "Loblaws", "Hydro", "Coffee shop", "Hydro rebate" ])
+        expect(reading.rows.map(&:amount)).to eq([ 2800, BigDecimal("-82.45"), BigDecimal("-65.50"), BigDecimal("-4.25"), BigDecimal("12.25") ])
+        expect(reading.zero_rows).to eq(1)
+      end
+
+      it "is left as the developer has changed it" do
+        budget.csv_formats.sole.update!(date_format: "DD/MM/YYYY")
+
+        run_seeds
+
+        expect(budget.csv_formats.sole.date_format).to eq("DD/MM/YYYY")
+      end
+    end
+
     describe "the archived envelope" do
       before { travel_to Time.utc(2026, 10, 15, 16) }
 
@@ -236,7 +264,7 @@ RSpec.describe "db/seeds.rb" do
 
       expect { run_seeds }.not_to change {
         [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
-          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count ]
+          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count ]
       }
     end
 

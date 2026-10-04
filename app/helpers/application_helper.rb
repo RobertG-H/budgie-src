@@ -18,4 +18,9 @@ module ApplicationHelper
     envelopes = Current.budget.envelopes
     envelopes.active.or(envelopes.where(id: keeping)).alphabetical.pluck(:name, :id)
   end
+
+  # A link to one of the sections in the header. The one being looked at is marked as the current page.
+  def section_link(name, path, current:)
+    link_to name, path, class: [ "link link-hover py-1", ("font-semibold" if current) ], aria: { current: ("page" if current) }
+  end
 end

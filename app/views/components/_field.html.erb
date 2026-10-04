@@ -1,6 +1,6 @@
 <%# locals: (form:, attribute:, control: :input, label: nil, hint: nil, error: nil, hide_label: false) %>
-<%# A labelled form control with an optional hint and error under it. The block renders the control and is given a hash to splat onto it: the daisyUI classes for `control` (:input, :select, :textarea, :checkbox or :radios) and the aria attributes that tie it to its hint and error. %>
-<%# `hide_label` takes the label out of sight but keeps it for assistive technology, for a control whose purpose is clear from where it sits, such as an amount inside a table cell. It's for an `:input`, `:select` or `:textarea`: a checkbox and a group of radio buttons always show theirs. %>
+<%# A labelled form control with an optional hint and error under it. The block renders the control and is given a hash to splat onto it: the daisyUI classes for `control` (:input, :select, :textarea, :file, :checkbox or :radios) and the aria attributes that tie it to its hint and error. %>
+<%# `hide_label` takes the label out of sight but keeps it for assistive technology, for a control whose purpose is clear from where it sits, such as an amount inside a table cell. It's for an `:input`, `:select`, `:textarea` or `:file`: a checkbox and a group of radio buttons always show theirs. %>
 <%# `:radios` is one group of choices: a fieldset with a legend, where the block renders every radio button, each with its own label, and splats the hash onto each. %>
 <%# The form's error summary (application/_form_errors) carries the messages, so a field is only marked invalid when its attribute has errors. Pass `error` to show one under the field too. %>
 <%# The 55% border is for contrast: a plain daisyUI input's default border is 20% of base-content, 1.49:1
@@ -13,6 +13,7 @@
     input: { default: "input w-full border-base-content/55", invalid: "input w-full input-error" },
     select: { default: "select w-full border-base-content/55", invalid: "select w-full select-error" },
     textarea: { default: "textarea w-full border-base-content/55", invalid: "textarea w-full textarea-error" },
+    file: { default: "file-input w-full border-base-content/55", invalid: "file-input w-full file-input-error" },
     checkbox: { default: "checkbox checkbox-primary", invalid: "checkbox checkbox-error" },
     radios: { default: "radio radio-primary", invalid: "radio radio-error" }
   }

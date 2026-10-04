@@ -1,0 +1,7 @@
+<% content_for :title, "Edit CSV format · Budgie" %>
+
+<%= render "components/page_header", title: "Edit CSV format" do %>
+  <%= render "components/delete_button", path: csv_format_path(@csv_format), confirm: "Delete the #{@csv_format.name_was} CSV format?" %>
+<% end %>
+
+<%= render "csv_formats/form", csv_format: @csv_format, sample: @sample, preview: @preview, cancel_path: csv_formats_path %>

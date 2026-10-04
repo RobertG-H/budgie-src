@@ -1,0 +1,7 @@
+<%# Both parts of the builder that depend on the sample are replaced, and nothing else, so what's being typed isn't disturbed. %>
+<%= turbo_stream.replace "csv-format-grid" do %>
+  <%= render "csv_formats/grid", csv_format: @csv_format, sample: @sample %>
+<% end %>
+<%= turbo_stream.replace "csv-format-preview" do %>
+  <%= render "csv_formats/preview", preview: @preview %>
+<% end %>

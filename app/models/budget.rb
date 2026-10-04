@@ -14,6 +14,8 @@ class Budget < ApplicationRecord
   belongs_to :user
   has_many :envelopes, dependent: :destroy
   has_many :deposits, dependent: :destroy
+  # How the budget's banks lay out their CSV downloads.
+  has_many :csv_formats, dependent: :destroy
   # Money assigned to the budget's envelopes, money spent from them, money that came back to them, money moved between
   # them and money moved out of them to Ready to Assign. They belong to the budget through their envelope (a Reallocation
   # between envelopes through its From envelope), so these are only for reading.

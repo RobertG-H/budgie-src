@@ -1,0 +1,6 @@
+<% content_for :title, "New CSV format · Budgie" %>
+
+<%= render "components/page_header", title: "New CSV format",
+      description: "Build it from a sample of the file your bank lets you download." %>
+
+<%= render "csv_formats/form", csv_format: @csv_format, sample: @sample, preview: @preview, cancel_path: csv_formats_path %>

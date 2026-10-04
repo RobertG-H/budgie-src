@@ -20,7 +20,7 @@ RSpec.describe Dev::StyleguideController, type: :controller do
       it "has a section for each part of the design" do
         with_development_routes { get :show }
 
-        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
+        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Link rows", "Sample grid", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
           assert_select "section > h2", text: heading
         end
       end
@@ -41,6 +41,27 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#record-rows ul.list li a.list-row", minimum: 3
         assert_select "#record-rows span.block[class~='text-base-content/70']", minimum: 1
         assert_select "#record-rows span.text-right.tabular-nums", text: "$3,000.00"
+      end
+
+      it "shows link rows, each a link with its name and a muted line under it" do
+        with_development_routes { get :show }
+
+        assert_select "#link-rows ul.list > li", minimum: 2
+        assert_select "#link-rows ul.list li a.list-row span.font-semibold", minimum: 2
+        assert_select "#link-rows span.block[class~='text-base-content/70']", minimum: 1
+      end
+
+      it "shows a sample grid with numbered columns, and a skipped row" do
+        with_development_routes { get :show }
+
+        assert_select "#sample-grid table thead th[scope=col]", text: "3"
+        assert_select "#sample-grid tbody .badge", text: "Skipped"
+      end
+
+      it "shows a file field" do
+        with_development_routes { get :show }
+
+        assert_select "#fields input[type=file].file-input"
       end
 
       it "shows a stat card that links to the records behind its number" do

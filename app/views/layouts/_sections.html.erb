@@ -1,0 +1,8 @@
+<%# locals: () %>
+<%# Where a signed-in person with a budget can go: the pages that aren't a month's. They wrap under each other on a phone, so however many there are, none is cut off. The one being looked at is marked in a word's weight and for assistive technology, and not by colour alone. %>
+<nav aria-label="Sections" class="mx-auto max-w-3xl px-4 pb-2 sm:px-6">
+  <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+    <li><%= section_link "Budget", root_path, current: request.path == root_path || request.path.start_with?("/months/") %></li>
+    <li><%= section_link "CSV formats", csv_formats_path, current: request.path.start_with?(csv_formats_path) %></li>
+  </ul>
+</nav>

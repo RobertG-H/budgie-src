@@ -39,6 +39,9 @@ RSpec.describe "The words on the pages", type: :request do
     create(:budget_ready_to_assign_reallocation, envelope: bills, description: "Unspent gas money", date: Date.new(2026, 10, 25), amount: 3.5, notes: "Back to the pool")
   end
 
+  # How one of the budget's banks lays out its CSV download.
+  let!(:csv_format) { create(:budget_csv_format, budget: budget, name: "CIBC", description_columns: [ 2, 1 ]) }
+
   before { sign_in_as budget.user }
 
   # What a person reads on the page, not its markup.
@@ -76,12 +79,64 @@ RSpec.describe "The words on the pages", type: :request do
     "the edit form of a Reallocation to Ready to Assign" => -> { edit_ready_to_assign_reallocation_path(to_ready_to_assign, month: "2026-10", from: "deposits") },
     "the envelope form" => -> { new_envelope_path(month: "2026-10", from: "month") },
     "the envelope edit form" => -> { edit_envelope_path(bills, month: "2026-10", from: "envelope") },
-    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
+    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) },
+    "the CSV formats" => -> { csv_formats_path },
+    "the CSV format form" => -> { new_csv_format_path },
+    "the CSV format edit form" => -> { edit_csv_format_path(csv_format) }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
       get instance_exec(&path)
 
       expect(response).to have_http_status(:ok)
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  describe "CSV formats" do
+    # A sample sent with the form, which a preview reads without Turbo, so the whole page comes back to be read.
+    def preview(text, **choices)
+      sample = Rack::Test::UploadedFile.new(StringIO.new(text), "text/csv", original_filename: "sample.csv")
+      format = { rows_to_skip: "1", date_column: "1", date_format: "YYYY-MM-DD", description_columns: "2", amount_style: "signed", amount_column: "3" }
+      post csv_format_preview_path, params: { csv_format: format.merge(choices).merge(sample: sample) }
+    end
+
+    it "says what a CSV format reads in the words a person uses, with no column names" do
+      get csv_formats_path
+
+      expect(response.body).not_to match(/budget_/)
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).to include("CIBC", "Date in column 1 as YYYY-MM-DD. Description in columns 2 and 1. Amount in column 3, with money out as a negative amount.")
+    end
+
+    it "uses the same words for what went wrong when a CSV format is refused" do
+      post csv_formats_path, params: { csv_format: { name: "", rows_to_skip: "-1", date_column: "", date_format: "", description_columns: "", amount_style: "direction", direction_column: "" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("Name can't be blank", "Rows to skip must be greater than or equal to 0", "Sample file must be chosen, so the columns can be read from it",
+        "Date column can't be blank", "Date format must be chosen", "Description columns can't be blank", "Direction column can't be blank", "Direction for money in can't be blank")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "uses the same words in the preview of how a sample reads" do
+      preview "Date,Description,Amount\n2026-10-01,Paycheck,2800.00\n2026-10-02,Loblaws,-82.45\n2026-10-03,Interest,0.00\n"
+
+      expect(response).to have_http_status(:ok)
+      expect(visible_text).to include("Sample", "Preview", "Skipped", "Oct 1, 2026", "Paycheck", "Money in", "Money out", "2 rows. 1 row of 0 would be skipped.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "uses the same words for the row a file would be refused for, and what's still to choose" do
+      preview "Date,Description,Amount\n13/45/2026,Paycheck,2800.00\n"
+
+      expect(visible_text).to include("This file would be refused. Line 2: the date \"13/45/2026\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).not_to match(retired_terms)
+
+      preview "Date,Description,Amount\n2026-10-01,Paycheck,2800.00\n", date_format: "", amount_column: ""
+
+      expect(visible_text).to include("Finish choosing", "Date format must be chosen", "Amount column can't be blank")
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
     end

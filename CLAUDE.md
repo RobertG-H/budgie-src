@@ -108,6 +108,52 @@ Reallocated (`Budget::EnvelopeReallocation`, `budget_envelope_reallocations`) is
 Reallocated to Ready to Assign (`Budget::ReadyToAssignReallocation`, `budget_ready_to_assign_reallocations`) is money moved out of one envelope back into Ready to Assign on a `date`, such as unspent holiday money; money going from Ready to Assign into an envelope is still Assigned. It's shaped like a Spend: `envelope_id` (the form's From, so `config/locales/en.yml` names it From), description, date, a positive amount and notes, no `budget_id` and no `month`, and it includes `DatedEnvelopeRecord` and declares its own `belongs_to :envelope`. It counts toward Ready to Assign in the month of its `date`, with no "month after" choice as a Deposit has: Ready to Assign(M) adds every one dated on or before the end of M, and Available(M) takes it off its envelope, so Ready to Assign plus every envelope's Available is the same with and without it. `Budget::Month::ReadyToAssign#reallocated` is this month's, with the earlier months' in `carried_over`, added up from each envelope's rows as Assigned is, and the same grouped query is subtracted from each envelope's Reallocated, so it adds one query by envelope. The Ready to Assign card's description gains "Reallocated $X" after Assigned only when it isn't zero, and a month's Deposits page (`/months/YYYY-MM/deposits`, which the card links to) has a Reallocations section below its Deposits, only when the month has some, listing them from every envelope, each "From Dining out", and linking to the edit page with `from=deposits`. An envelope's page lists them in its Reallocations section as "To Ready to Assign", with the ones between envelopes. Lowering a month's Assigned and a Reallocation to Ready to Assign can give the same balances, which is accepted: Assigned corrects the plan for the month, Reallocated moves money that's already there, and they stay in separate figures.
 Every form carries `from` (`home`, `month`, `deposits` or `envelope`) and `month` as hidden fields (`application/_origin_fields`), so saving, deleting or cancelling goes back to the page it was opened from (`ReturnsToOrigin`). `from` is a page name and never a URL, so it can't become an open redirect. `home` is the month view at `/`: it goes back there for the current month, and to that month's own address for any other. `MonthScoped` reads `month` ("2026-09") from a month's URL and from those forms.
 
+### Importing
+
+A person imports the CSV their bank lets them download into an Account (see the `roadmap` issue #67 for the whole model and its
+sliced build tickets); each row becomes a bank transaction that they file as Deposits, Spends and Refunds, or ignore. The tables
+are namespaced like the rest, and are in the order of the build: CSV formats first.
+
+#### CSV formats and the reader
+
+`Budget::CsvFormat` (`budget_csv_formats`, `budget_id`, never `user_id`) is how one bank's download is laid out. There are no
+presets: a person builds every one from a sample file. Columns are numbered from 1, as the builder's grid numbers them, and
+`column_count` is the sample's, so every column a format names is within it (a model validation and a check constraint).
+`description_columns` is an integer array, joined with a space. `amount_style` is `signed` (one column, negative for money out),
+`in_and_out` (`money_in_column` and `money_out_column`) or `direction` (one unsigned `amount_column`, a `direction_column` and
+the `money_in_value` that means money in, anything else being money out); the columns a style doesn't use are null, which
+`before_validation` makes true and one check constraint per style requires. `invert_sign` is for files where money out is
+positive. Names are unique per budget, ignoring case. Destroying a Budget deletes its CSV formats (`has_many :csv_formats,
+dependent: :destroy`), and `user:delete`'s confirmation counts them. Importer tables may have nulls where absence is real, which
+departs from the core's no-nulls rule.
+
+`Budget::CsvFormat#read(file)` (`Budget::CsvFormat::Reader`) is the one reader: the builder's preview and every Import use it, so a
+file can't preview one way and import another. `file` is anything that reads, such as an uploaded file, or its text. It returns a
+`Reading` with `rows` (each a `Row` of `line`, `date`, `description` and a signed `amount`, positive for money in per ADR 0009),
+`zero_rows` (rows of 0, which are skipped and counted, never refused) and `refusal`, the first thing wrong with the file, which
+has `line` (none for the whole file) and `message` ("Line 7: the date ... isn't a date in the DD/MM/YYYY format."). A refusal means
+no rows. `Budget::CsvFormat::Source` holds what a file is before a format reads it (UTF-8 and at most 2 MB, BOM stripped, rows with
+the physical line each started on), and `Sample` and `Preview` use it too. The refusals are a wrong column count, an unparseable
+date, an unparseable amount (including more than 2 decimal places, never rounded), a date more than a day after today
+(`Date.current`, Eastern) or before 1990, a blank description, and in the `in_and_out` style a row with both columns filled; in
+this reader's own judgement a row with neither, a direction that's blank on a row that isn't 0, a file that isn't valid CSV, an empty
+one and one over 5,000 data rows are too. An amount may have a sign, one currency symbol (`$`, `€`, `£`) and thousands separators
+in groups of three, so a European `12,50` is refused and not read as 1250. A money in or money out column holds a size, and which
+column it's in says which way the money went. Blank lines and rows with nothing in them are skipped: they count as rows when the first `rows_to_skip` are skipped, as the grid shows them as rows, but not towards the row limit. The delimiter is always a comma.
+
+The builder (`CsvFormatsController`, `/csv_formats`) takes a sample file in the same form as the choices, and every change asks
+`CsvFormatPreviewsController` (`POST /csv_formats/preview`) how the sample reads, which answers with Turbo Streams that replace
+`#csv-format-grid` (the sample's first rows as a numbered grid, and the `column_count` the format takes from it) and
+`#csv-format-preview` (the first 5 rows as they'd be imported, with the date spelled out and money in and money out in words, or
+the first row that would be refused, or what's still to choose). The Stimulus `csv-format-builder` controller sends the form after a
+pause, and shows only the columns the chosen amount style uses; without JavaScript the Preview button posts the same form and the
+answer is the whole page. The sample is read for the request and never kept: saving ignores it, and there's no column or storage for it.
+Saving a format needs a sample, so that `column_count` is known; editing without one keeps the format's. Another user's format is a
+404, `budget_id` is never a permitted param, and the notices are "CSV format added.", "CSV format updated." and "CSV format deleted.".
+
+The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget and CSV formats now, and
+the importer's other pages join it. It's left out until the person has a budget. The "Main" nav stays only Sign out.
+
 ### Production
 
 Both hosts run `RAILS_ENV=production` from the one `config/environments/production.rb`; what differs comes from each Kamal destination's env, such as `APP_HOST` and `MAILER_FROM`.
@@ -151,7 +197,7 @@ After a UI change:
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
-- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer isn't built yet: its model is the `roadmap` issue #67.
+- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and only CSV formats and the reader exist so far; the rest of its model is the `roadmap` issue #67.
 - A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Neither is built yet: their models are the `roadmap` issues #69 (Filing rules) and #70 (Filing guesses).
 
 ## Agent skills

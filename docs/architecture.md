@@ -234,6 +234,33 @@ nothing to say. Every envelope's figures are still worked out in the same groupe
 change. Below the table, an "Archived envelopes" section lists every archived envelope, each linking to its page for the
 month viewed. An archived envelope's page has Unarchive in place of Archive and no New spend, New refund or Reallocate.
 
+### Importing
+
+A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
+Refunds it was, or ignore it. The model is the `roadmap` issue
+[#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far.
+
+**CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
+columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
+column, separate money in and money out columns, or one unsigned column with another that says which way it went. There are no
+presets, so a person builds each one from a sample of their own file, which is shown as a numbered grid with a live preview of
+how its first rows would be read. Money in is always positive and money out negative once a file is read, whatever the bank's
+convention ([ADR 0009](adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md)), and the preview
+spells out the date and says "Money in" or "Money out" in words, so a wrong sign or a swapped day and month is noticed before
+anything is imported.
+
+**One reader.** `Budget::CsvFormat#read` reads a file with a format into rows of a date, a description and a signed amount, or
+refuses it, naming the first bad row by its line and giving the reason, and nothing is read from a file with anything wrong with
+it. The preview and every Import use that one reader, so a file can't preview one way and import another. It keeps to the
+core's money rule (at most 2 decimal places, never rounded), and to limits that keep a request small: UTF-8, 2 MB and 5,000
+rows. A row of 0 is skipped and counted, not refused.
+
+**The sample isn't kept.** The builder sends the sample file with the form each time a choice changes, and the server answers
+with the grid and the preview, so the sample only exists for a request, and there's no reader written in JavaScript to keep
+in step with the real one. Saving a format never imports the sample: the person uploads the file again to import it.
+
+The header has a second row of links to the pages that aren't a month's, which the importer's pages join as they're built.
+
 ### Frontend
 
 One daisyUI theme, `budgie`, defined by two vendored plugin files pinned to a release rather than fetched

@@ -1,0 +1,97 @@
+<%# locals: (csv_format:, cancel_path:, sample: nil, preview: nil) %>
+<%# The builder. The sample file is sent with the form, and every change to it asks the preview how it now reads (see the csv-format-builder Stimulus controller), which answers by replacing the grid and the preview. The sample is never kept: saving doesn't use it, and the format has no column for it. %>
+<%# The groups of fields that only some amount styles use say which, and are hidden for the others when JavaScript is there to show them again. %>
+<% preview ||= Budget::CsvFormat::Preview.new(csv_format, sample) %>
+
+<%= form_with model: csv_format, multipart: true, class: "mt-8 space-y-6",
+      data: { controller: "csv-format-builder", action: "input->csv-format-builder#schedule change->csv-format-builder#schedule" } do |form| %>
+  <%= render "form_errors", record: csv_format %>
+  <%= hidden_field_tag :csv_format_id, csv_format.id, id: nil if csv_format.persisted? %>
+
+  <%= render "components/field", form: form, attribute: :name, hint: "Such as the name of your bank." do |field| %>
+    <%= form.text_field :name, required: true, autofocus: csv_format.new_record?, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :sample, control: :file, label: "Sample file",
+        hint: "A file your bank lets you download. It's only used to build the format, and isn't kept." do |field| %>
+    <%= form.file_field :sample, accept: ".csv,text/csv", **field %>
+  <% end %>
+
+  <%= render "csv_formats/grid", csv_format: csv_format, sample: sample %>
+
+  <%= render "components/field", form: form, attribute: :rows_to_skip,
+        hint: "Rows at the top to leave out, such as a header. Count them in the grid." do |field| %>
+    <%= form.number_field :rows_to_skip, min: 0, step: 1, **field %>
+  <% end %>
+
+  <div class="grid gap-6 sm:grid-cols-2">
+    <%= render "components/field", form: form, attribute: :date_column, hint: "The number of the column the date is in." do |field| %>
+      <%= form.number_field :date_column, min: 1, step: 1, required: true, **field %>
+    <% end %>
+
+    <%= render "components/field", form: form, attribute: :date_format, control: :select do |field| %>
+      <%= form.select :date_format, Budget::CsvFormat::DATE_FORMATS, { prompt: "Choose a date format" }, required: true, **field %>
+    <% end %>
+  </div>
+
+  <%= render "components/field", form: form, attribute: :description_columns,
+        hint: "The number of the column the description is in, or of each, separated by commas, such as 2 or 2, 3. They're joined with a space." do |field| %>
+    <%= form.text_field :description_columns, value: csv_format.description_columns&.join(", "), required: true, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :amount_style, control: :radios do |field| %>
+    <% { "signed" => "One column, with money out as a negative amount",
+         "in_and_out" => "One column for money in and another for money out",
+         "direction" => "One column of amounts, and another that says money in or money out" }.each do |style, label| %>
+      <label class="flex items-center gap-3">
+        <%= form.radio_button :amount_style, style, required: true,
+              data: { csv_format_builder_target: "amountStyle", action: "change->csv-format-builder#toggleStyle" }, **field %>
+        <span><%= label %></span>
+      </label>
+    <% end %>
+  <% end %>
+
+  <div class="space-y-6">
+    <div data-csv-format-builder-target="styleGroup" data-styles="signed direction">
+      <%= render "components/field", form: form, attribute: :amount_column, hint: "The number of the column the amount is in." do |field| %>
+        <%= form.number_field :amount_column, min: 1, step: 1, **field %>
+      <% end %>
+    </div>
+
+    <div data-csv-format-builder-target="styleGroup" data-styles="in_and_out" class="grid gap-6 sm:grid-cols-2">
+      <%= render "components/field", form: form, attribute: :money_in_column do |field| %>
+        <%= form.number_field :money_in_column, min: 1, step: 1, **field %>
+      <% end %>
+
+      <%= render "components/field", form: form, attribute: :money_out_column do |field| %>
+        <%= form.number_field :money_out_column, min: 1, step: 1, **field %>
+      <% end %>
+    </div>
+
+    <div data-csv-format-builder-target="styleGroup" data-styles="direction" class="grid gap-6 sm:grid-cols-2">
+      <%= render "components/field", form: form, attribute: :direction_column, hint: "The column that says which way the money went." do |field| %>
+        <%= form.number_field :direction_column, min: 1, step: 1, **field %>
+      <% end %>
+
+      <%= render "components/field", form: form, attribute: :money_in_value,
+            hint: "What that column says for money in, such as Credit. Anything else is money out." do |field| %>
+        <%= form.text_field :money_in_value, **field %>
+      <% end %>
+    </div>
+  </div>
+
+  <%= render "components/field", form: form, attribute: :invert_sign, control: :checkbox, label: "Invert sign",
+        hint: "For files where money out is positive, such as a credit card's." do |field| %>
+    <%= form.check_box :invert_sign, **field %>
+  <% end %>
+
+  <%= render "csv_formats/preview", preview: preview %>
+
+  <%# Without JavaScript, this sends the form to the preview and shows the page with how the sample reads. With it, the preview is live and this is hidden. The method is stated again because the form may be an edit's, which is a patch. %>
+  <div class="flex flex-wrap items-center gap-4" data-csv-format-builder-target="previewActions">
+    <button type="submit" name="_method" value="post" formaction="<%= csv_format_preview_path %>" formnovalidate class="btn"
+      data-csv-format-builder-target="previewButton">Preview</button>
+  </div>
+
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
+<% end %>

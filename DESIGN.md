@@ -67,7 +67,7 @@ and `success` uses the `-700` shade because `success-600` with white content is 
 
 ## Layout
 
-Mobile-first: design at 375px, add `sm:`/`lg:` for wider. The app shell is a daisyUI `navbar` above a centred
+Mobile-first: design at 375px, add `sm:`/`lg:` for wider. The app shell is a daisyUI `navbar`, with a row of links to the other pages under it once there's a budget (`layouts/_sections`, wrapping on a phone, the current one marked in a bolder weight and `aria-current`), above a centred
 `main`; on a phone the budget's currency drops under the app name instead of beside it, so nothing has to
 shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spacing uses Tailwind's scale in
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
@@ -100,12 +100,14 @@ second use turns it into a partial. The partials:
 | `_page_header` | A page's `h1`, optional `badge` beside it, optional description, and actions block (e.g. the "New envelope" button). |
 | `_archived_badge` | The "Archived" badge beside an archived envelope's name, on the month view's row and by the title on its page (`_page_header`'s `badge`). A `badge-neutral badge-sm` word, never only a colour, as Overspent isn't. |
 | `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent. |
-| `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. `hide_label` takes the label out of sight but not away from assistive technology, for a control whose place makes its purpose clear, such as an amount inside a table cell. |
+| `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:file`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. `hide_label` takes the label out of sight but not away from assistive technology, for a control whose place makes its purpose clear, such as an amount inside a table cell. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
 | `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. Given an `error`, it says in words what's wrong with the number, under the description and in the error colour, so a negative Ready to Assign isn't only red. |
 | `_month_links` | Links to the months either side of the one being viewed, named for them, and back to the current month when viewing another. Each page passes a `path` that turns a month into its own address, so the links stay on that page. |
 | `_record_list` | The bordered list that holds record rows. |
 | `_record_row` | One record in a `_record_list`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. A Reallocation also has where the money went or came from, such as "To Groceries", "To Ready to Assign" or "From Dining out", as a muted line of its own, and its amount signed from the page's side. The whole row links to the record's edit page, where it's also deleted. |
+| `_link_row` | One thing in a list that's opened by choosing it, such as a CSV format: its name, with an optional muted line under it saying more. The whole row links to where it's opened, and it goes in a `_record_list`. |
+| `_sample_grid` | The first rows of a sample file as a numbered table, for choosing columns from: each row has its line and each column its number, a row the format skips is muted and says "Skipped" in a word, and a long cell is cut short. It scrolls by itself when it's wider than the page. |
 | `_form_actions` | What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. |
 | `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. A form of its own, so it goes in a page's header actions. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |

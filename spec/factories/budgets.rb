@@ -58,4 +58,36 @@ FactoryBot.define do
     month { Date.new(2026, 9, 1) }
     amount { 100 }
   end
+
+  # A signed amount in one column, which is how most banks lay out a download. The traits are the other two amount styles.
+  factory :budget_csv_format, class: "Budget::CsvFormat" do
+    budget
+    sequence(:name) { |n| "CSV format #{n}" }
+    rows_to_skip { 0 }
+    column_count { 3 }
+    date_column { 1 }
+    date_format { "YYYY-MM-DD" }
+    description_columns { [ 2 ] }
+    amount_style { "signed" }
+    amount_column { 3 }
+    invert_sign { false }
+
+    # Separate columns for money in and money out, as in: date, description, money out, money in.
+    trait :in_and_out do
+      column_count { 4 }
+      amount_style { "in_and_out" }
+      amount_column { nil }
+      money_out_column { 3 }
+      money_in_column { 4 }
+    end
+
+    # One unsigned amount and a column that says which way it went, as in: date, description, amount, direction.
+    trait :direction do
+      column_count { 4 }
+      amount_style { "direction" }
+      amount_column { 3 }
+      direction_column { 4 }
+      money_in_value { "Credit" }
+    end
+  end
 end

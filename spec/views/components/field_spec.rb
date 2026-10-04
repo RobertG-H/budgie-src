@@ -114,6 +114,7 @@ RSpec.describe "components/_field", type: :view do
     input: "input",
     select: "select",
     textarea: "textarea",
+    file: "file-input",
     checkbox: "checkbox"
   }.each do |control, css_class|
     it "gives a #{control} the #{css_class} class, and #{css_class}-error when invalid" do

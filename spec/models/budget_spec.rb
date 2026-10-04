@@ -6,6 +6,7 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to belong_to(:user) }
   it { is_expected.to have_many(:envelopes).class_name("Budget::Envelope").dependent(:destroy) }
   it { is_expected.to have_many(:deposits).class_name("Budget::Deposit").dependent(:destroy) }
+  it { is_expected.to have_many(:csv_formats).class_name("Budget::CsvFormat").dependent(:destroy) }
   it { is_expected.to have_many(:assignments).through(:envelopes) }
   it { is_expected.to have_many(:spends).through(:envelopes) }
   it { is_expected.to have_many(:refunds).through(:envelopes) }
@@ -308,6 +309,7 @@ RSpec.describe Budget, type: :model do
       create_list(:budget_ready_to_assign_reallocation, 2, envelope: groceries)
       create(:budget_ready_to_assign_reallocation, envelope: extra)
       create(:budget_deposit, budget: budget)
+      create_list(:budget_csv_format, 2, budget: budget)
     end
 
     it "deletes its envelopes' records first, since an envelope with records can't be deleted, and then everything else" do
@@ -320,6 +322,7 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::EnvelopeReallocation, :count).by(-6)
         .and change(Budget::ReadyToAssignReallocation, :count).by(-3)
         .and change(Budget::Deposit, :count).by(-1)
+        .and change(Budget::CsvFormat, :count).by(-2)
     end
 
     it "leaves another budget's records alone" do
@@ -328,6 +331,7 @@ RSpec.describe Budget, type: :model do
       others_refund = create(:budget_refund)
       others_reallocation = create(:budget_envelope_reallocation)
       others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
+      others_csv_format = create(:budget_csv_format)
 
       budget.destroy!
 
@@ -336,6 +340,7 @@ RSpec.describe Budget, type: :model do
       expect(Budget::Refund.all).to contain_exactly(others_refund)
       expect(Budget::EnvelopeReallocation.all).to contain_exactly(others_reallocation)
       expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
+      expect(Budget::CsvFormat.all).to contain_exactly(others_csv_format)
       expect(Budget::Envelope.exists?(others.envelope_id)).to be(true)
     end
   end

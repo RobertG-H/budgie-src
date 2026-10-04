@@ -21,9 +21,10 @@ RSpec.describe "user rake tasks", type: :task do
       create(:budget_envelope_reallocation, from_envelope: envelopes.first, to_envelope: envelopes.last)
       create(:budget_envelope_reallocation, from_envelope: envelopes.last, to_envelope: envelopes.first)
       create(:budget_ready_to_assign_reallocation, envelope: envelopes.first)
+      create_list(:budget_csv_format, 2, budget: budget)
     end
 
-    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds) and invite once the email is typed to confirm" do
+    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends, Refunds, Reallocations (of both kinds), CSV formats and invite once the email is typed to confirm" do
       output = nil
 
       expect { output = run_task("user:delete", stdin: "Robin@Example.com\n", "EMAIL" => "robin@example.com") }
@@ -34,7 +35,8 @@ RSpec.describe "user rake tasks", type: :task do
         .and change(Budget::Spend, :count).by(-6).and change(Budget::Refund, :count).by(-4)
         .and change(Budget::EnvelopeReallocation, :count).by(-2)
         .and change(Budget::ReadyToAssignReallocation, :count).by(-1)
-      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits, 4 assignments, 6 spends, 4 refunds and 3 reallocations and their invite", "Deleted robin@example.com.")
+        .and change(Budget::CsvFormat, :count).by(-2)
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits, 4 assignments, 6 spends, 4 refunds, 3 reallocations and 2 CSV formats and their invite", "Deleted robin@example.com.")
     end
 
     it "leaves another user's budget alone" do
@@ -43,6 +45,7 @@ RSpec.describe "user rake tasks", type: :task do
       others_refund = create(:budget_refund)
       others_reallocation = create(:budget_envelope_reallocation)
       others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
+      others_csv_format = create(:budget_csv_format)
 
       run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
@@ -51,6 +54,7 @@ RSpec.describe "user rake tasks", type: :task do
       expect(Budget::Refund.all).to contain_exactly(others_refund)
       expect(Budget::EnvelopeReallocation.all).to contain_exactly(others_reallocation)
       expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
+      expect(Budget::CsvFormat.all).to contain_exactly(others_csv_format)
     end
 
     it "counts a single envelope, a single deposit, a single assignment, a single spend and a single refund in the singular" do
@@ -62,10 +66,11 @@ RSpec.describe "user rake tasks", type: :task do
       Budget::ReadyToAssignReallocation.where(envelope: user.budget.envelopes).delete_all
       user.budget.envelopes.where.not(id: kept.envelope_id).destroy_all
       user.budget.deposits.where.not(id: user.budget.deposits.first.id).destroy_all
+      user.budget.csv_formats.where.not(id: user.budget.csv_formats.first.id).destroy_all
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment, 1 spend, 1 refund and 0 reallocations and their invite")
+      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment, 1 spend, 1 refund, 0 reallocations and 1 CSV format and their invite")
     end
 
     it "counts a single reallocation in the singular" do
@@ -74,7 +79,7 @@ RSpec.describe "user rake tasks", type: :task do
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("4 refunds and 1 reallocation and their invite")
+      expect(output).to include("4 refunds, 1 reallocation and 2 CSV formats and their invite")
     end
 
     it "counts a budget that has nothing in it" do
@@ -84,11 +89,12 @@ RSpec.describe "user rake tasks", type: :task do
       user.budget.envelope_reallocations.each(&:destroy!)
       user.budget.ready_to_assign_reallocations.each(&:destroy!)
       user.budget.deposits.destroy_all
+      user.budget.csv_formats.destroy_all
       user.budget.envelopes.destroy_all
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments, 0 spends, 0 refunds and 0 reallocations and their invite")
+      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments, 0 spends, 0 refunds, 0 reallocations and 0 CSV formats and their invite")
     end
 
     it "says when the user has no budget" do

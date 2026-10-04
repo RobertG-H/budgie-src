@@ -30,6 +30,10 @@ Rails.application.routes.draw do
     # Putting an envelope away (create) and taking it back (destroy). It's one archive per envelope.
     resource :archive, only: [ :create, :destroy ], controller: "envelope_archives"
   end
+  # How each bank lays out its CSV download, built from a sample file. The preview is sent the whole form, sample included, and
+  # answers with how the sample reads, so the sample never has to be kept.
+  resources :csv_formats, except: :show
+  post "csv_formats/preview" => "csv_format_previews#create", as: :csv_format_preview
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]
   # One Reallocate form makes either kind of Reallocation, and its To decides which. Editing and deleting are per kind,

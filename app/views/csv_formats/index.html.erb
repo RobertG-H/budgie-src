@@ -1,0 +1,20 @@
+<% content_for :title, "CSV formats · Budgie" %>
+
+<%= render "components/page_header", title: "CSV formats",
+      description: "How each of your banks lays out its CSV download, so a file from it reads the same way every time." do %>
+  <%= link_to "New CSV format", new_csv_format_path, class: "btn btn-primary" %>
+<% end %>
+
+<div class="mt-8">
+  <% if @csv_formats.any? %>
+    <%= render "components/record_list" do %>
+      <% @csv_formats.each do |csv_format| %>
+        <%= render "components/link_row", href: edit_csv_format_path(csv_format), name: csv_format.name, detail: csv_format_summary(csv_format) %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "You don't have any CSV formats yet." do %>
+      <%= link_to "New CSV format", new_csv_format_path, class: "btn btn-primary" %>
+    <% end %>
+  <% end %>
+</div>

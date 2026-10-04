@@ -1,0 +1,29 @@
+<%# locals: (sample:) %>
+<%# The first rows of a sample file as a numbered grid: each row has the line it's on, and each column its number, which is what a CSV format names its columns by. A row the format skips is muted, and says so in a word. It scrolls by itself when it's wider than the page. %>
+<div class="overflow-x-auto">
+  <table class="table table-sm">
+    <caption class="sr-only">The first rows of the sample file, with its columns numbered</caption>
+    <thead>
+      <tr>
+        <th scope="col">Line</th>
+        <% (1..sample.width).each do |column| %>
+          <th scope="col"><%= column %></th>
+        <% end %>
+      </tr>
+    </thead>
+    <tbody>
+      <% sample.grid_rows.each do |row| %>
+        <tr class="<%= "text-base-content/70" if row.skipped %>">
+          <th scope="row" class="whitespace-nowrap tabular-nums">
+            <%= row.line %>
+            <% if row.skipped %><span class="badge badge-ghost badge-sm">Skipped</span><% end %>
+          </th>
+          <% sample.width.times do |index| %>
+            <%# A long cell is cut short, so one can't push the rest off the page. The whole of it is in the title. %>
+            <td class="max-w-40 truncate" title="<%= row.cells[index] %>"><%= row.cells[index] %></td>
+          <% end %>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

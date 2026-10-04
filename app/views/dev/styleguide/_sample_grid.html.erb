@@ -1,0 +1,8 @@
+<%# locals: () %>
+<% sample = Budget::CsvFormat::Sample.new("Account: Chequing,,\nDate,Description,Amount\n2026-09-01,Paycheck,2800.00\n2026-09-02,\"Loblaws, a description long enough to be cut short in its cell\",-82.45\n", rows_to_skip: 2) %>
+<section id="sample-grid" aria-labelledby="sample-grid-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="sample-grid-heading" class="text-xl font-semibold">Sample grid</h2>
+  <p class="text-base-content/70">The first rows of a sample file, with its columns numbered and each row's line, which is what a CSV format names its columns by. A row the format skips is muted and says so in a word, and a long cell is cut short.</p>
+
+  <%= render "components/sample_grid", sample: sample %>
+</section>

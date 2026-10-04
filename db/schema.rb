@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,6 +23,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_140000) do
     t.index ["envelope_id", "month"], name: "index_budget_assignments_on_envelope_id_and_month", unique: true
     t.check_constraint "EXTRACT(day FROM month) = 1::numeric", name: "budget_assignments_month_first_of_month"
     t.check_constraint "amount > 0::numeric", name: "budget_assignments_amount_positive"
+  end
+
+  create_table "budget_csv_formats", force: :cascade do |t|
+    t.bigint "budget_id", null: false
+    t.string "name", null: false
+    t.integer "rows_to_skip", default: 0, null: false
+    t.integer "column_count", null: false
+    t.integer "date_column", null: false
+    t.string "date_format", null: false
+    t.integer "description_columns", null: false, array: true
+    t.string "amount_style", null: false
+    t.integer "amount_column"
+    t.integer "money_in_column"
+    t.integer "money_out_column"
+    t.integer "direction_column"
+    t.string "money_in_value"
+    t.boolean "invert_sign", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index "budget_id, lower((name)::text)", name: "index_budget_csv_formats_on_budget_id_and_lower_name", unique: true
+    t.check_constraint "amount_style::text <> 'direction'::text OR amount_column IS NOT NULL AND amount_column >= 1 AND amount_column <= column_count AND direction_column IS NOT NULL AND direction_column >= 1 AND direction_column <= column_count AND amount_column <> direction_column AND money_in_value IS NOT NULL AND btrim(money_in_value::text) <> ''::text AND money_in_column IS NULL AND money_out_column IS NULL", name: "budget_csv_formats_direction_columns"
+    t.check_constraint "amount_style::text <> 'in_and_out'::text OR money_in_column IS NOT NULL AND money_in_column >= 1 AND money_in_column <= column_count AND money_out_column IS NOT NULL AND money_out_column >= 1 AND money_out_column <= column_count AND money_in_column <> money_out_column AND amount_column IS NULL AND direction_column IS NULL AND money_in_value IS NULL", name: "budget_csv_formats_in_and_out_columns"
+    t.check_constraint "amount_style::text <> 'signed'::text OR amount_column IS NOT NULL AND amount_column >= 1 AND amount_column <= column_count AND money_in_column IS NULL AND money_out_column IS NULL AND direction_column IS NULL AND money_in_value IS NULL", name: "budget_csv_formats_signed_columns"
+    t.check_constraint "amount_style::text = ANY (ARRAY['signed'::character varying, 'in_and_out'::character varying, 'direction'::character varying]::text[])", name: "budget_csv_formats_amount_style_known"
+    t.check_constraint "btrim(name::text) <> ''::text", name: "budget_csv_formats_name_not_blank"
+    t.check_constraint "cardinality(description_columns) >= 1 AND (1 <= ALL (description_columns)) AND (column_count >= ALL (description_columns))", name: "budget_csv_formats_description_columns_within_count"
+    t.check_constraint "column_count >= 1", name: "budget_csv_formats_column_count_positive"
+    t.check_constraint "date_column >= 1 AND date_column <= column_count", name: "budget_csv_formats_date_column_within_count"
+    t.check_constraint "date_format::text = ANY (ARRAY['YYYY-MM-DD'::character varying, 'MM/DD/YYYY'::character varying, 'DD/MM/YYYY'::character varying, 'YYYYMMDD'::character varying]::text[])", name: "budget_csv_formats_date_format_known"
+    t.check_constraint "rows_to_skip >= 0", name: "budget_csv_formats_rows_to_skip_not_negative"
   end
 
   create_table "budget_deposits", force: :cascade do |t|
@@ -161,6 +191,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_140000) do
   end
 
   add_foreign_key "budget_assignments", "budget_envelopes", column: "envelope_id", on_delete: :restrict
+  add_foreign_key "budget_csv_formats", "budgets", on_delete: :restrict
   add_foreign_key "budget_deposits", "budgets", on_delete: :restrict
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "from_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "to_envelope_id", on_delete: :restrict

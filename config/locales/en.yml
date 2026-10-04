@@ -35,6 +35,8 @@ en:
       # What a Reallocation is called to a person, such as on the form's button.
       budget/envelope_reallocation: Reallocation
       budget/ready_to_assign_reallocation: Reallocation
+      # Rails would call it "Csv format", on the form's button.
+      budget/csv_format: CSV format
     attributes:
       # What the form calls the month a Deposit counts toward.
       budget/deposit:
@@ -49,6 +51,10 @@ en:
       # Its envelope is the form's From.
       budget/ready_to_assign_reallocation:
         envelope: From
+      # The sample file is where a format's column count comes from, and what the form asks for.
+      budget/csv_format:
+        column_count: Sample file
+        money_in_value: Direction for money in
     errors:
       models:
         # A Spend or a Refund with no envelope is told so the way every other missing field is, not with Rails' "must exist".
