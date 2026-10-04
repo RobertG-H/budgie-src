@@ -24,10 +24,10 @@ class Budget < ApplicationRecord
 
   # The latest month that has been started, which Assigned was copied into from the month before. A new budget's first
   # month gets no copy, so it starts as that month.
-  attribute :assignments_copied_through, :date, default: -> { Date.current.beginning_of_month }
+  attribute :assignments_copied_through, :date, default: -> { current_month }
 
-  # Budgets whose current month hasn't been started yet, which is the month of today's date in the app's time zone.
-  scope :with_months_to_start, -> { where(assignments_copied_through: ...Date.current.beginning_of_month) }
+  # Budgets whose current month hasn't been started yet.
+  scope :with_months_to_start, -> { where(assignments_copied_through: ...current_month) }
 
   validates :currency, presence: true
   validates :currency, inclusion: { in: CURRENCIES.keys, message: "isn't supported" }, allow_blank: true
@@ -42,6 +42,12 @@ class Budget < ApplicationRecord
     CURRENCIES.map { |code, currency| [ "#{currency[:name]} (#{code})", code ] }
   end
 
+  # The month that has begun, as the 1st: today's month by the app's time zone, which is Eastern Time, so a month begins
+  # at midnight there.
+  def self.current_month
+    Date.current.beginning_of_month
+  end
+
   def currency_unit
     CURRENCIES.fetch(currency)[:unit]
   end
@@ -54,8 +60,7 @@ class Budget < ApplicationRecord
   # user leaves it however often this runs.
   def start_new_months
     with_lock do
-      current_month = Date.current.beginning_of_month
-      start_month(assignments_copied_through.next_month) while assignments_copied_through < current_month
+      start_month(assignments_copied_through.next_month) while assignments_copied_through < Budget.current_month
     end
   end
 

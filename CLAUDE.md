@@ -105,7 +105,7 @@ Cloudflare terminates TLS, so `assume_ssl` makes every request count as HTTPS, a
 
 ### Specs
 
-Request, model and service specs use FactoryBot and shoulda-matchers; there are no system specs yet.
+Request, model, service and job specs use FactoryBot and shoulda-matchers; there are no system specs yet.
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
 In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
 A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
