@@ -84,9 +84,9 @@ three money columns fit without that. Tap targets stay comfortable at 375px (dai
 - Negatives always carry a sign (`-$30.00`); overspending also says so in words.
 - The currency code appears once, in the header (`Budget in USD`).
 - Budgeting copy uses only the terms `CLAUDE.md` lists: Budget, Envelope, Deposit, Assigned, Spend, Spent,
-  Refund, Reallocation, Archive, Account, Bank transaction, CSV format, Import, File, Ignore, Available, Overspent,
-  Ready to Assign, Carried over, Starting balance, and other forms of them (Deposited, Refunded, Reallocate,
-  Reallocated, Archived, Unarchive, Assign, Filed, Unfiled, Ignored, Imported).
+  Refund, Reallocation, Archive, Account, Bank transaction, CSV format, Import, File, Filing rule, Guess, Ignore,
+  Available, Overspent, Ready to Assign, Carried over, Starting balance, and other forms of them (Deposited,
+  Refunded, Reallocate, Reallocated, Archived, Unarchive, Assign, Filed, Unfiled, Ignored, Imported, Guessed).
 
 ## Components
 
