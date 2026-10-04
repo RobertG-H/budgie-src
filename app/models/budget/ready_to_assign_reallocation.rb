@@ -10,6 +10,7 @@ class Budget::ReadyToAssignReallocation < ApplicationRecord
   include DatedEnvelopeRecord
 
   belongs_to :envelope, inverse_of: :ready_to_assign_reallocations
+  refuse_archived_envelopes :envelope
 
   # The form's From, which a Reallocation to an envelope calls its From envelope.
   alias_attribute :from_envelope_id, :envelope_id

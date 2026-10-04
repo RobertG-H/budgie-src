@@ -7,9 +7,10 @@ class SpendsController < ApplicationController
   helper_method :origin_envelope
 
   # A Spend can be started for an envelope, named by its id in `envelope`, which an envelope's page does, and without one,
-  # which the month view does. An envelope that isn't the budget's is none, and neither is anything but a plain id.
+  # which the month view does. An envelope that isn't the budget's is none, and so is an archived one, which takes no new
+  # records, and anything but a plain id.
   def new
-    @spend = Budget::Spend.new(date: default_date, envelope: Current.budget.envelopes.find_by(id: params[:envelope].to_s))
+    @spend = Budget::Spend.new(date: default_date, envelope: Current.budget.envelopes.active.find_by(id: params[:envelope].to_s))
   end
 
   def create

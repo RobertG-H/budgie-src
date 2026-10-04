@@ -212,6 +212,28 @@ everything behind the card's figures is on that page. An envelope's page lists t
 Lowering a month's Assigned and reallocating to Ready to Assign can give the same balances; that overlap is accepted,
 and the two stay separate figures: Assigned is the plan for the month, Reallocated is money moved.
 
+### Archiving envelopes
+
+An envelope that's finished with can be archived, which keeps its history and takes it out of use
+([ADR 0008](adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md)). It's a nullable `archived_at` on
+`budget_envelopes`, null while the envelope is in use, and unarchiving clears it. Archiving is judged against the current
+month whichever month's page it's done from, and holds the budget's row lock, as starting a new month does: it's refused,
+with a message that says what's wrong and what to do, unless Available is 0 in the current month and nothing for the
+envelope is dated after it (no Assigned for a later month, and no Spend, Refund or Reallocation of either kind, on either
+side). Unarchiving has no precondition and gives the envelope no Assigned.
+
+An archived envelope takes no new records: the Spend, Refund and Reallocation models refuse to add one to it or to move
+one into it, and the pickers offer only envelopes in use, plus a record's own, so an edit form keeps it. A record that's
+already in one can still be changed and deleted. Its Assigned is read-only in every month, the monthly copy of last month's
+Assigned skips it, and its name stays reserved. Nothing about the formulas changes, so Ready to Assign still counts what it
+had assigned, in the months it had it.
+
+The month view shows an archived envelope's row, with an "Archived" badge and its Assigned as plain text, only in a month
+where one of its figures isn't zero, so past months still add up and the envelope is gone from the months where it has
+nothing to say. Every envelope's figures are still worked out in the same grouped queries, so the query count doesn't
+change. Below the table, an "Archived envelopes" section lists every archived envelope, each linking to its page for the
+month viewed. An archived envelope's page has Unarchive in place of Archive and no New spend, New refund or Reallocate.
+
 ### Frontend
 
 One daisyUI theme, `budgie`, defined by two vendored plugin files pinned to a release rather than fetched

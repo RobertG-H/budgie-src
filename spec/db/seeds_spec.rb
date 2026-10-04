@@ -59,26 +59,26 @@ RSpec.describe "db/seeds.rb" do
       ])
     end
 
-    it "assigns $2,800 last month and $3,100 this month, across the envelopes, and none the month before" do
+    it "assigns $2,840 last month, with the archived envelope's $40, and $3,100 this month, across the envelopes, and none the month before" do
       travel_to Time.utc(2026, 10, 15, 16)
 
       run_seeds
 
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
-      expect(budget.assignments.group(:month).sum(:amount)).to eq(Date.new(2026, 9, 1) => 2800, Date.new(2026, 10, 1) => 3100)
+      expect(budget.assignments.group(:month).sum(:amount)).to eq(Date.new(2026, 9, 1) => 2840, Date.new(2026, 10, 1) => 3100)
       expect(budget.assignments.map { |assignment| assignment.envelope.name }.uniq.size).to be > 1
     end
 
-    it "has Ready to Assign read $200 last month and $150 this month, with $50 reallocated to it, and nothing before last month" do
+    it "has Ready to Assign read $160 last month and $110 this month, with $50 reallocated to it, and nothing before last month" do
       travel_to Time.utc(2026, 10, 15, 16)
       run_seeds
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
 
       expect(Budget::Month.new(budget, Date.new(2026, 8, 1)).ready_to_assign).to have_attributes(carried_over: 0, deposited: 0, assigned: 0, amount: 0)
       expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).ready_to_assign)
-        .to have_attributes(carried_over: 0, deposited: 3000, assigned: 2800, amount: 200)
+        .to have_attributes(carried_over: 0, deposited: 3000, assigned: 2840, amount: 160)
       expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign)
-        .to have_attributes(carried_over: 200, deposited: 3000, assigned: 3100, reallocated: 50, amount: 150)
+        .to have_attributes(carried_over: 160, deposited: 3000, assigned: 3100, reallocated: 50, amount: 110)
     end
 
     it "leaves an envelope Overspent, so there's one on the month view to see, with nothing assigned to it" do
@@ -195,8 +195,40 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
 
-      expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).ready_to_assign.amount).to eq(200)
-      expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign.amount).to eq(150)
+      expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).ready_to_assign.amount).to eq(160)
+      expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign.amount).to eq(110)
+    end
+
+    describe "the archived envelope" do
+      before { travel_to Time.utc(2026, 10, 15, 16) }
+
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      it "is Old gym, with $40 assigned last month and all of it spent, and nothing this month" do
+        old_gym = budget.envelopes.archived.sole
+
+        expect(old_gym.name).to eq("Old gym")
+        expect(old_gym.assignments.pluck(:month, :amount)).to eq([ [ Date.new(2026, 9, 1), 40 ] ])
+        expect(old_gym.spends.pluck(:date, :amount)).to eq([ [ Date.new(2026, 9, 15), 40 ] ])
+      end
+
+      it "shows on last month's view, with nothing Available, and not on this month's" do
+        last_month = Budget::Month.new(budget, Date.new(2026, 9, 1))
+        this_month = Budget::Month.new(budget, Date.new(2026, 10, 1))
+
+        expect(last_month.envelopes.find { |line| line.envelope.name == "Old gym" })
+          .to have_attributes(carried_over: 0, assigned: 40, spent: 40, available: 0)
+        expect(this_month.envelopes.map { |line| line.envelope.name }).not_to include("Old gym")
+        expect(this_month.archived_envelopes.map(&:name)).to eq([ "Old gym" ])
+      end
+
+      it "is left unarchived when the developer has unarchived it" do
+        budget.envelopes.archived.sole.unarchive
+
+        run_seeds
+
+        expect(budget.envelopes.archived).to be_empty
+      end
     end
 
     it "changes nothing when it's run again" do

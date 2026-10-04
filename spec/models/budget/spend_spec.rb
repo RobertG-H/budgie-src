@@ -180,4 +180,9 @@ RSpec.describe Budget::Spend, type: :model do
         .to raise_error(ActiveRecord::StatementInvalid, /PG::RestrictViolation/)
     end
   end
+
+  describe "an archived envelope" do
+    include_examples "a record that refuses an archived envelope", association: :envelope, label: "Envelope",
+      build: ->(envelope, _budget) { build(:budget_spend, envelope: envelope) }
+  end
 end

@@ -1,8 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
-# them, what's spent, what came back and what was moved between envelopes and back to Ready to Assign, so the real pages
-# have something to show. Running it again changes nothing
-# that's already there.
+# them, what's spent, what came back, what was moved between envelopes and back to Ready to Assign, and an archived
+# envelope with history, so the real pages have something to show. Running it again changes nothing that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
 user = User.find_or_create_by!(email: Dev::USER_EMAIL) { |new_user| new_user.name = "Dev Budgie" }
@@ -28,8 +27,9 @@ last_month = this_month.prev_month
 end
 
 # What's assigned to each envelope last month and this month: $2,800 and then $3,100, against $3,000 deposited in
-# each, so Ready to Assign reads $200 last month and, before the Reallocation to it below, $100 this month. Bills gets nothing, which keeps it Overspent
-# and shows an Assigned of $0.00, and the month before last has nothing assigned at all.
+# each, so Ready to Assign reads $200 last month and $100 this month, before the archived envelope and the Reallocation
+# to Ready to Assign below change them. Bills gets nothing, which keeps it Overspent and shows an Assigned of $0.00, and
+# the month before last has nothing assigned at all.
 {
   "Rent" => [ 1500, 1500 ],
   "Groceries" => [ 700, 800 ],
@@ -88,3 +88,14 @@ budget.envelopes.find_by!(name: "Dining out").incoming_reallocations
 # Reallocation to Ready to Assign, and this month's Deposits page has a Reallocations section.
 budget.envelopes.find_by!(name: "Fuel").ready_to_assign_reallocations
   .find_or_create_by!(description: "Unspent fuel money", date: this_month + 13) { |reallocation| reallocation.amount = 50 }
+
+# An envelope that's been put away, with history: $40 assigned to it last month and all spent, so it has nothing Available
+# and nothing after last month, and could be archived. Last month's view shows it, with an Archived badge, and this
+# month's doesn't, since none of its figures is anything but zero there. Its $40 lowers Ready to Assign, from $200 to $160
+# last month and from $150 to $110 this month, as every envelope's Assigned does. It's archived once it has its records,
+# since an archived envelope takes no more, and only when it's new, so one the developer has unarchived stays so.
+old_gym = budget.envelopes.find_or_create_by!(name: "Old gym") do |envelope|
+  envelope.assignments.build(month: last_month, amount: 40)
+  envelope.spends.build(description: "Membership", date: last_month + 14, amount: 40)
+end
+old_gym.archive! if old_gym.previously_new_record?

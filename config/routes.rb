@@ -26,7 +26,10 @@ Rails.application.routes.draw do
   end
 
   resources :deposits, except: [ :index, :show ]
-  resources :envelopes, except: [ :index, :show ]
+  resources :envelopes, except: [ :index, :show ] do
+    # Putting an envelope away (create) and taking it back (destroy). It's one archive per envelope.
+    resource :archive, only: [ :create, :destroy ], controller: "envelope_archives"
+  end
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]
   # One Reallocate form makes either kind of Reallocation, and its To decides which. Editing and deleting are per kind,

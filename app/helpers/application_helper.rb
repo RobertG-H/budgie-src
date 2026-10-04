@@ -10,4 +10,12 @@ module ApplicationHelper
   def assigned_to(envelope, month)
     "Assigned to #{envelope.name} in #{month.name}"
   end
+
+  # The envelopes a picker offers, as [ name, id ] pairs, alphabetically: the budget's envelopes in use, and the ones
+  # whose ids are in `keeping`, such as the envelope a record being edited is already in, which stays in its picker
+  # even when it has been archived.
+  def envelope_options(keeping: [])
+    envelopes = Current.budget.envelopes
+    envelopes.active.or(envelopes.where(id: keeping)).alphabetical.pluck(:name, :id)
+  end
 end

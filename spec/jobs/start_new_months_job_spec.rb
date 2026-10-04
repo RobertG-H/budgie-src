@@ -46,6 +46,25 @@ RSpec.describe StartNewMonthsJob, type: :job do
     expect(budgets.map { |budget| assigned_in_october(budget) }).to eq([ 400, 400 ])
   end
 
+  describe "with an archived envelope" do
+    let(:march) { Date.new(2026, 3, 1) }
+    let(:april) { Date.new(2026, 4, 1) }
+
+    it "copies an envelope in use's Assigned when April begins, and not an archived envelope's" do
+      budget = travel_to(Time.zone.local(2026, 3, 5)) { create(:budget) }
+      gym = create(:budget_envelope, budget: budget, name: "Gym")
+      groceries = create(:budget_envelope, budget: budget, name: "Groceries")
+      create(:budget_assignment, envelope: gym, month: march, amount: 40)
+      create(:budget_assignment, envelope: groceries, month: march, amount: 400)
+      gym.update_column(:archived_at, Time.current)
+
+      travel_to Time.utc(2026, 4, 1, 4, 1)
+      described_class.perform_now
+
+      expect(Budget::Assignment.where(month: april).pluck(:envelope_id, :amount)).to eq([ [ groceries.id, 400 ] ])
+    end
+  end
+
   describe "when a budget's new month can't be started" do
     # What was logged while the block ran.
     def log_during

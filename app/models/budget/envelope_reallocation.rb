@@ -12,6 +12,7 @@ class Budget::EnvelopeReallocation < ApplicationRecord
   belongs_to :from_envelope, class_name: "Budget::Envelope", inverse_of: :outgoing_reallocations
   belongs_to :to_envelope, class_name: "Budget::Envelope", inverse_of: :incoming_reallocations
 
+  refuse_archived_envelopes :from_envelope, :to_envelope
   validate :envelopes_differ
   validate :envelopes_in_the_same_budget
 

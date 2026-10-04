@@ -975,6 +975,113 @@ RSpec.describe Budget::Month, type: :model do
     end
   end
 
+  describe "an archived envelope" do
+    let(:january) { Date.new(2026, 1, 1) }
+    let(:february) { Date.new(2026, 2, 1) }
+    let(:march) { Date.new(2026, 3, 1) }
+    let!(:gym) { create(:budget_envelope, budget: budget, name: "Gym") }
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+    let!(:january_spend) { spend gym, 40, Date.new(2026, 1, 20) }
+
+    before do
+      deposit 100, january
+      assign gym, 40, january
+      assign groceries, 10, january
+      gym.update_column(:archived_at, Time.zone.local(2026, 3, 10))
+    end
+
+    def names(month)
+      month_of(month).envelopes.map { |line| line.envelope.name }
+    end
+
+    # Records for the envelope as it was in use, which an archived one takes no more of, and then archived again.
+    def while_in_use
+      archived_at = gym.archived_at
+      gym.update_column(:archived_at, nil)
+      yield
+      gym.update_column(:archived_at, archived_at)
+    end
+
+    it "shows its line in the month it has figures, with the figures it had" do
+      line = month_of(january).envelopes.find { |each| each.envelope == gym }
+
+      expect(line).to have_attributes(carried_over: 0, assigned: 40, spent: 40, refunded: 0, reallocated: 0, available: 0)
+    end
+
+    it "doesn't show in the months after, when every figure is zero, but an envelope in use does" do
+      expect(names(january)).to eq([ "Groceries", "Gym" ])
+      expect(names(february)).to eq([ "Groceries" ])
+      expect(names(march)).to eq([ "Groceries" ])
+    end
+
+    it "still counts in Ready to Assign, in the months it had Assigned" do
+      expect(month_of(january).ready_to_assign.assigned).to eq(50)
+      expect(month_of(january).ready_to_assign.amount).to eq(50)
+      expect(month_of(february).ready_to_assign.carried_over).to eq(50)
+    end
+
+    it "is found by envelope_line in any month, shown or not" do
+      expect(month_of(march).envelope_line(gym.id)).to have_attributes(envelope: gym, available: 0, carried_over: 0)
+    end
+
+    it "shows in the months after a change to one of its old records makes a figure non-zero" do
+      january_spend.update!(amount: 30)
+
+      expect(names(february)).to eq([ "Groceries", "Gym" ])
+      expect(names(march)).to eq([ "Groceries", "Gym" ])
+      expect(month_of(march).envelope_line(gym.id)).to have_attributes(carried_over: 10, available: 10)
+    end
+
+    it "is hidden in a month when its only records are a Reallocation in and one out of the same amount, though the envelopes in the moves show them" do
+      moved_in = moved_out = nil
+      while_in_use do
+        moved_in = reallocate(groceries, gym, 5, Date.new(2026, 2, 3))
+        moved_out = reallocate(gym, groceries, 5, Date.new(2026, 2, 20))
+      end
+
+      expect(names(february)).to eq([ "Groceries" ])
+      expect(month_of(february).envelope_line(gym.id)).to have_attributes(reallocated: 0, available: 0)
+      expect(month_of(february).envelope_line(groceries.id)).to have_attributes(reallocated: 0)
+      expect([ moved_in, moved_out ]).to all(be_persisted)
+    end
+
+    it "shows a month's Reallocation into it, which is a figure" do
+      while_in_use { reallocate groceries, gym, 5, Date.new(2026, 2, 3) }
+
+      expect(names(february)).to eq([ "Groceries", "Gym" ])
+    end
+
+    it "is listed in archived_envelopes whether the month shows it or not, alphabetically" do
+      create(:budget_envelope, budget: budget, name: "Bike", archived_at: Time.current)
+
+      expect(month_of(january).archived_envelopes.map(&:name)).to eq([ "Bike", "Gym" ])
+      expect(month_of(march).archived_envelopes.map(&:name)).to eq([ "Bike", "Gym" ])
+    end
+
+    it "leaves an envelope in use shown whatever it has, even when every figure is zero" do
+      empty = create(:budget_envelope, budget: budget, name: "Empty")
+
+      expect(names(march)).to eq([ "Empty", "Groceries" ])
+      expect(month_of(march).envelope_line(empty.id)).to be_empty
+    end
+
+    it "costs the same number of queries as with no archived envelopes" do
+      other = create(:budget)
+      create(:budget_envelope, budget: other, name: "Gym")
+      create(:budget_envelope, budget: other, name: "Groceries")
+      figures = lambda do |of|
+        count_queries do
+          month = Budget::Month.new(of, march)
+          month.ready_to_assign.amount
+          month.envelopes.each { |line| [ line.carried_over, line.assigned, line.spent, line.refunded, line.reallocated, line.available ] }
+          month.archived_envelopes
+        end
+      end
+
+      expect(figures.call(budget)).to eq(figures.call(other))
+    end
+  end
+
   describe "the number of queries" do
     let(:month) { Date.new(2029, 9, 1) }
 

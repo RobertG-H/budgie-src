@@ -4,11 +4,20 @@
 <%= link_to "Back to #{@month.name}", month_path(@month), class: "link" %>
 
 <div class="mt-4">
-  <%= render "components/page_header", title: @envelope.name, description: @month.name do %>
-    <%= link_to "New spend", new_spend_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn btn-primary" %>
-    <%= link_to "New refund", new_refund_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
-    <%= link_to "Reallocate", new_reallocation_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
+  <%# An archived envelope takes no new records, so it has no New spend, New refund or Reallocate, and has Unarchive where an envelope in use has Archive. %>
+  <%= render "components/page_header", title: @envelope.name, description: @month.name,
+        badge: (render("components/archived_badge") if @envelope.archived?) do %>
+    <% unless @envelope.archived? %>
+      <%= link_to "New spend", new_spend_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn btn-primary" %>
+      <%= link_to "New refund", new_refund_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
+      <%= link_to "Reallocate", new_reallocation_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
+    <% end %>
     <%= link_to "Edit", edit_envelope_path(@envelope, month: @month, from: "envelope"), class: "btn" %>
+    <% if @envelope.archived? %>
+      <%= button_to "Unarchive", envelope_archive_path(@envelope), method: :delete, params: { month: @month.to_param }, class: "btn" %>
+    <% else %>
+      <%= button_to "Archive", envelope_archive_path(@envelope), method: :post, params: { month: @month.to_param }, class: "btn" %>
+    <% end %>
     <%= render "components/delete_button", path: envelope_path(@envelope),
           confirm: "Delete the #{@envelope.name} envelope?", params: { month: @month.to_param } %>
   <% end %>
