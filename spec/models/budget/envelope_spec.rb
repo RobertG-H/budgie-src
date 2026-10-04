@@ -4,6 +4,7 @@ RSpec.describe Budget::Envelope, type: :model do
   subject { build(:budget_envelope) }
 
   it { is_expected.to belong_to(:budget) }
+  it { is_expected.to have_many(:assignments).class_name("Budget::Assignment").dependent(:restrict_with_error) }
   it { is_expected.to validate_presence_of(:name) }
 
   it "uses the budget_envelopes table" do
@@ -93,6 +94,133 @@ RSpec.describe Budget::Envelope, type: :model do
       groceries = create(:budget_envelope, budget: budget, name: "Groceries")
 
       expect(budget.envelopes.alphabetical).to eq([ bills, groceries, rent ])
+    end
+  end
+
+  describe "#assign" do
+    let(:envelope) { create(:budget_envelope) }
+    let(:september) { Date.new(2026, 9, 1) }
+
+    # What the envelope has assigned, as [ month, amount ] pairs, read from the database afresh.
+    def assigned
+      Budget::Assignment.where(envelope: envelope).order(:month).pluck(:month, :amount)
+    end
+
+    it "creates the month's Assignment from a positive amount, and returns it" do
+      assignment = envelope.assign(september, "400.50")
+
+      expect(assignment).to be_persisted
+      expect(assignment.errors).to be_empty
+      expect(assigned).to eq([ [ september, BigDecimal("400.50") ] ])
+    end
+
+    it "changes the month's Assignment rather than adding another" do
+      existing = create(:budget_assignment, envelope: envelope, month: september, amount: 100)
+
+      assignment = envelope.assign(september, "250")
+
+      expect(assignment).to eq(existing)
+      expect(assigned).to eq([ [ september, 250 ] ])
+    end
+
+    it "can assign again and again, the last amount being the one that counts" do
+      envelope.assign(september, "100")
+      envelope.assign(september, "100")
+      envelope.assign(september, "75.25")
+
+      expect(assigned).to eq([ [ september, BigDecimal("75.25") ] ])
+    end
+
+    it "takes any day of the month for the month" do
+      envelope.assign(Date.new(2026, 9, 17), "10")
+      envelope.assign(Date.new(2026, 9, 30), "20")
+
+      expect(assigned).to eq([ [ september, 20 ] ])
+    end
+
+    [ "", " ", nil, "0", "0.00", "0.0", " 0 ", "-0" ].each do |nothing|
+      it "deletes the month's Assignment for #{nothing.inspect}, which is to assign nothing" do
+        create(:budget_assignment, envelope: envelope, month: september, amount: 100)
+
+        assignment = envelope.assign(september, nothing)
+
+        expect(assigned).to be_empty
+        expect(assignment).to be_destroyed
+        expect(assignment.errors).to be_empty
+      end
+
+      it "has nothing to delete for #{nothing.inspect} when nothing is assigned, and that's fine" do
+        assignment = envelope.assign(september, nothing)
+
+        expect(assigned).to be_empty
+        expect(assignment).not_to be_persisted
+        expect(assignment.errors).to be_empty
+      end
+    end
+
+    {
+      "-5" => "Assigned must be greater than 0",
+      "-0.01" => "Assigned must be greater than 0",
+      "10.005" => "Assigned can't have more than 2 decimal places",
+      "10000000000000" => "Assigned must be less than 10000000000000",
+      "abc" => "Assigned is not a number",
+      "$1,000" => "Assigned is not a number",
+      "NaN" => "Assigned is not a number"
+    }.each do |refused, message|
+      it "refuses #{refused.inspect} with the reason, keeps what was assigned, and keeps what was entered for the form" do
+        create(:budget_assignment, envelope: envelope, month: september, amount: 100)
+
+        assignment = envelope.assign(september, refused)
+
+        expect(assignment.errors.full_messages).to eq([ message ])
+        expect(assignment.amount_before_type_cast).to eq(refused)
+        expect(assigned).to eq([ [ september, 100 ] ])
+      end
+    end
+
+    it "creates nothing when the amount for a month with no Assignment is refused" do
+      assignment = envelope.assign(september, "-5")
+
+      expect(assignment).not_to be_persisted
+      expect(assigned).to be_empty
+    end
+
+    it "touches only that envelope's Assignment for that month" do
+      other_month = create(:budget_assignment, envelope: envelope, month: Date.new(2026, 10, 1), amount: 7)
+      other_envelope = create(:budget_assignment, month: september, amount: 9)
+
+      envelope.assign(september, "100")
+      envelope.assign(september, "")
+
+      expect(other_month.reload.amount).to eq(7)
+      expect(other_envelope.reload.amount).to eq(9)
+    end
+  end
+
+  describe "deleting" do
+    it "is refused while the envelope has records, with the reason, and keeps both the envelope and its records" do
+      assignment = create(:budget_assignment)
+      envelope = assignment.envelope
+
+      expect(envelope.destroy).to be(false)
+
+      expect(envelope.errors.full_messages).to eq([ "This envelope can't be deleted because it has records." ])
+      expect(Budget::Envelope.exists?(envelope.id)).to be(true)
+      expect(Budget::Assignment.exists?(assignment.id)).to be(true)
+    end
+
+    it "is allowed once the records are gone" do
+      assignment = create(:budget_assignment)
+      assignment.destroy!
+
+      expect(assignment.envelope.destroy).to be_truthy
+      expect(Budget::Envelope.exists?(assignment.envelope_id)).to be(false)
+    end
+
+    it "is allowed for an envelope with nothing recorded against it, whatever its Starting balance" do
+      envelope = create(:budget_envelope, starting_balance: 250)
+
+      expect(envelope.destroy).to be_truthy
     end
   end
 

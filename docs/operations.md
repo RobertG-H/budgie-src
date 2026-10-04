@@ -59,7 +59,7 @@ docker compose run --rm kamal task user:delete EMAIL=someone@example.com -d prod
 ```
 
 The task shows what it will delete and asks you to type the email to confirm. It permanently deletes the
-user, their identities, their sessions (which signs them out), their budget with its envelopes and Deposits, and their
+user, their identities, their sessions (which signs them out), their budget with its envelopes, Deposits and Assigned amounts, and their
 invite — so the address can be invited again with `invite:create`. That makes it the easy way to test the
 invite flow with an account you've already signed in with.
 

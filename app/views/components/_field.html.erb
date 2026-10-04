@@ -1,5 +1,6 @@
-<%# locals: (form:, attribute:, control: :input, label: nil, hint: nil, error: nil) %>
+<%# locals: (form:, attribute:, control: :input, label: nil, hint: nil, error: nil, hide_label: false) %>
 <%# A labelled form control with an optional hint and error under it. The block renders the control and is given a hash to splat onto it: the daisyUI classes for `control` (:input, :select, :textarea, :checkbox or :radios) and the aria attributes that tie it to its hint and error. %>
+<%# `hide_label` takes the label out of sight but keeps it for assistive technology, for a control whose purpose is clear from where it sits, such as an amount inside a table cell. %>
 <%# `:radios` is one group of choices: a fieldset with a legend, where the block renders every radio button, each with its own label, and splats the hash onto each. %>
 <%# The form's error summary (application/_form_errors) carries the messages, so a field is only marked invalid when its attribute has errors. Pass `error` to show one under the field too. %>
 <%# The 55% border is for contrast: a plain daisyUI input's default border is 20% of base-content, 1.49:1
@@ -29,13 +30,13 @@
   <% if control == :checkbox %>
     <div class="flex items-center gap-3">
       <%= yield field %>
-      <%= form.label attribute, label, class: "font-medium" %>
+      <%= form.label attribute, label, class: (hide_label ? "sr-only" : "font-medium") %>
     </div>
   <% elsif control == :radios %>
-    <legend class="mb-2 font-medium"><%= label || form.object.try(:class)&.try(:human_attribute_name, attribute) || attribute.to_s.humanize %></legend>
+    <legend class="<%= hide_label ? "sr-only" : "mb-2 font-medium" %>"><%= label || form.object.try(:class)&.try(:human_attribute_name, attribute) || attribute.to_s.humanize %></legend>
     <%= yield field %>
   <% else %>
-    <%= form.label attribute, label, class: "block font-medium" %>
+    <%= form.label attribute, label, class: (hide_label ? "sr-only" : "block font-medium") %>
     <%= yield field %>
   <% end %>
 

@@ -1,0 +1,4 @@
+<%# An amount that was refused: the input goes back into the cell's frame, with the reason. See AssignmentsController#update. %>
+<%= turbo_stream.update dom_id(@envelope, :assigned) do %>
+  <%= render "assignments/form", assignment: @assignment, envelope: @envelope, month: @month %>
+<% end %>

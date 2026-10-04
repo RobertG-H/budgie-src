@@ -58,6 +58,37 @@ RSpec.describe "components", type: :view do
       assert_select ".stat-desc", text: "Across 3 envelopes"
     end
 
+    it "says what's wrong in words, under the description and in the error colour, when given an error" do
+      render inline: <<~ERB
+        <%= render "components/stat_card", title: "Ready to Assign", value: "-$150.00", description: "Assigned $250.00", error: "More was assigned than deposited." %>
+      ERB
+
+      assert_select ".stat-desc", count: 2
+      assert_select ".stat-desc:not(.text-error)", text: "Assigned $250.00"
+      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+    end
+
+    it "can have an error without a description, and has none when it isn't given one" do
+      render inline: %(<%= render "components/stat_card", title: "Ready to Assign", value: "-$1.00", error: "Too much." %>)
+      assert_select ".stat-desc.text-error", text: "Too much."
+      assert_select ".stat-desc", count: 1
+
+      render inline: %(<%= render "components/stat_card", title: "Ready to Assign", value: "$1.00", description: "Fine." %>)
+      assert_select ".stat-desc.text-error", count: 0
+    end
+
+    it "lets what's under the number wrap, so a long description doesn't run off a narrow card" do
+      render inline: %(<%= render "components/stat_card", title: "Ready to Assign", value: "$1.00", description: "Carried over $1 · Deposited $2 · Assigned $3", error: "Wrong." %>)
+
+      assert_select ".stat-desc.whitespace-normal", count: 2
+    end
+
+    it "lets the number wrap too, so a badge beside it, such as Overspent, drops under it in a narrow card instead of being cut off" do
+      render inline: %(<%= render "components/stat_card", title: "Available", value: "-$30.00 Overspent" %>)
+
+      assert_select ".stat-value.whitespace-normal", text: "-$30.00 Overspent"
+    end
+
     it "isn't a link unless it's given somewhere to go" do
       render inline: %(<%= render "components/stat_card", title: "Ready to Assign", value: "$1,250.00" %>)
 

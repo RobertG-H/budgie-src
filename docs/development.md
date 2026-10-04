@@ -146,7 +146,9 @@ Two things to know:
   the `schema.rb` it writes. Never hand-edit that file — CI rebuilds it from the migrations and fails on
   any difference. See [the schema drift check](ci.md#the-schema-drift-check).
 - **Give every new user-owned table a `dependent:` option.** Foreign keys are `ON DELETE RESTRICT`, and
-  `user:delete` relies on Rails deleting children first.
+  `user:delete` relies on Rails deleting children first. A table that references envelopes also goes in
+  `Budget#delete_envelope_records`, and its envelope refuses deletion while it has records
+  (`has_many …, dependent: :restrict_with_error`).
 
 ## Working on the UI
 

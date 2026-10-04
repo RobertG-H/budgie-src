@@ -98,9 +98,9 @@ second use turns it into a partial. The partials:
 | `_flash` | One flash message (`notice`/`alert`/`info`/`warning`), used by the layout and shown for every type on `/styleguide`. |
 | `_page_header` | A page's `h1`, optional description, and actions block (e.g. the "New envelope" button). |
 | `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent. |
-| `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. |
+| `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. `hide_label` takes the label out of sight but not away from assistive technology, for a control whose place makes its purpose clear, such as an amount inside a table cell. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
-| `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. |
+| `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. Given an `error`, it says in words what's wrong with the number, under the description and in the error colour, so a negative Ready to Assign isn't only red. |
 | `_month_links` | Links to the months either side of the one being viewed, named for them, and back to the current month when viewing another. Each page passes a `path` that turns a month into its own address, so the links stay on that page. |
 | `_record_list` | The bordered list that holds record rows. |
 | `_record_row` | One record in a `_record_list`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. The whole row links to the record's edit page, where it's also deleted. |
@@ -111,6 +111,13 @@ second use turns it into a partial. The partials:
 
 Turbo Frames and Streams and Stimulus first. Native `<dialog>` (the `_modal` partial) and `<details>` where
 they do the job, instead of a JS-built equivalent. No new JS libraries without asking.
+
+An amount edited in place, such as an envelope's Assigned on the month view (`app/views/assignments/`), is a Turbo
+Frame that swaps a button showing the amount for an input with Save and Cancel. The button is a `btn btn-sm
+font-normal` chip, so it reads as tappable at rest, nudged with `-mr-2 px-2` so its figure still lines up with the
+other amounts in its column. The input is `components/field` with `hide_label`. Its form submits to the whole page
+(`data-turbo-frame="_top"`) so that saving refreshes every figure on the page with a morph that keeps the scroll
+position, and an amount that's refused comes back as a Turbo Stream into the frame.
 
 ## Don't
 

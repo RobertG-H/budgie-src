@@ -1,11 +1,15 @@
 <% content_for :title, "#{@month.name} · Budgie" %>
+<%# Saving an Assigned amount comes back here, to the same page, and Turbo refreshes it in place: it morphs the page into the new one and keeps the scroll position, so every figure updates and the person stays where they were. %>
+<% turbo_refreshes_with method: :morph, scroll: :preserve %>
 <% budget = @month.budget %>
 <% ready_to_assign = @month.ready_to_assign %>
 <%# Amounts are shown through the money partial wherever they are, so a negative one is signed and red here too. %>
 <% ready_to_assign_description = safe_join([
      "Carried over", render("components/money", amount: ready_to_assign.carried_over, budget: budget),
      "·",
-     "Deposited", render("components/money", amount: ready_to_assign.deposited, budget: budget)
+     "Deposited", render("components/money", amount: ready_to_assign.deposited, budget: budget),
+     "·",
+     "Assigned", render("components/money", amount: ready_to_assign.assigned, budget: budget)
    ], " ") %>
 
 <%= render "components/page_header", title: @month.name do %>
@@ -20,7 +24,8 @@
 <div class="mt-8">
   <%= render "components/stat_card", title: "Ready to Assign",
         value: render("components/money", amount: ready_to_assign.amount, budget: budget),
-        description: ready_to_assign_description, href: month_deposits_path(@month) %>
+        description: ready_to_assign_description, href: month_deposits_path(@month),
+        error: ("More was assigned than deposited." if ready_to_assign.amount.negative?) %>
 </div>
 
 <div class="mt-8">
@@ -31,6 +36,7 @@
           <tr>
             <th scope="col">Envelope</th>
             <th scope="col" class="hidden text-right sm:table-cell">Carried over</th>
+            <th scope="col" class="text-right">Assigned</th>
             <th scope="col" class="text-right">Available</th>
           </tr>
         </thead>
@@ -39,6 +45,7 @@
             <tr id="<%= dom_id(line.envelope) %>">
               <td><%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %></td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
+              <td class="text-right tabular-nums"><%= render "assignments/cell", line: line, month: @month %></td>
               <td class="text-right tabular-nums"><%= render "components/money", amount: line.available, budget: budget, overspent: line.overspent? %></td>
             </tr>
           <% end %>

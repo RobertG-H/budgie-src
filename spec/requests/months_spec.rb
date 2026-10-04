@@ -8,7 +8,12 @@ RSpec.describe "Months", type: :request do
   # The words under Ready to Assign's number. Its amounts are spans of their own, so the whitespace between the
   # pieces is collapsed before comparing.
   def stat_description
-    css_select(".stat-desc").map { |description| description.text.squish }.sole
+    css_select(".stat-desc:not(.text-error)").map { |description| description.text.squish }.sole
+  end
+
+  # The amount an envelope's Assigned button shows, without the words that name the button for assistive technology.
+  def assigned_for(envelope)
+    css_select("tr#envelope_#{envelope.id} td:nth-child(3) button span:not(.sr-only)").map { |amount| amount.text.strip }.sole
   end
 
   describe "GET /" do
@@ -83,7 +88,7 @@ RSpec.describe "Months", type: :request do
       assert_select "a[href='#{month_deposits_path("2026-09")}']" do
         assert_select ".stat-title", text: "Ready to Assign"
         assert_select ".stat-value", text: "$4,000.00"
-        expect(stat_description).to eq("Carried over $1,000.00 · Deposited $3,000.00")
+        expect(stat_description).to eq("Carried over $1,000.00 · Deposited $3,000.00 · Assigned $0.00")
       end
     end
 
@@ -92,8 +97,8 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select ".stat-desc span", count: 2
-      assert_select ".stat-desc span", text: "$0.00"
+      assert_select ".stat-desc span", count: 3
+      assert_select ".stat-desc span", text: "$0.00", count: 2
       assert_select ".stat-desc span", text: "$3,000.00"
     end
 
@@ -101,7 +106,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "$0.00"
-      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00")
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00 · Assigned $0.00")
     end
 
     it "carries forward into a month with no Deposits of its own" do
@@ -110,18 +115,18 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-12")
 
       assert_select ".stat-value", text: "$3,000.00"
-      expect(stat_description).to eq("Carried over $3,000.00 · Deposited $0.00")
+      expect(stat_description).to eq("Carried over $3,000.00 · Deposited $0.00 · Assigned $0.00")
     end
 
     it "counts a Deposit dated September 30 and marked for October in October, and not in September" do
       create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 9, 30), month: Date.new(2026, 10, 1))
 
       get month_path("2026-09")
-      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00")
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00 · Assigned $0.00")
 
       get month_path("2026-10")
       assert_select ".stat-value", text: "$3,000.00"
-      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00")
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $0.00")
     end
 
     it "is shown in the budget's currency unit" do
@@ -131,6 +136,273 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "£25.00"
+    end
+  end
+
+  describe "Assigned" do
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 25) }
+    let!(:rent) { create(:budget_envelope, budget: budget, name: "Rent") }
+    let(:january) { Date.new(2026, 1, 1) }
+    let(:february) { Date.new(2026, 2, 1) }
+
+    # The worked example: $3,000 is deposited in each of January and February, with $2,800 assigned in January
+    # and $3,100 in February.
+    def set_up_the_worked_example
+      create(:budget_deposit, budget: budget, amount: 3000, date: january)
+      create(:budget_deposit, budget: budget, amount: 3000, date: february)
+      create(:budget_assignment, envelope: groceries, month: january, amount: 1300)
+      create(:budget_assignment, envelope: rent, month: january, amount: 1500)
+      create(:budget_assignment, envelope: groceries, month: february, amount: 1600)
+      create(:budget_assignment, envelope: rent, month: february, amount: 1500)
+    end
+
+    it "shows exactly the numbers of the worked example, in January and then in February" do
+      set_up_the_worked_example
+
+      get month_path("2026-01")
+      assert_select ".stat-title", text: "Ready to Assign"
+      assert_select ".stat-value", text: "$200.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $2,800.00")
+
+      get month_path("2026-02")
+      assert_select ".stat-value", text: "$100.00"
+      expect(stat_description).to eq("Carried over $200.00 · Deposited $3,000.00 · Assigned $3,100.00")
+    end
+
+    it "shows each envelope's Carried over, Assigned and Available, in the month's own columns" do
+      set_up_the_worked_example
+
+      get month_path("2026-02")
+
+      assert_select "tr#envelope_#{groceries.id}" do
+        assert_select "td:nth-child(2)", text: "$1,325.00"
+        assert_select "td:nth-child(4)", text: "$2,925.00"
+      end
+      expect(assigned_for(groceries)).to eq("$1,600.00")
+      assert_select "tr#envelope_#{rent.id}" do
+        assert_select "td:nth-child(2)", text: "$1,500.00"
+        assert_select "td:nth-child(4)", text: "$3,000.00"
+      end
+      expect(assigned_for(rent)).to eq("$1,500.00")
+    end
+
+    it "shows $0.00 for an envelope with nothing assigned in the month" do
+      create(:budget_assignment, envelope: rent, month: january, amount: 1500)
+
+      get month_path("2026-02")
+
+      expect(assigned_for(groceries)).to eq("$0.00")
+      expect(assigned_for(rent)).to eq("$0.00")
+    end
+
+    it "makes each envelope's Assigned a button that opens its input in the cell's own frame, and says which one" do
+      get month_path("2026-02")
+
+      assert_select "tbody tr#envelope_#{groceries.id} td:nth-child(3) turbo-frame#assigned_envelope_#{groceries.id}" do
+        assert_select "form[method=get][action='#{edit_month_envelope_assignment_path("2026-02", groceries)}'] button.btn" do
+          assert_select "span.sr-only", text: "Assigned to Groceries in February 2026:"
+        end
+      end
+      assert_select "tbody tr#envelope_#{rent.id} td:nth-child(3) turbo-frame#assigned_envelope_#{rent.id}"
+    end
+
+    it "keeps Assigned on a phone, where only Carried over is dropped" do
+      get month_path("2026-02")
+
+      assert_select "thead th", text: "Assigned"
+      assert_select "thead th:nth-child(3)[class~='hidden']", count: 0
+      assert_select "tbody td:nth-child(3)[class~='hidden']", count: 0
+      assert_select "tbody td:nth-child(2)[class~='hidden'][class~='sm:table-cell']", count: 2
+    end
+
+    it "shows what changes in every later month when an earlier month's Assigned is changed" do
+      set_up_the_worked_example
+      Budget::Assignment.find_by!(envelope: groceries, month: january).update!(amount: 1450)
+
+      get month_path("2026-01")
+      assert_select ".stat-value", text: "$50.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $2,950.00")
+
+      get month_path("2026-02")
+      assert_select ".stat-value .text-error", text: "-$50.00"
+      expect(stat_description).to eq("Carried over $50.00 · Deposited $3,000.00 · Assigned $3,100.00")
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(2)", text: "$1,475.00"
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(4)", text: "$3,075.00"
+      expect(assigned_for(groceries)).to eq("$1,600.00")
+    end
+
+    it "lowers Ready to Assign only from the month an Assigned amount is for" do
+      create(:budget_deposit, budget: budget, amount: 1000, date: january)
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 3, 1), amount: 300)
+
+      [ [ "2026-01", "$1,000.00" ], [ "2026-02", "$1,000.00" ], [ "2026-03", "$700.00" ] ].each do |month, ready_to_assign|
+        get month_path(month)
+
+        assert_select ".stat-value", text: ready_to_assign
+      end
+    end
+
+    it "takes a Deposit marked for next month out of next month's Ready to Assign, not the month of its date" do
+      create(:budget_deposit, budget: budget, amount: 1500, date: Date.new(2026, 9, 15), month: Date.new(2026, 10, 1))
+      create(:budget_deposit, budget: budget, amount: 1500, date: Date.new(2026, 9, 30), month: Date.new(2026, 10, 1))
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 10, 1), amount: 3000)
+
+      get month_path("2026-09")
+      assert_select ".stat-value", text: "$0.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00 · Assigned $0.00")
+
+      get month_path("2026-10")
+      assert_select ".stat-value", text: "$0.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $3,000.00")
+    end
+
+    it "doesn't count another budget's Assigned amounts" do
+      create(:budget_assignment, month: january, amount: 999)
+
+      get month_path("2026-01")
+
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00 · Assigned $0.00")
+    end
+
+    it "is in the budget's currency unit" do
+      budget.update!(currency: "GBP")
+      create(:budget_assignment, envelope: groceries, month: january, amount: 25)
+
+      get month_path("2026-01")
+
+      expect(assigned_for(groceries)).to eq("£25.00")
+    end
+  end
+
+  describe "a negative Ready to Assign" do
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+
+    before do
+      create(:budget_deposit, budget: budget, amount: 100, date: Date.new(2026, 9, 1))
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 250)
+    end
+
+    it "is shown with its sign and in red, and the card says in words that more was assigned than deposited" do
+      get month_path("2026-09")
+
+      assert_select ".stat-value .text-error", text: "-$150.00"
+      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $100.00 · Assigned $250.00")
+    end
+
+    it "is reported in the month it's opened in, and also in the months after it, which it carries into" do
+      get month_path("2026-10")
+
+      assert_select ".stat-value .text-error", text: "-$150.00"
+      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+      expect(stat_description).to eq("Carried over -$150.00 · Deposited $0.00 · Assigned $0.00")
+    end
+
+    it "isn't reported in a month before the money was assigned" do
+      get month_path("2026-08")
+
+      assert_select ".stat-desc.text-error", count: 0
+      assert_select ".stat-value .text-error", count: 0
+    end
+
+    it "isn't reported when everything deposited has been assigned, to the cent" do
+      create(:budget_deposit, budget: budget, amount: 150, date: Date.new(2026, 9, 2))
+
+      get month_path("2026-09")
+
+      assert_select ".stat-value", text: "$0.00"
+      assert_select ".stat-desc.text-error", count: 0
+      assert_select ".stat-value .text-error", count: 0
+    end
+
+    it "isn't reported for a positive amount" do
+      create(:budget_deposit, budget: budget, amount: 1000, date: Date.new(2026, 9, 2))
+
+      get month_path("2026-09")
+
+      assert_select ".stat-value", text: "$850.00"
+      assert_select ".stat-desc.text-error", count: 0
+    end
+  end
+
+  describe "refreshing in place" do
+    it "asks Turbo to morph the month view and keep the scroll position when it's refreshed, so saving Assigned stays put" do
+      get month_path("2026-09")
+
+      assert_select "head meta[name=turbo-refresh-method][content=morph]"
+      assert_select "head meta[name=turbo-refresh-scroll][content=preserve]"
+    end
+
+    it "says nothing of the kind on the pages that aren't refreshed in place" do
+      envelope = create(:budget_envelope, budget: budget)
+
+      [ month_deposits_path("2026-09"), month_envelope_path("2026-09", envelope), new_envelope_path ].each do |path|
+        get path
+
+        assert_select "head meta[name=turbo-refresh-method]", count: 0
+        assert_select "head meta[name=turbo-refresh-scroll]", count: 0
+      end
+    end
+  end
+
+  describe "setting Assigned from the month view" do
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 25) }
+    let(:frame) { "assigned_envelope_#{groceries.id}" }
+
+    before do
+      create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 1, 1))
+      create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 2, 1))
+    end
+
+    it "goes back to the month that was edited, and the months after it follow from what was set" do
+      get month_path("2026-01")
+      assert_select ".stat-value", text: "$3,000.00"
+      expect(assigned_for(groceries)).to eq("$0.00")
+
+      # Tap Assigned in the Groceries row: its button loads the input into the cell's frame.
+      edit_path = css_select("tr#envelope_#{groceries.id} form[method=get]").first["action"]
+      get edit_path, headers: { "Turbo-Frame" => frame }
+      form = css_select("turbo-frame##{frame} form").first
+      expect(form["action"]).to eq(month_envelope_assignment_path("2026-01", groceries))
+
+      # Save 2,800 for January: the redirect is to January, and January shows it.
+      patch form["action"], params: { assignment: { amount: "2800" } }
+      expect(response).to redirect_to(month_path("2026-01"))
+      follow_redirect!
+      assert_select "h1", text: "January 2026"
+      assert_select ".stat-value", text: "$200.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $2,800.00")
+      expect(assigned_for(groceries)).to eq("$2,800.00")
+
+      # February carries what's left over from January, and what was assigned in January.
+      get month_path("2026-02")
+      assert_select ".stat-value", text: "$3,200.00"
+      expect(stat_description).to eq("Carried over $200.00 · Deposited $3,000.00 · Assigned $0.00")
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(2)", text: "$2,825.00"
+      expect(assigned_for(groceries)).to eq("$0.00")
+    end
+
+    it "changes a past month from its own month view, and only that month's Assigned" do
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 1, 1), amount: 1000)
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 2, 1), amount: 2000)
+
+      patch month_envelope_assignment_path("2026-01", groceries), params: { assignment: { amount: "1150" } }
+      expect(response).to redirect_to(month_path("2026-01"))
+
+      get month_path("2026-02")
+      expect(assigned_for(groceries)).to eq("$2,000.00")
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(2)", text: "$1,175.00"
+      expect(stat_description).to eq("Carried over $1,850.00 · Deposited $3,000.00 · Assigned $2,000.00")
+    end
+
+    it "clears what was assigned, so the month shows $0.00 again" do
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 1, 1), amount: 1000)
+
+      patch month_envelope_assignment_path("2026-01", groceries), params: { assignment: { amount: "" } }
+      follow_redirect!
+
+      expect(assigned_for(groceries)).to eq("$0.00")
+      assert_select ".stat-value", text: "$3,000.00"
     end
   end
 
@@ -154,7 +426,7 @@ RSpec.describe "Months", type: :request do
   end
 
   describe "the envelopes" do
-    it "are listed alphabetically, each name linking to its page, with Carried over and Available" do
+    it "are listed alphabetically, each name linking to its page, with Carried over, Assigned and Available" do
       rent = create(:budget_envelope, budget: budget, name: "rent", starting_balance: 1234.5)
       bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: 40)
       create(:budget_envelope, name: "Someone else's", starting_balance: 5)
@@ -163,13 +435,17 @@ RSpec.describe "Months", type: :request do
 
       assert_select "thead th", text: "Envelope"
       assert_select "thead th", text: "Carried over"
+      assert_select "thead th", text: "Assigned"
       assert_select "thead th", text: "Available"
+      assert_select "thead th:nth-child(2)", text: "Carried over"
+      assert_select "thead th:nth-child(3)", text: "Assigned"
+      assert_select "thead th:nth-child(4)", text: "Available"
       assert_select "tbody tr", count: 2
       assert_select "tbody tr:nth-child(1) td:nth-child(1) a[href='#{month_envelope_path("2026-09", bills)}']", text: "Bills"
       assert_select "tbody tr:nth-child(1) td:nth-child(2)", text: "$40.00"
-      assert_select "tbody tr:nth-child(1) td:nth-child(3)", text: "$40.00"
+      assert_select "tbody tr:nth-child(1) td:nth-child(4)", text: "$40.00"
       assert_select "tbody tr:nth-child(2) td:nth-child(1) a[href='#{month_envelope_path("2026-09", rent)}']", text: "rent"
-      assert_select "tbody tr:nth-child(2) td:nth-child(3)", text: "$1,234.50"
+      assert_select "tbody tr:nth-child(2) td:nth-child(4)", text: "$1,234.50"
       expect(response.body).not_to include("Someone else")
     end
 
@@ -180,21 +456,23 @@ RSpec.describe "Months", type: :request do
       [ "2026-09", "2024-01", "2031-12" ].each do |month|
         get month_path(month)
 
-        assert_select "tbody tr:nth-child(1) td:nth-child(3)", text: /\A-\$30\.00\s+Overspent\z/
-        assert_select "tbody tr:nth-child(1) td:nth-child(3) .text-error", text: "-$30.00"
-        assert_select "tbody tr:nth-child(2) td:nth-child(3)", text: "$0.00"
+        assert_select "tbody tr:nth-child(1) td:nth-child(4)", text: /\A-\$30\.00\s+Overspent\z/
+        assert_select "tbody tr:nth-child(1) td:nth-child(4) .text-error", text: "-$30.00"
+        assert_select "tbody tr:nth-child(2) td:nth-child(4)", text: "$0.00"
         assert_select ".badge", text: "Overspent", count: 1
       end
     end
 
-    it "right-align their amounts, and drop Carried over on a phone" do
+    it "right-align their amounts, and drop Carried over on a phone, which keeps Assigned and Available" do
       create(:budget_envelope, budget: budget)
 
       get month_path("2026-09")
 
+      assert_select "thead th[scope=col].text-right", text: "Assigned"
       assert_select "thead th[scope=col].text-right", text: "Available"
       assert_select "thead th[class~='hidden'][class~='sm:table-cell']", text: "Carried over"
-      assert_select "tbody td.text-right.tabular-nums", count: 2
+      assert_select "thead th[class~='hidden']", count: 1
+      assert_select "tbody td.text-right.tabular-nums", count: 3
       assert_select "tbody td[class~='hidden'][class~='sm:table-cell']", count: 1
     end
 

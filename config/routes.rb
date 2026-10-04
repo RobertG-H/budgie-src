@@ -19,6 +19,11 @@ Rails.application.routes.draw do
   get "months/:month" => "months#show", as: :month
   get "months/:month/deposits" => "deposits#index", as: :month_deposits
   get "months/:month/envelopes/:id" => "envelopes#show", as: :month_envelope
+  # What's Assigned to an envelope in a month is one figure, set in place on the month view: its cell there is a
+  # Turbo Frame that swaps between the amount (show) and an input for it (edit), and saving sets it (update).
+  scope "months/:month/envelopes/:envelope_id", as: :month_envelope do
+    resource :assignment, only: [ :show, :edit, :update ]
+  end
 
   resources :deposits, except: [ :index, :show ]
   resources :envelopes, except: [ :index, :show ]

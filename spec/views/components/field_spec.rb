@@ -25,6 +25,44 @@ RSpec.describe "components/_field", type: :view do
     assert_select "label[for=envelope_name]", text: "Envelope name"
   end
 
+  describe "with the label hidden" do
+    it "keeps the label for assistive technology but takes it out of sight" do
+      render_field label: "Assigned to Groceries in September 2026", hide_label: true
+
+      assert_select "label.sr-only[for=envelope_name]", text: "Assigned to Groceries in September 2026"
+      assert_select "label.block", count: 0
+      assert_select "input#envelope_name.input"
+    end
+
+    it "still ties a hint and an error to the control" do
+      render_field hide_label: true, hint: "Helpful", error: "Name can't be blank"
+
+      assert_select "input[aria-describedby='envelope_name_hint envelope_name_error']"
+      assert_select "p#envelope_name_error", text: "Name can't be blank"
+    end
+
+    it "hides a checkbox's label, and a group of radio buttons' legend, too" do
+      render_field control: :checkbox, hide_label: true
+      assert_select "input.checkbox + label.sr-only", text: "Name"
+
+      render inline: <<~ERB
+        <%= form_with model: Budget::Deposit.new, url: "#" do |form| %>
+          <%= render "components/field", form: form, attribute: :month, control: :radios, hide_label: true do |field| %>
+            <%= form.radio_button :month, "2026-09-01", **field %>
+          <% end %>
+        <% end %>
+      ERB
+      assert_select "fieldset > legend.sr-only", text: "Ready to Assign in"
+    end
+
+    it "shows the label as usual when it isn't asked to hide it" do
+      render_field hide_label: false
+
+      assert_select "label.block.font-medium[for=envelope_name]", text: "Name"
+      assert_select "label.sr-only", count: 0
+    end
+  end
+
   it "gives the control a border dark enough to see, and marks nothing invalid" do
     render_field
 

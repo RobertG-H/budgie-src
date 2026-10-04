@@ -7,7 +7,7 @@ class EnvelopesController < ApplicationController
   # An envelope's figures for a month. It's one of the month's own envelope lines, so another user's envelope,
   # or one that doesn't exist, is a 404.
   def show
-    @line = @month.envelopes.find { |line| line.envelope.id == params[:id].to_i } or raise ActiveRecord::RecordNotFound
+    @line = @month.envelope_line(params[:id])
     @envelope = @line.envelope
   end
 
@@ -36,10 +36,14 @@ class EnvelopesController < ApplicationController
     end
   end
 
-  # The envelope's own page is gone, so wherever the form was opened from, this goes to the month view.
+  # The envelope's own page is gone, so wherever the form was opened from, this goes to the month view. An envelope
+  # with records can't be deleted: its page says why, and stays.
   def destroy
-    @envelope.destroy!
-    redirect_to month_path(@month), status: :see_other, notice: "Envelope deleted."
+    if @envelope.destroy
+      redirect_to month_path(@month), status: :see_other, notice: "Envelope deleted."
+    else
+      redirect_to month_envelope_path(@month, @envelope), status: :see_other, alert: @envelope.errors.full_messages.to_sentence
+    end
   end
 
   private

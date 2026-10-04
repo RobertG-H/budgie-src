@@ -9,7 +9,9 @@ namespace :user do
     budget = if user.budget
       envelopes = user.budget.envelopes.count
       deposits = user.budget.deposits.count
-      "their budget with #{envelopes} #{"envelope".pluralize(envelopes)} and #{deposits} #{"deposit".pluralize(deposits)}"
+      assignments = user.budget.assignments.count
+      "their budget with #{envelopes} #{"envelope".pluralize(envelopes)}, #{deposits} #{"deposit".pluralize(deposits)} " \
+        "and #{assignments} #{"assignment".pluralize(assignments)}"
     else
       "no budget"
     end

@@ -42,6 +42,11 @@
       <% end %>
     <% end %>
 
+    <%= render "components/field", form: form, attribute: :assigned_amount, label: "Assigned to Groceries in September 2026",
+          hide_label: true, hint: "Its label is hidden from sight, for a control whose place makes its purpose clear, such as an amount in a table cell. Assistive technology still reads it." do |field| %>
+      <%= form.number_field :assigned_amount, step: 0.01, placeholder: "0.00", **field %>
+    <% end %>
+
     <%= render "components/field", form: form, attribute: :name_with_error, label: "Name",
           error: "Name can't be blank" do |field| %>
       <%= form.text_field :name_with_error, **field %>
