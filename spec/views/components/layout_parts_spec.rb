@@ -57,6 +57,24 @@ RSpec.describe "components", type: :view do
       render inline: %(<%= render "components/stat_card", title: "Ready to Assign", value: "$1,250.00", description: "Across 3 envelopes" %>)
       assert_select ".stat-desc", text: "Across 3 envelopes"
     end
+
+    it "isn't a link unless it's given somewhere to go" do
+      render inline: %(<%= render "components/stat_card", title: "Ready to Assign", value: "$1,250.00" %>)
+
+      assert_select "a", count: 0
+      assert_select "div.stats .stat-title", text: "Ready to Assign"
+    end
+
+    it "links the whole card to the records behind its number when given an href" do
+      render inline: <<~ERB
+        <%= render "components/stat_card", title: "Ready to Assign", value: "$1,250.00", description: "Deposited $1,250.00", href: "/months/2026-09/deposits" %>
+      ERB
+
+      assert_select "a.stats[href='/months/2026-09/deposits']", count: 1
+      assert_select "a.stats .stat-title", text: "Ready to Assign"
+      assert_select "a.stats .stat-value", text: "$1,250.00"
+      assert_select "a.stats .stat-desc", text: "Deposited $1,250.00"
+    end
   end
 
   describe "_modal" do

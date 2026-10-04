@@ -1,0 +1,24 @@
+<% content_for :title, "#{@envelope.name} · #{@month.name} · Budgie" %>
+<% budget = @month.budget %>
+
+<%= link_to "Back to #{@month.name}", month_path(@month), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: @envelope.name, description: @month.name do %>
+    <%= link_to "Edit", edit_envelope_path(@envelope, month: @month, from: "envelope"), class: "btn" %>
+    <%= button_to "Delete", envelope_path(@envelope), method: :delete, params: { month: @month.to_param },
+          form: { data: { turbo_confirm: "Delete the #{@envelope.name} envelope?" } },
+          class: "btn btn-ghost text-error" %>
+  <% end %>
+</div>
+
+<div class="mt-4">
+  <%= render "components/month_links", month: @month, path: ->(month) { month_envelope_path(month, @envelope) } %>
+</div>
+
+<div class="mt-8 grid gap-4 sm:grid-cols-2">
+  <%= render "components/stat_card", title: "Carried over",
+        value: render("components/money", amount: @line.carried_over, budget: budget) %>
+  <%= render "components/stat_card", title: "Available",
+        value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
+</div>

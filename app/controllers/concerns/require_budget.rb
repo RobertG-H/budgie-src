@@ -14,6 +14,6 @@ module RequireBudget
 
   private
     def require_budget
-      redirect_to new_budget_path if Current.user && Current.user.budget.nil?
+      redirect_to new_budget_path if Current.user && Current.budget.nil?
     end
 end

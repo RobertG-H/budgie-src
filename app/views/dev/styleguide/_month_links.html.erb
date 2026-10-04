@@ -1,0 +1,14 @@
+<%# locals: (budget:) %>
+<%# The links for the current month, and for a month a year on, which can also go back to this one. They go nowhere: the styleguide is drawn from sample data. %>
+<% current = Budget::Month.new(budget, Date.current) %>
+<% another = Budget::Month.new(budget, Date.current.next_year) %>
+<section id="month-links" aria-labelledby="month-links-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="month-links-heading" class="text-xl font-semibold">Month links</h2>
+  <p class="text-base-content/70">Links to the months either side, named for them. This month is only offered when viewing another month. Each page passes the path that keeps the links on that page.</p>
+
+  <h3 class="font-semibold">The current month</h3>
+  <%= render "components/month_links", month: current, path: ->(_month) { "#" } %>
+
+  <h3 class="font-semibold">Another month</h3>
+  <%= render "components/month_links", month: another, path: ->(_month) { "#" } %>
+</section>

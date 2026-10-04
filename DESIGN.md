@@ -100,7 +100,9 @@ second use turns it into a partial. The partials:
 | `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent. |
 | `_field` | A labelled form control (`:input`, `:select`, `:textarea` or `:checkbox`) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
-| `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. |
+| `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. |
+| `_month_links` | Links to the months either side of the one being viewed, named for them, and back to the current month when viewing another. Each page passes a `path` that turns a month into its own address, so the links stay on that page. |
+| `_record_row` | One record in a `<ul class="list">`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. The whole row links to the record's edit page, where it's also deleted. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |
 
 ## Interactivity

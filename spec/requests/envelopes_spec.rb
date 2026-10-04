@@ -6,68 +6,136 @@ RSpec.describe "Envelopes", type: :request do
 
   before { sign_in_as budget.user }
 
-  describe "GET /envelopes" do
-    it "is the root page" do
-      get root_path
+  describe "GET /months/:month/envelopes/:id" do
+    let(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 250) }
+
+    it "is headed with the envelope's name, the month as its description, and Edit and Delete as its actions" do
+      get month_envelope_path("2026-09", groceries)
 
       expect(response).to have_http_status(:ok)
-      assert_select "h1", text: "Envelopes"
+      assert_select "title", text: "Groceries · September 2026 · Budgie"
+      assert_select "h1", text: "Groceries"
+      assert_select "h1 + p", text: "September 2026"
+      assert_select "a.btn[href='#{edit_envelope_path(groceries, month: "2026-09", from: "envelope")}']", text: "Edit"
+      assert_select "form[action='#{envelope_path(groceries)}'][data-turbo-confirm='Delete the Groceries envelope?']" do
+        assert_select "input[name='_method'][value=delete]"
+        assert_select "input[name=month][value='2026-09']"
+        assert_select "button", text: "Delete"
+      end
     end
 
-    it "lists the budget's envelopes alphabetically with their starting balances" do
-      create(:budget_envelope, budget: budget, name: "rent", starting_balance: 1234.5)
-      create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
-      others_envelope
+    it "shows what it carried over and what's Available in the month" do
+      get month_envelope_path("2026-09", groceries)
 
-      get envelopes_path
-
-      assert_select "tbody tr", count: 2
-      assert_select "tbody tr:nth-child(1) td", text: "Bills"
-      assert_select "tbody tr:nth-child(1) td", text: "-$30.00"
-      assert_select "tbody tr:nth-child(2) td", text: "rent"
-      assert_select "tbody tr:nth-child(2) td", text: "$1,234.50"
-      assert_select "tbody tr:nth-child(2) a[href='#{edit_envelope_path(budget.envelopes.find_by!(name: "rent"))}']", text: "Edit"
-      assert_select "tbody tr:nth-child(2) form[data-turbo-confirm] button", text: "Delete"
-      expect(response.body).not_to include("Someone else&#39;s")
+      assert_select ".stat-title", text: "Carried over"
+      assert_select ".stat-title", text: "Available"
+      assert_select ".stat-value", text: "$250.00", count: 2
+      assert_select ".badge", count: 0
     end
 
-    it "shows the budget's currency once, in the header, with an Envelopes link" do
-      create(:budget_envelope, budget: budget)
+    it "says Overspent when Available is below zero" do
+      bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
 
-      get envelopes_path
+      get month_envelope_path("2031-12", bills)
 
-      assert_select "header", text: /Budget in CAD/
-      assert_select "nav a[href='#{envelopes_path}']", text: "Envelopes"
-      expect(response.body.scan("CAD").size).to eq(1)
+      assert_select ".stat-value", text: "-$30.00", count: 1
+      assert_select ".stat-value", text: /-\$30\.00\s+Overspent/, count: 1
+      assert_select ".badge", text: "Overspent", count: 1
     end
 
-    it "says when there are no envelopes" do
-      get envelopes_path
+    it "has month links that stay on this envelope, and a link back to the month view" do
+      travel_to Time.utc(2026, 9, 15, 16)
 
-      assert_select "main", text: /You don't have any envelopes yet./
+      get month_envelope_path("2026-09", groceries)
+
+      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-08", groceries)}']", text: "August 2026"
+      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-10", groceries)}']", text: "October 2026"
+      assert_select "a[href='#{month_path("2026-09")}']", text: "Back to September 2026"
+
+      get month_envelope_path("2027-03", groceries)
+
+      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-09", groceries)}']", text: "This month"
+    end
+
+    it "is not found for another user's envelope" do
+      get month_envelope_path("2026-09", others_envelope)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is not found for an envelope that doesn't exist, or a month that isn't one" do
+      get month_envelope_path("2026-09", 0)
+      expect(response).to have_http_status(:not_found)
+
+      get "/months/2026-09/envelopes/not-an-id"
+      expect(response).to have_http_status(:not_found)
+
+      get "/months/2026-13/envelopes/#{groceries.id}"
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "requires sign-in" do
+      delete session_path
+
+      get month_envelope_path("2026-09", groceries)
+
+      expect(response).to redirect_to(sign_in_path)
+    end
+  end
+
+  describe "the list of envelopes" do
+    it "is gone: envelopes are created from the month view, and edited and deleted from their page" do
+      get "/envelopes"
+      expect(response).to have_http_status(:not_found)
+
+      get "/envelopes/#{create(:budget_envelope, budget: budget).id}"
+      expect(response).to have_http_status(:not_found)
     end
   end
 
   describe "GET /envelopes/new" do
-    it "shows the form" do
-      get new_envelope_path
+    it "shows the form, remembering the page and month it was opened from" do
+      get new_envelope_path(month: "2026-09", from: "month")
 
       expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "New envelope"
       assert_select "form[action='#{envelopes_path}'] input[name='envelope[name]']"
       assert_select "form input[type=number][name='envelope[starting_balance]'][step='0.01']"
       assert_select "label", text: "Starting balance"
+      assert_select "form input[type=hidden][name=from][value=month]"
+      assert_select "form input[type=hidden][name=month][value='2026-09']"
+    end
+
+    it "has a Cancel link back to the month it was opened from" do
+      get new_envelope_path(month: "2026-09", from: "month")
+
+      assert_select "a.btn[href='#{month_path("2026-09")}']", text: "Cancel"
+    end
+
+    it "is not found for a month that isn't one" do
+      get new_envelope_path(month: "2026-13")
+
+      expect(response).to have_http_status(:not_found)
     end
   end
 
   describe "POST /envelopes" do
-    it "creates an envelope in the user's budget" do
-      expect { post envelopes_path, params: { envelope: { name: " Groceries ", starting_balance: "-12.34" } } }
+    it "creates an envelope in the user's budget, and goes back to the month it was opened from" do
+      expect { post envelopes_path, params: { envelope: { name: " Groceries ", starting_balance: "-12.34" }, from: "month", month: "2027-03" } }
         .to change(budget.envelopes, :count).by(1)
 
       expect(budget.envelopes.sole).to have_attributes(name: "Groceries", starting_balance: BigDecimal("-12.34"))
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(month_path("2027-03"))
       follow_redirect!
       assert_select "[role=status]", text: "Envelope created."
+    end
+
+    it "goes to the current month when it wasn't opened from one" do
+      travel_to Time.utc(2026, 9, 15, 16)
+
+      post envelopes_path, params: { envelope: { name: "Groceries" } }
+
+      expect(response).to redirect_to(month_path("2026-09"))
     end
 
     it "saves a blank starting balance as 0" do
@@ -76,15 +144,17 @@ RSpec.describe "Envelopes", type: :request do
       expect(budget.envelopes.sole.starting_balance).to eq(0)
     end
 
-    it "shows errors for an invalid envelope" do
+    it "shows errors for an invalid envelope, and remembers where the form was opened from" do
       create(:budget_envelope, budget: budget, name: "Groceries")
 
-      expect { post envelopes_path, params: { envelope: { name: "groceries", starting_balance: "1.234" } } }
+      expect { post envelopes_path, params: { envelope: { name: "groceries", starting_balance: "1.234" }, from: "month", month: "2026-09" } }
         .not_to change(Budget::Envelope, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
       assert_select "[role=alert] li", text: "Name has already been taken"
       assert_select "[role=alert] li", text: "Starting balance can't have more than 2 decimal places"
+      assert_select "form input[type=hidden][name=month][value='2026-09']"
+      assert_select "a.btn[href='#{month_path("2026-09")}']", text: "Cancel"
     end
 
     it "ignores a budget_id in the params" do
@@ -98,13 +168,23 @@ RSpec.describe "Envelopes", type: :request do
   end
 
   describe "GET /envelopes/:id/edit" do
-    it "shows the form for the user's envelope" do
-      envelope = create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 50)
+    let(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 50) }
 
-      get edit_envelope_path(envelope)
+    it "shows the form for the user's envelope" do
+      get edit_envelope_path(groceries, month: "2026-09", from: "envelope")
 
       expect(response).to have_http_status(:ok)
-      assert_select "form[action='#{envelope_path(envelope)}'] input[name='envelope[name]'][value=Groceries]"
+      assert_select "title", text: "Edit Groceries · Budgie"
+      assert_select "h1", text: "Edit envelope"
+      assert_select "form[action='#{envelope_path(groceries)}'] input[name='envelope[name]'][value=Groceries]"
+      assert_select "form input[type=hidden][name=from][value=envelope]"
+      assert_select "form input[type=hidden][name=month][value='2026-09']"
+    end
+
+    it "has a Cancel link back to the envelope's page, for the month it was opened from" do
+      get edit_envelope_path(groceries, month: "2026-09", from: "envelope")
+
+      assert_select "a.btn[href='#{month_envelope_path("2026-09", groceries)}']", text: "Cancel"
     end
 
     it "is not found for another user's envelope" do
@@ -117,20 +197,30 @@ RSpec.describe "Envelopes", type: :request do
   describe "PATCH /envelopes/:id" do
     let(:envelope) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 50) }
 
-    it "updates the name and starting balance" do
-      patch envelope_path(envelope), params: { envelope: { name: "Food", starting_balance: "-5" } }
+    it "updates the name and starting balance, and goes back to the envelope's page for the month it was opened from" do
+      patch envelope_path(envelope), params: { envelope: { name: "Food", starting_balance: "-5" }, from: "envelope", month: "2027-03" }
 
       expect(envelope.reload).to have_attributes(name: "Food", starting_balance: -5)
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(month_envelope_path("2027-03", envelope))
       follow_redirect!
       assert_select "[role=status]", text: "Envelope updated."
+      assert_select "h1", text: "Food"
     end
 
-    it "shows errors for an invalid change" do
-      patch envelope_path(envelope), params: { envelope: { name: " " } }
+    it "goes back to the month view when it was opened from there, or from something that isn't a page" do
+      [ "month", "https://evil.example/", "//evil.example", nil ].each do |from|
+        patch envelope_path(envelope), params: { envelope: { name: "Food" }, from: from, month: "2026-09" }
+
+        expect(response).to redirect_to(month_path("2026-09"))
+      end
+    end
+
+    it "shows errors for an invalid change, and remembers where the form was opened from" do
+      patch envelope_path(envelope), params: { envelope: { name: " " }, from: "envelope", month: "2026-09" }
 
       expect(response).to have_http_status(:unprocessable_content)
       assert_select "[role=alert] li", text: "Name can't be blank"
+      assert_select "a.btn[href='#{month_envelope_path("2026-09", envelope)}']", text: "Cancel"
       expect(envelope.reload.name).to eq("Groceries")
     end
 
@@ -151,15 +241,23 @@ RSpec.describe "Envelopes", type: :request do
   end
 
   describe "DELETE /envelopes/:id" do
-    it "deletes the user's envelope" do
+    it "deletes the user's envelope, and goes to the month view for the month it was opened from" do
       envelope = create(:budget_envelope, budget: budget)
 
-      expect { delete envelope_path(envelope) }.to change(Budget::Envelope, :count).by(-1)
+      expect { delete envelope_path(envelope), params: { month: "2027-03" } }.to change(Budget::Envelope, :count).by(-1)
 
       expect(response).to have_http_status(:see_other)
-      expect(response).to redirect_to(envelopes_path)
+      expect(response).to redirect_to(month_path("2027-03"))
       follow_redirect!
       assert_select "[role=status]", text: "Envelope deleted."
+    end
+
+    it "goes to the month view even when it was opened from the envelope's own page, which is gone" do
+      envelope = create(:budget_envelope, budget: budget)
+
+      delete envelope_path(envelope), params: { from: "envelope", month: "2026-09" }
+
+      expect(response).to redirect_to(month_path("2026-09"))
     end
 
     it "is not found for another user's envelope, which isn't deleted" do

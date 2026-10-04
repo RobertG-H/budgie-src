@@ -69,6 +69,15 @@ RSpec.describe Budget::Envelope, type: :model do
       expect(envelope.errors.full_messages).to eq([ "Starting balance is not a number" ])
     end
 
+    it "rejects NaN and Infinity as not numbers, without also complaining about decimal places" do
+      [ "NaN", "Infinity", "-Infinity" ].each do |value|
+        envelope = build(:budget_envelope, starting_balance: value)
+
+        expect(envelope).not_to be_valid
+        expect(envelope.errors.full_messages).to eq([ "Starting balance is not a number" ])
+      end
+    end
+
     it "rejects an amount too large to store" do
       expect(build(:budget_envelope, starting_balance: "10000000000000")).not_to be_valid
       expect(build(:budget_envelope, starting_balance: "-10000000000000")).not_to be_valid

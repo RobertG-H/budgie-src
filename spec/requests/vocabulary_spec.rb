@@ -1,0 +1,62 @@
+require "rails_helper"
+
+# The UI uses only the terms CLAUDE.md lists. Internal names (tables, columns) stay out of it, and so do the terms
+# GLOSSARY.md says to avoid.
+RSpec.describe "The words on the pages", type: :request do
+  let(:retired_terms) do
+    /\b(categor(y|ies)|income|inflow|outflow|budgeted|spending|expense|purchase|payment|transfer|move|reimbursement|repayment|wallet|transaction|payee|payer)\b/i
+  end
+  let(:budget) { create(:budget) }
+  let!(:bills) { create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30) }
+  let!(:paycheck) do
+    create(:budget_deposit, budget: budget, description: "Paycheck", date: Date.new(2026, 9, 30), month: Date.new(2026, 10, 1), amount: 3000, notes: "Biweekly")
+  end
+
+  before { sign_in_as budget.user }
+
+  # What a person reads on the page, not its markup.
+  def visible_text
+    Nokogiri::HTML(response.body).at("main").text.squish
+  end
+
+  {
+    "the month view" => -> { month_path("2026-10") },
+    "a month's Deposits" => -> { month_deposits_path("2026-10") },
+    "the envelope page" => -> { month_envelope_path("2026-10", bills) }
+  }.each do |page, path|
+    it "has no table or column names in #{page}" do
+      get instance_exec(&path)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to match(/budget_|starting_balance|carried_over|ready_to_assign|_id\b/)
+      expect(visible_text).not_to match(/\w+_\w+/)
+    end
+  end
+
+  {
+    "the month view" => -> { month_path("2026-10") },
+    "a month's Deposits" => -> { month_deposits_path("2026-10") },
+    "the envelope page" => -> { month_envelope_path("2026-10", bills) },
+    "the Deposit form" => -> { new_deposit_path(month: "2026-10", from: "month") },
+    "the Deposit edit form" => -> { edit_deposit_path(paycheck, month: "2026-10", from: "deposits") },
+    "the envelope form" => -> { new_envelope_path(month: "2026-10", from: "month") },
+    "the envelope edit form" => -> { edit_envelope_path(bills, month: "2026-10", from: "envelope") }
+  }.each do |page, path|
+    it "has no snake_case names and no retired terms in the words on #{page}" do
+      get instance_exec(&path)
+
+      expect(response).to have_http_status(:ok)
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  it "uses the same words for what went wrong when a Deposit is refused" do
+    post deposits_path, params: { deposit: { description: "", date: "2026-10-15", month: "2026-09-01", amount: "1.005" } }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(visible_text).to include("Ready to Assign in must be October 2026 or November 2026")
+    expect(visible_text).not_to match(/\w+_\w+/)
+    expect(visible_text).not_to match(retired_terms)
+  end
+end

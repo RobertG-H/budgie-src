@@ -13,6 +13,7 @@ class Budget < ApplicationRecord
 
   belongs_to :user
   has_many :envelopes, dependent: :destroy
+  has_many :deposits, dependent: :destroy
 
   validates :currency, presence: true
   validates :currency, inclusion: { in: CURRENCIES.keys, message: "isn't supported" }, allow_blank: true

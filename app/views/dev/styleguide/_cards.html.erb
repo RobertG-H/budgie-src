@@ -15,4 +15,9 @@
 
   <h3 class="font-semibold">Stat card</h3>
   <%= render "components/stat_card", title: "Ready to Assign", value: money(1250, budget: budget), description: "Across 3 envelopes" %>
+
+  <h3 class="font-semibold">Stat card that links</h3>
+  <p class="text-base-content/70">Given an href, the whole card links to the records behind its number.</p>
+  <%= render "components/stat_card", title: "Ready to Assign", value: money(1250, budget: budget),
+        description: "Carried over #{money(1000, budget: budget)} · Deposited #{money(250, budget: budget)}", href: "#" %>
 </section>

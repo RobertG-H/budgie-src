@@ -429,7 +429,7 @@ LISTEN 0  4096  127.0.0.1:80   0.0.0.0:*  users:(("docker-proxy",...))
 1. `docker compose run --rm kamal task invite:create EMAIL=<address> -d testing`, which prints `Invited <address>.`
 2. The invite arrives, and the Zedmail dashboard shows it as delivered. Its link goes to `https://testing.budgiebuddie.com/sign_in`.
 3. Sign in with Google as that address. You land on budget setup; choose a currency.
-4. Create an envelope. It's saved and listed.
+4. Create an envelope from the month view. It's saved and listed there.
 
 On **production**, do this with an address that **isn't** the Google Cloud project's owner: that's what proves the consent screen is really In production.
 If that address isn't one of Zedmail's verified test addresses, it also needs Zedmail to have moved the account out of sandbox mode.
@@ -443,7 +443,7 @@ docker compose run --rm kamal task invite:list -d production
 
 Testing's list has the address you invited there, as `accepted`, and production's doesn't: it lists only what you've invited on production, or says `No invites.`
 
-**A signed-in page isn't cached, and the session cookie is `Secure`.** Signed in, open the browser's developer tools and reload the envelopes page:
+**A signed-in page isn't cached, and the session cookie is `Secure`.** Signed in, open the browser's developer tools and reload the month view:
 
 - In **Network**, the page's own request has `cf-cache-status: DYNAMIC` in its response headers, or no `cf-cache-status` at all.
 - Under the site's cookies (**Application** in Chrome, **Storage** in Firefox and Safari), `session_id` has **Secure** ticked, and so does every other Budgie cookie.

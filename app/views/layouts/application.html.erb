@@ -29,16 +29,13 @@
         <%# The currency sits under the name on a phone, and beside it from sm up. %>
         <div class="flex flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-4">
           <%= link_to "Budgie", root_path, class: "text-xl font-semibold" %>
-          <% if authenticated? && (budget = Current.user.budget) %>
+          <% if authenticated? && (budget = Current.budget) %>
             <span class="text-sm text-base-content/70">Budget in <%= budget.currency %></span>
           <% end %>
         </div>
 
         <% if authenticated? %>
           <nav aria-label="Main" class="flex flex-none items-center gap-2">
-            <% if Current.user.budget %>
-              <%= link_to "Envelopes", envelopes_path, class: "btn btn-ghost btn-sm" %>
-            <% end %>
             <%= button_to "Sign out", session_path, method: :delete, class: "btn btn-ghost btn-sm" %>
           </nav>
         <% end %>

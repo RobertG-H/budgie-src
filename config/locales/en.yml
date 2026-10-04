@@ -29,3 +29,9 @@
 
 en:
   hello: "Hello world"
+
+  activerecord:
+    attributes:
+      # What the form calls the month a Deposit counts toward.
+      budget/deposit:
+        month: Ready to Assign in

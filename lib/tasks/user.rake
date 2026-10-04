@@ -8,7 +8,8 @@ namespace :user do
     sessions = user.sessions.count
     budget = if user.budget
       envelopes = user.budget.envelopes.count
-      "their budget with #{envelopes} #{"envelope".pluralize(envelopes)}"
+      deposits = user.budget.deposits.count
+      "their budget with #{envelopes} #{"envelope".pluralize(envelopes)} and #{deposits} #{"deposit".pluralize(deposits)}"
     else
       "no budget"
     end

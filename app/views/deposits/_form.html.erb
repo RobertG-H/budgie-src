@@ -1,0 +1,44 @@
+<%# locals: (deposit:, cancel_path:) %>
+<%# A Deposit counts toward the month of its date or the month after, so those are the two choices. The month-choice Stimulus controller renames them when the date changes, and keeps whichever was chosen. Without JavaScript they're the date's as of this page, and a month that no longer fits is a validation error. %>
+<% first_of_month = (deposit.date || @month.date).beginning_of_month %>
+<% months = [ first_of_month, first_of_month.next_month ] %>
+
+<%= form_with model: deposit, class: "mt-8 space-y-6", data: { controller: "month-choice" } do |form| %>
+  <%= render "form_errors", record: deposit %>
+  <%= render "origin_fields", month: @month %>
+
+  <%= render "components/field", form: form, attribute: :description, hint: "Such as Paycheck" do |field| %>
+    <%= form.text_field :description, required: true, autofocus: true, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :date do |field| %>
+    <%= form.date_field :date, required: true, data: { month_choice_target: "date", action: "input->month-choice#update" }, **field %>
+  <% end %>
+
+  <% month_invalid = deposit.errors.include?(:month) %>
+  <fieldset class="space-y-2" aria-describedby="deposit_month_hint">
+    <legend class="mb-2 font-medium"><%= Budget::Deposit.human_attribute_name(:month) %></legend>
+    <% months.each do |month| %>
+      <label class="flex items-center gap-3">
+        <%= form.radio_button :month, month.iso8601, required: true,
+              class: (month_invalid ? "radio radio-error" : "radio radio-primary"),
+              aria: { invalid: (true if month_invalid) }, data: { month_choice_target: "radio" } %>
+        <span data-month-choice-target="name"><%= month.strftime("%B %Y") %></span>
+      </label>
+    <% end %>
+    <p id="deposit_month_hint" class="text-sm text-base-content/70">Choose the month after to save this Deposit for next month.</p>
+  </fieldset>
+
+  <%= render "components/field", form: form, attribute: :amount do |field| %>
+    <%= form.number_field :amount, step: 0.01, required: true, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
+    <%= form.text_area :notes, rows: 3, **field %>
+  <% end %>
+
+  <div class="flex items-center gap-4">
+    <%= form.submit class: "btn btn-primary" %>
+    <%= link_to "Cancel", cancel_path, class: "btn btn-ghost" %>
+  </div>
+<% end %>

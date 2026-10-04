@@ -76,12 +76,21 @@ Each user has at most one `Budget` (unique `user_id`), in a currency they choose
 The `RequireBudget` concern in `ApplicationController` redirects a signed-in user without a budget to `new_budget_path`; opt out with `allow_missing_budget`.
 `budget:currency EMAIL= CURRENCY=` in `lib/tasks/budget.rake` is the only way to change a currency, and it doesn't convert amounts.
 
-Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb` with the table `budget_envelopes`, and later tables follow suit (`Budget::Deposit`, …).
+Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb` with the table `budget_envelopes`, and `Budget::Deposit` follows suit with `budget_deposits`, as later tables will.
 `Budget.use_relative_model_naming?` drops the prefix from routes, params and DOM ids, so it's `envelopes_path`, `params[:envelope]` and `EnvelopesController`.
-Controllers look records up through `Current.user.budget`, so another user's record is a 404, and `budget_id` is never a permitted param.
+`Current.budget` is the one way controllers and views find the budget. For now it's the signed-in user's, and Multiple and shared budgets will change how it's picked, so nothing reads `Current.user.budget`. Controllers look records up through it, so another user's record is a 404, and `budget_id` is never a permitted param.
 
 Constraints live in the database as well as the model (check constraints, unique indexes such as `(budget_id, lower(name))`). Foreign keys are `ON DELETE RESTRICT`, and Rails deletes children first through `dependent: :destroy`, so give new budget tables `dependent:` options to keep `user:delete` working.
 PostgreSQL reports a restrict violation as `PG::RestrictViolation`, which Rails raises as a plain `ActiveRecord::StatementInvalid`, not `ActiveRecord::InvalidForeignKey`.
+An amount in a `decimal(15, 2)` column is validated with `money: true` (any sign) or `money: { positive: true }` (`app/validators/money_validator.rb`): a number under 10**13 with at most 2 decimal places, where more places is an error and never rounded.
+
+### The month view and balances
+
+The home page is the month view: `/` is the current month and `/months/YYYY-MM` any other, and anything else is a 404. Navigation isn't bounded. Everything hangs off a month: `/months/YYYY-MM/deposits` lists the Deposits behind Ready to Assign, and `/months/YYYY-MM/envelopes/:id` is an envelope's page for it. Adding, editing and deleting records stay on flat routes (`/deposits`, `/envelopes`).
+`config.time_zone` is Eastern Time (US & Canada) for everyone. Records store dates, not times, so it only decides "today": which month `/` opens and what a date field starts as.
+`Budget::Month` (`app/models/budget/month.rb`) is the only place a balance is computed, so views and controllers do no arithmetic on balances. `Budget::Month.new(budget, date)` works on the calendar month containing `date` and exposes `ready_to_assign` (with its `carried_over` and `deposited`), `envelopes` (alphabetical, each with its `carried_over` and `available`), `previous` and `next`. It runs a fixed number of grouped `SUM … FILTER` queries, split into "before the month" and "in the month", so the query count doesn't grow with months of history or with envelopes, and `spec/models/budget/month_spec.rb` checks that. It uses BigDecimal throughout and stores and caches nothing: no table has a balance column. A new figure is added there, in the same queries.
+A Deposit counts toward Ready to Assign in its `month`, not the month of its `date`: the month of its date or the month after, chosen per Deposit and defaulting to the date's.
+Every form carries `from` (`month`, `deposits` or `envelope`) and `month` as hidden fields (`application/_origin_fields`), so saving, deleting or cancelling goes back to the page it was opened from (`ReturnsToOrigin`). `from` is a page name and never a URL, so it can't become an open redirect. `MonthScoped` reads `month` ("2026-09") from a month's URL and from those forms.
 
 ### Production
 
@@ -95,6 +104,8 @@ Cloudflare terminates TLS, so `assume_ssl` makes every request count as HTTPS, a
 Request, model and service specs use FactoryBot and shoulda-matchers; there are no system specs yet.
 Specs never call Google: `spec/support/omniauth.rb` turns on OmniAuth test mode and provides `google_auth_hash` and `sign_in_with_google`.
 In request specs, `sign_in_as(user)` signs in without going through a provider. A user needs a budget to reach any page but setup, so use `create(:user, :with_budget)` or `create(:budget)`. Time helpers such as `travel` are available in every spec.
+A Deposit is `create(:budget_deposit, budget:, date:, month:)`, where `month` is the date's unless given. `count_queries { … }` (`spec/support/query_counter.rb`) counts the SQL a block runs.
+Eastern Time has daylight saving, so `30.days` is a span of calendar days there. A spec a minute either side of such a limit travels from `Time.current` (`travel_to Time.current + 30.days`) rather than with `travel 30.days`, which adds exact hours and fails on some dates. To check "today" itself, `travel_to Time.utc(2026, 10, 1, 0, 30)` is still September 30 in Eastern time.
 
 ### Frontend
 

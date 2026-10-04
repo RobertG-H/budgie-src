@@ -1,6 +1,6 @@
-<%# locals: (title:, value:, description: nil) %>
-<%# One headline number, such as Ready to Assign. daisyUI mutes stat text to 60%, which is under AA here, so it's set back to 70%. %>
-<div class="stats w-full border border-base-300">
+<%# locals: (title:, value:, description: nil, href: nil) %>
+<%# One headline number, such as Ready to Assign. Given an `href`, the whole card links to the records behind the number. daisyUI mutes stat text to 60%, which is under AA here, so it's set back to 70%. %>
+<%= content_tag (href ? :a : :div), href: href, class: [ "stats w-full border border-base-300", ("hover:bg-base-200" if href) ] do %>
   <div class="stat">
     <div class="stat-title text-base-content/70"><%= title %></div>
     <div class="stat-value"><%= value %></div>
@@ -8,4 +8,4 @@
       <div class="stat-desc text-base-content/70"><%= description %></div>
     <% end %>
   </div>
-</div>
+<% end %>

@@ -5,6 +5,7 @@ RSpec.describe Budget, type: :model do
 
   it { is_expected.to belong_to(:user) }
   it { is_expected.to have_many(:envelopes).class_name("Budget::Envelope").dependent(:destroy) }
+  it { is_expected.to have_many(:deposits).class_name("Budget::Deposit").dependent(:destroy) }
   it { is_expected.to validate_presence_of(:currency) }
   it { is_expected.to validate_inclusion_of(:currency).in_array(Budget::CURRENCIES.keys).with_message("isn't supported") }
 
@@ -29,6 +30,7 @@ RSpec.describe Budget, type: :model do
 
   it "names nested models without the Budget prefix in routes and params" do
     expect(Budget::Envelope.model_name).to have_attributes(route_key: "envelopes", param_key: "envelope")
+    expect(Budget::Deposit.model_name).to have_attributes(route_key: "deposits", param_key: "deposit")
   end
 
   describe "database constraints" do

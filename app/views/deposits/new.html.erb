@@ -1,0 +1,7 @@
+<% content_for :title, "New deposit · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "New deposit" %>
+
+  <%= render "form", deposit: @deposit, cancel_path: return_path(@month) %>
+</div>

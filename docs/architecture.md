@@ -98,12 +98,34 @@ Each user has at most one `Budget`, in a currency chosen during first-run setup;
 default currency. The `RequireBudget` concern redirects a signed-in user without one to budget setup.
 
 Models that belong to a budget are namespaced: `Budget::Envelope` lives in `app/models/budget/envelope.rb`
-with the table `budget_envelopes`. `Budget.use_relative_model_naming?` drops the prefix from routes, params
-and DOM ids, so it's `envelopes_path` and `EnvelopesController`. Controllers look records up through
-`Current.user.budget`, so another user's record is a 404.
+with the table `budget_envelopes`, and `Budget::Deposit` has `budget_deposits`. `Budget.use_relative_model_naming?`
+drops the prefix from routes, params and DOM ids, so it's `envelopes_path` and `EnvelopesController`.
+`Current.budget` is the one way controllers and views find the budget — for now the signed-in user's — and
+controllers look records up through it, so another user's record is a 404.
 
 Constraints live in the database as well as in the models — check constraints, unique indexes, and
-`ON DELETE RESTRICT` foreign keys with Rails deleting children first through `dependent: :destroy`.
+`ON DELETE RESTRICT` foreign keys with Rails deleting children first through `dependent: :destroy`. An amount
+is validated as a number under 10¹³ with at most two decimal places, and more places is an error rather than
+being rounded.
+
+### The month view and balances
+
+The home page is the month view: `/` is the current month and `/months/YYYY-MM` is any other. Everything
+hangs off a month — `/months/YYYY-MM/deposits` lists the Deposits behind Ready to Assign, and
+`/months/YYYY-MM/envelopes/:id` is an envelope's page for that month. The time zone is Eastern Time (US &
+Canada) for everyone. Records store dates, not times, so it only decides what "today" is: which month `/`
+opens on, and what a date field starts as.
+
+Every balance is worked out in one place, `Budget::Month` (`app/models/budget/month.rb`), which views and
+controllers only ask. It works on one calendar month of a budget and runs a fixed number of grouped `SUM`
+queries, split into "before the month" and "in the month", so the number of queries doesn't grow with the
+months of history or with the number of envelopes. Nothing is stored or cached, and no table has a balance
+column.
+
+A Deposit counts toward Ready to Assign in its `month`, which is the month of its date or the month after it,
+so someone living on last month's money can mark each paycheck for next month. Every form remembers the page
+it was opened from, as a page name rather than a URL, and goes back there when it's saved, deleted or
+cancelled.
 
 ### Frontend
 
