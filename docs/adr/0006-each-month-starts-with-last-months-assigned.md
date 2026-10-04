@@ -11,3 +11,5 @@ Assigned is one figure per envelope per month, and most envelopes get the same a
 ## Consequences
 
 A background job, not the user, writes the copied amounts, so a month that hasn't begun shows only what was entered ahead for it.
+
+The copy skips archived envelopes ([ADR 0008](0008-an-archived-envelope-shows-only-where-it-has-figures.md)), so an archived envelope never gets an Assigned amount without the user doing it.

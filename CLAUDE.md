@@ -135,10 +135,12 @@ After a UI change:
 
 - Work is tracked as GitHub issues in `RobertG-H/budgie-src`. A build ticket has a plain title and the `enhancement` label, and GitHub's blocked-by links give the build order; the `[NN]` in the oldest tickets' titles is a retired build-plan number. An issue's Decisions, Build and Done when sections are the spec.
 - In a PR description, put "close", "fixes" or "resolves" next to `#N` only when merging should close `#N`. GitHub matches them mid-sentence ("would close #10" closed #10 on merge), and Dependabot treats its own PR closed that way as dismissed and deletes its branch.
-- User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spend, Spent, Refund, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Other forms of a listed term count as that term, such as Deposited, Refunded or Assign. Internal field names stay out of the UI.
+- User-facing budgeting copy may only use these terms: Budget, Envelope, Deposit, Assigned, Spend, Spent, Refund, Reallocation, Archive, Available, Overspent, Ready to Assign, Carried over, and Starting balance (the amount already in an envelope before Budgie tracked it). Other forms of a listed term count as that term, such as Deposited, Refunded, Reallocate, Reallocated, Archived, Unarchive or Assign. Internal field names stay out of the UI.
 - Envelopes never reset at month end: leftover money and overspending both carry into the next month.
 - A Deposit counts toward Ready to Assign in the month of its date or the month after, so a user can live on last month's money (`docs/adr/0005-a-deposit-can-count-toward-next-month.md`).
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
+- A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
+- An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
 
 ## Agent skills
 
