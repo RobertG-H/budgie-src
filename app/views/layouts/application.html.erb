@@ -18,6 +18,11 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
+    <%# The month view's remembered "Show details" (month_details_controller.js, which has the same key), put on <html> before the first paint so the table doesn't show collapsed and then open. The page works without it. %>
+    <%= javascript_tag nonce: true do %>
+      try { var details = localStorage.getItem("budgie.monthDetails"); if (details === "on" || details === "off") document.documentElement.dataset.details = details } catch (_) {}
+    <% end %>
+
     <%# Includes all stylesheet files in app/assets/stylesheets %>
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>

@@ -1,0 +1,10 @@
+<%# locals: (line:) %>
+<%# How much of what an envelope had to spend is Available, as a bar under its Available figure: success for plenty, warning for a little, a full bar in error for Overspent, and none at all when it had nothing to spend. It has no word, since the figure beside it is the text, and the bar's length and colour tell plenty from a little, so it's hidden from assistive technology. A native <progress> because its length is a value, where a styled div's would need an inline style attribute. Overspent keeps its word, in the badge on a line under the bar, so the figure stays right-aligned. %>
+<% level = line.available_level %>
+<% unless level == :none %>
+  <% color = { plenty: "progress-success", little: "progress-warning", overspent: "progress-error" }.fetch(level) %>
+  <progress class="progress <%= color %> ml-auto block w-16" value="<%= line.available_percent %>" max="100" aria-hidden="true"></progress>
+<% end %>
+<% if level == :overspent %>
+  <div class="mt-1 leading-none"><%= render "components/overspent_badge" %></div>
+<% end %>

@@ -229,11 +229,11 @@ RSpec.describe "Months", type: :request do
       assert_select "thead th", text: "Assigned"
       [ 3, 4, 7 ].each do |column|
         assert_select "thead th:nth-child(#{column})[class~='hidden']", count: 0
-        assert_select "tbody td:nth-child(#{column})[class~='hidden']", count: 0
+        assert_select "tbody tr[id] td:nth-child(#{column})[class~='hidden']", count: 0
       end
       [ 2, 5, 6 ].each do |column|
-        assert_select "thead th:nth-child(#{column})[class~='hidden'][class~='sm:table-cell']", count: 1
-        assert_select "tbody td:nth-child(#{column})[class~='hidden'][class~='sm:table-cell']", count: 2
+        assert_select "thead th:nth-child(#{column})[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", count: 1
+        assert_select "tbody tr[id] td:nth-child(#{column})[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", count: 2
       end
     end
 
@@ -803,8 +803,8 @@ RSpec.describe "Months", type: :request do
       expect(css_select("thead th").map { |heading| heading.text.squish }).to eq(
         [ "Envelope", "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ]
       )
-      assert_select "thead th:nth-child(6)[class~='hidden'][class~='sm:table-cell'][class~='text-right']", text: "Reallocated"
-      assert_select "tbody td:nth-child(6)[class~='hidden'][class~='sm:table-cell'][class~='tabular-nums']", count: 2
+      assert_select "thead th:nth-child(6)[class~='hidden'][class~='sm:in-data-[details=on]:table-cell'][class~='text-right']", text: "Reallocated"
+      assert_select "tbody tr[id] td:nth-child(6)[class~='hidden'][class~='sm:in-data-[details=on]:table-cell'][class~='tabular-nums']", count: 2
     end
 
     it "has no Reallocate on the month view, and doesn't merge into Assigned" do
@@ -884,28 +884,30 @@ RSpec.describe "Months", type: :request do
       assert_select "thead th:nth-child(5)", text: "Refunded"
       assert_select "thead th:nth-child(6)", text: "Reallocated"
       assert_select "thead th:nth-child(7)", text: "Available"
-      assert_select "tbody tr", count: 2
-      assert_select "tbody tr:nth-child(1) td:nth-child(1) a[href='#{month_envelope_path("2026-09", bills)}']", text: "Bills"
-      assert_select "tbody tr:nth-child(1) td:nth-child(2)", text: "$40.00"
-      assert_select "tbody tr:nth-child(1) td:nth-child(4)", text: "$0.00"
-      assert_select "tbody tr:nth-child(1) td:nth-child(5)", text: "$0.00"
-      assert_select "tbody tr:nth-child(1) td:nth-child(6)", text: "$0.00"
-      assert_select "tbody tr:nth-child(1) td:nth-child(7)", text: "$40.00"
-      assert_select "tbody tr:nth-child(2) td:nth-child(1) a[href='#{month_envelope_path("2026-09", rent)}']", text: "rent"
-      assert_select "tbody tr:nth-child(2) td:nth-child(7)", text: "$1,234.50"
+      assert_select "tbody tr[id]", count: 2
+      assert_select "tbody tr[id]:first-child", count: 2
+      expect(css_select("tbody tr[id]").map { |row| row["id"] }).to eq([ "envelope_#{bills.id}", "envelope_#{rent.id}" ])
+      assert_select "tr#envelope_#{bills.id} td:nth-child(1) a[href='#{month_envelope_path("2026-09", bills)}']", text: "Bills"
+      assert_select "tr#envelope_#{bills.id} td:nth-child(2)", text: "$40.00"
+      assert_select "tr#envelope_#{bills.id} td:nth-child(4)", text: "$0.00"
+      assert_select "tr#envelope_#{bills.id} td:nth-child(5)", text: "$0.00"
+      assert_select "tr#envelope_#{bills.id} td:nth-child(6)", text: "$0.00"
+      assert_select "tr#envelope_#{bills.id} td:nth-child(7)", text: "$40.00"
+      assert_select "tr#envelope_#{rent.id} td:nth-child(1) a[href='#{month_envelope_path("2026-09", rent)}']", text: "rent"
+      assert_select "tr#envelope_#{rent.id} td:nth-child(7)", text: "$1,234.50"
       expect(response.body).not_to include("Someone else")
     end
 
     it "show their Starting balance as Available in every month, and say Overspent when it's negative" do
-      create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
-      create(:budget_envelope, budget: budget, name: "Fuel", starting_balance: 0)
+      bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
+      fuel = create(:budget_envelope, budget: budget, name: "Fuel", starting_balance: 0)
 
       [ "2026-09", "2024-01", "2031-12" ].each do |month|
         get month_path(month)
 
-        assert_select "tbody tr:nth-child(1) td:nth-child(7)", text: /\A-\$30\.00\s+Overspent\z/
-        assert_select "tbody tr:nth-child(1) td:nth-child(7) .text-error", text: "-$30.00"
-        assert_select "tbody tr:nth-child(2) td:nth-child(7)", text: "$0.00"
+        assert_select "tr#envelope_#{bills.id} td:nth-child(7)", text: /\A-\$30\.00\s+Overspent\z/
+        assert_select "tr#envelope_#{bills.id} td:nth-child(7) .text-error", text: "-$30.00"
+        assert_select "tr#envelope_#{fuel.id} td:nth-child(7)", text: "$0.00"
         assert_select ".badge", text: "Overspent", count: 1
       end
     end
@@ -920,12 +922,12 @@ RSpec.describe "Months", type: :request do
       assert_select "thead th[scope=col].text-right", text: "Refunded"
       assert_select "thead th[scope=col].text-right", text: "Reallocated"
       assert_select "thead th[scope=col].text-right", text: "Available"
-      assert_select "thead th[class~='hidden'][class~='sm:table-cell']", text: "Carried over"
-      assert_select "thead th[class~='hidden'][class~='sm:table-cell']", text: "Refunded"
-      assert_select "thead th[class~='hidden'][class~='sm:table-cell']", text: "Reallocated"
+      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: "Carried over"
+      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: "Refunded"
+      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: "Reallocated"
       assert_select "thead th[class~='hidden']", count: 3
-      assert_select "tbody td.text-right.tabular-nums", count: 6
-      assert_select "tbody td[class~='hidden'][class~='sm:table-cell']", count: 3
+      assert_select "tbody tr[id] td.text-right.tabular-nums", count: 6
+      assert_select "tbody tr[id] td[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", count: 3
     end
 
     it "are replaced by an invitation to create one when there are none" do
@@ -982,6 +984,166 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2100-12")
       assert_select "a[href='#{month_path("2101-01")}']", text: "January 2101"
+    end
+  end
+
+  describe "the Available bar" do
+    let(:month) { Date.new(2026, 9, 1) }
+
+    # An envelope with $100 assigned in September, and `spent` of it spent.
+    def envelope_with(name, assigned: 100, spent: 0)
+      create(:budget_envelope, budget: budget, name: name).tap do |envelope|
+        create(:budget_assignment, envelope: envelope, month: month, amount: assigned) if assigned.positive?
+        create(:budget_spend, envelope: envelope, date: month + 4, amount: spent) if spent.positive?
+      end
+    end
+
+    # The Available cell of an envelope's row.
+    def available_cell(envelope)
+      "tr#envelope_#{envelope.id} td:nth-child(7)"
+    end
+
+    it "is a success bar under the figure when most of what the envelope had is left, with its share as the value" do
+      groceries = envelope_with("Groceries", spent: 20)
+
+      get month_path("2026-09")
+
+      assert_select "#{available_cell(groceries)} progress.progress.progress-success[value='80'][max='100'][aria-hidden=true]"
+      assert_select "#{available_cell(groceries)} .badge", count: 0
+    end
+
+    it "is a warning bar when under a quarter is left, and an empty one when it's all spent" do
+      dining_out = envelope_with("Dining out", spent: 76)
+      rent = envelope_with("Rent", spent: 100)
+
+      get month_path("2026-09")
+
+      assert_select "#{available_cell(dining_out)} progress.progress-warning[value='24']"
+      assert_select "#{available_cell(rent)} progress.progress-warning[value='0']"
+    end
+
+    it "counts exactly a quarter as plenty" do
+      fuel = envelope_with("Fuel", spent: 75)
+
+      get month_path("2026-09")
+
+      assert_select "#{available_cell(fuel)} progress.progress-success[value='25']"
+    end
+
+    it "is a full error bar with the Overspent badge on a line under it, however much it had to spend" do
+      dining_out = envelope_with("Dining out", spent: 130)
+      bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
+
+      get month_path("2026-09")
+
+      [ dining_out, bills ].each do |envelope|
+        assert_select "#{available_cell(envelope)} progress.progress-error[value='100'][aria-hidden=true]"
+        assert_select "#{available_cell(envelope)} div .badge.badge-error", text: "Overspent", count: 1
+        assert_select "#{available_cell(envelope)} span .badge", count: 0
+      end
+    end
+
+    it "is no bar for a new envelope with nothing to spend and no Spends" do
+      new_envelope = create(:budget_envelope, budget: budget, name: "New", starting_balance: 0)
+
+      get month_path("2026-09")
+
+      assert_select "tr#envelope_#{new_envelope.id}", count: 1
+      assert_select "tr#envelope_#{new_envelope.id} progress", count: 0
+      assert_select "tr#envelope_#{new_envelope.id} .badge", count: 0
+    end
+
+    it "has no word for the level: Overspent is the only word, and a bar is hidden from assistive technology" do
+      envelope_with("Groceries", spent: 20)
+      envelope_with("Dining out", spent: 76)
+
+      get month_path("2026-09")
+
+      assert_select "progress:not([aria-hidden=true])", count: 0
+      expect(response.body).not_to match(/\b(plenty|a little)\b/i)
+    end
+
+    it "is under the figure in the Available column, which stays right-aligned" do
+      groceries = envelope_with("Groceries", spent: 130)
+
+      get month_path("2026-09")
+
+      assert_select "#{available_cell(groceries)}.text-right progress.ml-auto"
+      expect(css_select(available_cell(groceries)).sole.text.squish).to eq("-$30.00 Overspent")
+    end
+
+    it "doesn't change the query count with envelopes" do
+      envelope_with("Groceries", spent: 20)
+      few = count_queries { get month_path("2026-09") }
+
+      envelope_with("Dining out", spent: 130)
+      envelope_with("Rent", spent: 100)
+      many = count_queries { get month_path("2026-09") }
+
+      expect(many).to eq(few)
+    end
+  end
+
+  describe "Show details" do
+    before { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 25) }
+
+    it "is one button above the table, not pressed, with both of its labels and both of its hints in the markup" do
+      get month_path("2026-09")
+
+      assert_select "[data-controller=month-details]" do
+        assert_select "button.btn.btn-sm[type=button][aria-pressed=false][data-action='month-details#toggle']", count: 1
+        assert_select "button span", text: "Show details"
+        assert_select "button span", text: "Hide details"
+        assert_select "p", text: "Carried over, Refunded and Reallocated are hidden, so the figures below don't add up on their own."
+        assert_select "p", text: "Carried over, Refunded and Reallocated are shown, so the figures below add up to Available."
+      end
+    end
+
+    it "stacks both hints and both labels in one grid cell, so the table doesn't move when it changes" do
+      get month_path("2026-09")
+
+      assert_select "div.grid > p.col-start-1.row-start-1", count: 2
+      assert_select "div.grid > p.invisible", count: 1
+      assert_select "button span.grid > span.col-start-1.row-start-1", count: 2
+      assert_select "button span.grid > span.invisible", count: 1
+    end
+
+    it "has Carried over, Refunded and Reallocated as columns only with details on, from sm: up" do
+      get month_path("2026-09")
+
+      [ "Carried over", "Refunded", "Reallocated" ].each do |heading|
+        assert_select "thead th.hidden.sm\\:in-data-\\[details\\=on\\]\\:table-cell", text: heading
+      end
+      assert_select "thead th.hidden", count: 3
+    end
+
+    it "gives each envelope its own tbody, with a second row of the three figures, labelled, for a phone with details on" do
+      get month_path("2026-09")
+
+      assert_select "table tbody", count: 1
+      assert_select "tbody tr", count: 2
+      assert_select "tbody tr:nth-child(2).hidden td[colspan='4'] dl.grid-cols-3" do
+        assert_select "dt", text: "Carried over"
+        assert_select "dd", text: "$25.00"
+        assert_select "dt", text: "Refunded"
+        assert_select "dt", text: "Reallocated"
+        assert_select "dd", count: 3
+      end
+    end
+
+    it "is remembered on <html>, which the layout's head applies before the first paint" do
+      get month_path("2026-09")
+
+      assert_select "head script", text: /localStorage\.getItem\("budgie\.monthDetails"\).*dataset\.details/m
+    end
+
+    it "isn't on a month with no envelopes" do
+      Budget::Envelope.delete_all
+
+      get month_path("2026-09")
+
+      assert_select "[data-controller=month-details]", count: 0
+      assert_select "button", text: "Show details", count: 0
     end
   end
 end

@@ -1,0 +1,42 @@
+<%# locals: (budget:) %>
+<%# The month view's Available bar at each level, drawn from sample figures, and the Show details toggle. %>
+<% levels = [
+     { name: "Plenty", note: "$400.00 of $500.00 left", line: { assigned: 500, spent: 100 } },
+     { name: "A little", note: "$20.00 of $500.00 left", line: { assigned: 500, spent: 480 } },
+     { name: "Overspent", note: "$30.00 over", line: { assigned: 100, spent: 130 } },
+     { name: "None", note: "Nothing to spend and no Spends", line: {} }
+   ].map do |level|
+     figures = { carried_over: 0, assigned: 0, spent: 0, refunded: 0, reallocated: 0 }.merge(level[:line]).transform_values { |amount| BigDecimal(amount) }
+     level.merge(line: Budget::Month::EnvelopeLine.new(envelope: nil, **figures, available: figures[:assigned] - figures[:spent]))
+   end %>
+<section id="available-bars" aria-labelledby="available-bars-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="available-bars-heading" class="text-xl font-semibold">Available bar and Show details</h2>
+  <p class="text-base-content/70">The bar sits under the Available figure, with no word: its colour and length say plenty from a little. Overspent is a full bar with its badge on a line under it, and an envelope with nothing to spend has no bar.</p>
+
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Level</th>
+          <th scope="col" class="text-right">Available</th>
+        </tr>
+      </thead>
+      <% levels.each do |level| %>
+        <tbody>
+          <tr>
+            <td class="align-top"><%= level[:name] %> <span class="text-sm text-base-content/70">(<%= level[:note] %>)</span></td>
+            <td class="text-right align-top tabular-nums">
+              <%= render "components/money", amount: level[:line].available, budget: budget %>
+              <%= render "components/available_bar", line: level[:line] %>
+            </td>
+          </tr>
+        </tbody>
+      <% end %>
+    </table>
+  </div>
+
+  <p class="text-base-content/70">The toggle shows or hides the table's Carried over, Refunded and Reallocated, and says what hiding them means. Both of its hints and both of its labels are always there, so nothing moves when it changes.</p>
+  <div data-controller="month-details" data-action="turbo:morph@document->month-details#sync">
+    <%= render "months/details_toggle" %>
+  </div>
+</section>

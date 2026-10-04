@@ -175,9 +175,21 @@ the end of it. A Refund lands in its envelope and never touches Ready to Assign,
 Spend. It is handled like a Spend, and the two models share their validations and scopes in `DatedEnvelopeRecord` and
 their form in `application/_envelope_record_form`: it belongs to its budget through its envelope, the envelope it's saved
 against is looked up in the budget's own envelopes, and it's listed on its envelope's page for the month of its date. The month view
-shows a Refunded column from `sm:` up (and Reallocated, below) and has no "New refund", since Refunds are rarer than Spends; an envelope's page
+shows a Refunded column behind Show details (as is Reallocated, below) and has no "New refund", since Refunds are rarer than Spends; an envelope's page
 has "New refund" beside "New spend", its Refunded, and a Refunds section when the month has any. With Refunds, the core
 of the month view is complete, and every balance on it, in a fixed number of grouped queries, comes from `Budget::Month`.
+
+The month view's table also shows, under each envelope's Available figure, a bar for how much of what it had to spend is left,
+and hides Carried over, Refunded and Reallocated behind one Show details toggle. The bar's figures are on
+`Budget::Month::EnvelopeLine`, so views do no arithmetic and no query is added: what the envelope had to spend is the positive part
+of Carried over + Assigned + Refunded + the positive part of Reallocated, its share is Available over that (never over 100%), and
+its level is plenty, a little (strictly under a quarter), Overspent (a full bar, even with nothing to spend) or none (no bar). The
+bar is a native `<progress aria-hidden="true">` with no word for its level, in `progress-success`, `progress-warning` or
+`progress-error`, and the Overspent badge sits on a line under it so every Available figure stays right-aligned. The toggle's
+state is `data-details="on|off"` on `<html>`, outside the `<body>` that Turbo morphs, so saving an Assigned amount doesn't reset
+it; it's remembered per browser in `localStorage`, applied before the first paint by a script in the layout's `<head>`, and kept
+in step with the button by the `month-details` Stimulus controller. The markup reads it with Tailwind's `in-data-[details=on]:`
+variants: the three figures are columns from `sm:` up, and below it a second row of labelled figures under each envelope.
 
 A Reallocation moves money that's already in an envelope into another envelope, such as covering an Overspent envelope
 or shifting what's left of one purpose to another, and is recorded with a date. An envelope's Reallocated in a month is
@@ -194,7 +206,7 @@ or Ready to Assign, below), so both kinds share the form's fields; editing and d
 repeat across them, at `/reallocations/to-envelope/:id` and `/reallocations/to-ready-to-assign/:id`, and once saved its To can't change. It is listed on both of its
 envelopes' pages for the month of its date, each row read from that envelope's side ("To Groceries" and negative, or "From
 Dining out" and positive), so a form opened from an envelope's page carries that envelope and goes back to its page for as
-long as the Reallocation is still in or out of it. The month view shows a Reallocated column from `sm:` up and no
+long as the Reallocation is still in or out of it. The month view shows a Reallocated column, behind Show details, and no
 "Reallocate": Assigned stays the plan, set in place, and Reallocated is money moved, and they're never merged. An envelope's
 page has "Reallocate" with that envelope as From, its Reallocated, and a Reallocations section when the month has any.
 
