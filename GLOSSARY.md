@@ -79,3 +79,11 @@ _Avoid_: Categorising, matching, assigning
 **Ignored bank transaction**:
 A bank transaction Budgie won't file, such as a card payment between the user's own accounts. It can be un-ignored.
 _Avoid_: Hidden, skipped
+
+**Filing rule**:
+A standing instruction, such as "anything from Loblaws goes to Groceries", that files the bank transactions it fits the same way each time, or ignores them. It acts on bank transactions as they come in, never on ones already filed.
+_Avoid_: Category rule, mapping, auto-categorisation
+
+**Guess**:
+The envelope and kind Budgie proposes for an unfiled bank transaction that no filing rule fits, from how similar ones were filed. It only suggests, and filing stays the user's.
+_Avoid_: Suggestion, prediction
