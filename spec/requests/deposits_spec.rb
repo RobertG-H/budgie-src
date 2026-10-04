@@ -275,6 +275,21 @@ RSpec.describe "Deposits", type: :request do
       expect(budget.deposits.sole.notes).to eq("")
     end
 
+    # A date field takes a year of up to six digits, so a slip of the finger there still has to land somewhere.
+    it "can be dated in a year with more than four digits, and still be found in its month" do
+      post deposits_path, params: { deposit: deposit_params.merge(date: "20266-09-15", month: "20266-09-01") }
+
+      expect(response).to redirect_to(month_path("20266-09"))
+      follow_redirect!
+      expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "September 20266"
+      assert_select ".stat-value", text: "$3,000.00"
+
+      get month_deposits_path("20266-09")
+
+      expect(rows).to eq([ "Sep 15 Paycheck Biweekly $3,000.00" ])
+    end
+
     it "shows what's wrong, and keeps what was typed, for an invalid Deposit" do
       params = { deposit: deposit_params.merge(description: " ", amount: "0", notes: "Keep me"), from: "deposits", month: "2026-09" }
 

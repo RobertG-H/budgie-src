@@ -6,9 +6,8 @@
 <div class="mt-4">
   <%= render "components/page_header", title: @envelope.name, description: @month.name do %>
     <%= link_to "Edit", edit_envelope_path(@envelope, month: @month, from: "envelope"), class: "btn" %>
-    <%= button_to "Delete", envelope_path(@envelope), method: :delete, params: { month: @month.to_param },
-          form: { data: { turbo_confirm: "Delete the #{@envelope.name} envelope?" } },
-          class: "btn btn-ghost text-error" %>
+    <%= render "components/delete_button", path: envelope_path(@envelope),
+          confirm: "Delete the #{@envelope.name} envelope?", params: { month: @month.to_param } %>
   <% end %>
 </div>
 

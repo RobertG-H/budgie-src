@@ -1,6 +1,8 @@
-# One calendar month of a budget, and every balance in it. A plain Ruby object, not a table: nothing here is
-# stored or cached, and no table has a balance column. Every figure on every page comes from here, so the
-# formulas live in one place and views and controllers do no arithmetic on balances.
+# One calendar month of a budget, and every balance in it. A plain Ruby object, not a table: nothing is stored,
+# and no table has a balance column. A Month only remembers the figures it has worked out for as long as it
+# lives, which is one request, so a page can read a figure as often as it likes without asking the database
+# again. Every figure on every page comes from here, so the formulas live in one place and views and
+# controllers do no arithmetic on balances.
 #
 # It works on the calendar month containing the date it's given, and runs a fixed number of grouped SUM queries,
 # each split into "before the month" and "in the month", so the number of queries doesn't grow with the months
@@ -20,9 +22,10 @@ class Budget::Month
   attr_reader :budget, :date
 
   # The month a URL names by its year and month, such as "2026-09". Anything else is nil, and so is a year
-  # that PostgreSQL has no dates for.
+  # that PostgreSQL has no dates for. A year has four to six digits, because a date field accepts up to 275760
+  # and a Deposit can be dated in any year it does, so each of them has a month to be found in.
   def self.from_param(budget, param)
-    year, month = param.to_s.match(/\A(\d{4})-(\d{2})\z/)&.captures&.map(&:to_i)
+    year, month = param.to_s.match(/\A(\d{4,6})-(\d{2})\z/)&.captures&.map(&:to_i)
     new(budget, Date.new(year, month, 1)) if year&.positive? && Date.valid_date?(year, month, 1)
   end
 
@@ -32,7 +35,7 @@ class Budget::Month
   end
 
   def name
-    date.strftime("%B %Y")
+    date.to_fs(:month_and_year)
   end
 
   def to_param
@@ -74,9 +77,12 @@ class Budget::Month
   private
     # Deposits for the months before this one, and for this one, from a single query.
     def deposit_totals
-      before_this_month = Arel.sql(Budget::Deposit.sanitize_sql_array([ "COALESCE(SUM(amount) FILTER (WHERE month < ?), 0)", date ]))
-      in_this_month = Arel.sql(Budget::Deposit.sanitize_sql_array([ "COALESCE(SUM(amount) FILTER (WHERE month = ?), 0)", date ]))
+      budget.deposits.where(month: ..date).pick(sum_where("month < ?"), sum_where("month = ?"))
+    end
 
-      budget.deposits.where(month: ..date).pick(before_this_month, in_this_month)
+    # One column of a query: the total amount where `condition` holds, given this month. Only for the literal
+    # conditions above, never for anything a person typed.
+    def sum_where(condition)
+      Arel.sql(Budget::Deposit.sanitize_sql_array([ "COALESCE(SUM(amount) FILTER (WHERE #{condition}), 0)", date ]))
     end
 end

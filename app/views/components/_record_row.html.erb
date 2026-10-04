@@ -1,5 +1,5 @@
 <%# locals: (href:, date:, description:, amount:, budget:, notes: nil) %>
-<%# One record in a list, such as a Deposit: its date, its description with any notes as a muted second line under it, and its amount. The whole row links to the record's edit page. Put rows in a <ul class="list">. The description is the second column, which daisyUI's list lets grow. %>
+<%# One record in a list, such as a Deposit: its date, its description with any notes as a muted second line under it, and its amount. The whole row links to the record's edit page. Put rows in components/record_list. The description is the second column, which daisyUI's list lets grow. %>
 <li>
   <%= link_to href, class: "list-row items-baseline hover:bg-base-200" do %>
     <%# A fixed width, so descriptions line up whichever dates the rows have. %>

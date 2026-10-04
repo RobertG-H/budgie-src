@@ -119,8 +119,8 @@ opens on, and what a date field starts as.
 Every balance is worked out in one place, `Budget::Month` (`app/models/budget/month.rb`), which views and
 controllers only ask. It works on one calendar month of a budget and runs a fixed number of grouped `SUM`
 queries, split into "before the month" and "in the month", so the number of queries doesn't grow with the
-months of history or with the number of envelopes. Nothing is stored or cached, and no table has a balance
-column.
+months of history or with the number of envelopes. Nothing is stored, and no table has a balance column; a
+month only remembers the figures it has worked out for as long as the request that asked for them.
 
 A Deposit counts toward Ready to Assign in its `month`, which is the month of its date or the month after it,
 so someone living on last month's money can mark each paycheck for next month. Every form remembers the page

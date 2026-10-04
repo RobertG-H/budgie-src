@@ -20,12 +20,12 @@
 
 <div class="mt-8">
   <% if @deposits.any? %>
-    <ul class="list rounded-box border border-base-300">
+    <%= render "components/record_list" do %>
       <% @deposits.each do |deposit| %>
         <%= render "components/record_row", href: edit_deposit_path(deposit, month: @month, from: "deposits"),
               date: deposit.date, description: deposit.description, notes: deposit.notes, amount: deposit.amount, budget: budget %>
       <% end %>
-    </ul>
+    <% end %>
   <% else %>
     <%= render "components/empty_state", message: "No deposits in #{@month.name}." %>
   <% end %>

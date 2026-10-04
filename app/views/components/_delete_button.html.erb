@@ -1,0 +1,4 @@
+<%# locals: (path:, confirm:, params: {}) %>
+<%# A button that deletes the record at `path` once the question in `confirm` has been answered yes. `params` go along with it, such as the page the record was opened from. It's a form of its own, so it can't sit inside another form: put it in a page's header actions. %>
+<%= button_to "Delete", path, method: :delete, params: params, form: { data: { turbo_confirm: confirm } },
+      class: "btn btn-ghost text-error" %>

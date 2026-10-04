@@ -5,6 +5,12 @@ RSpec.describe "Months", type: :request do
 
   before { sign_in_as budget.user }
 
+  # The words under Ready to Assign's number. Its amounts are spans of their own, so the whitespace between the
+  # pieces is collapsed before comparing.
+  def stat_description
+    css_select(".stat-desc").map { |description| description.text.squish }.sole
+  end
+
   describe "GET /" do
     it "opens the current month, by Eastern time" do
       # 00:30 UTC on October 1 is still the evening of September 30 in Eastern time.
@@ -40,9 +46,15 @@ RSpec.describe "Months", type: :request do
 
       get month_path("9999-12")
       expect(response).to have_http_status(:ok)
+      assert_select "nav[aria-label=Months] a[rel=next]", text: "January 10000"
+
+      click_next = css_select("nav[aria-label=Months] a[rel=next]").first["href"]
+      get click_next
+      expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "January 10000"
     end
 
-    [ "2026-13", "2026-00", "2026-9", "2026-09-01", "0000-05", "10000-01", "abc" ].each do |param|
+    [ "2026-13", "2026-00", "2026-9", "2026-09-01", "0000-05", "1000000-01", "abc" ].each do |param|
       it "is not found for #{param.inspect}, which isn't a month" do
         get "/months/#{param}"
 
@@ -71,15 +83,25 @@ RSpec.describe "Months", type: :request do
       assert_select "a[href='#{month_deposits_path("2026-09")}']" do
         assert_select ".stat-title", text: "Ready to Assign"
         assert_select ".stat-value", text: "$4,000.00"
-        assert_select ".stat-desc", text: "Carried over $1,000.00 · Deposited $3,000.00"
+        expect(stat_description).to eq("Carried over $1,000.00 · Deposited $3,000.00")
       end
+    end
+
+    it "shows the amounts it's described with the way every amount is shown, so a negative would be signed and red" do
+      create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 9, 1))
+
+      get month_path("2026-09")
+
+      assert_select ".stat-desc span", count: 2
+      assert_select ".stat-desc span", text: "$0.00"
+      assert_select ".stat-desc span", text: "$3,000.00"
     end
 
     it "is $0.00 for a budget with no Deposits" do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "$0.00"
-      assert_select ".stat-desc", text: "Carried over $0.00 · Deposited $0.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00")
     end
 
     it "carries forward into a month with no Deposits of its own" do
@@ -88,18 +110,18 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-12")
 
       assert_select ".stat-value", text: "$3,000.00"
-      assert_select ".stat-desc", text: "Carried over $3,000.00 · Deposited $0.00"
+      expect(stat_description).to eq("Carried over $3,000.00 · Deposited $0.00")
     end
 
     it "counts a Deposit dated September 30 and marked for October in October, and not in September" do
       create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 9, 30), month: Date.new(2026, 10, 1))
 
       get month_path("2026-09")
-      assert_select ".stat-desc", text: "Carried over $0.00 · Deposited $0.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $0.00")
 
       get month_path("2026-10")
       assert_select ".stat-value", text: "$3,000.00"
-      assert_select ".stat-desc", text: "Carried over $0.00 · Deposited $3,000.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00")
     end
 
     it "is shown in the budget's currency unit" do

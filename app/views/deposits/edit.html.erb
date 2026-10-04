@@ -2,10 +2,9 @@
 
 <div class="mx-auto max-w-md">
   <%= render "components/page_header", title: "Edit deposit" do %>
-    <%= button_to "Delete", deposit_path(@deposit), method: :delete,
-          params: { from: origin, month: @month.to_param }.compact,
-          form: { data: { turbo_confirm: "Delete the #{@deposit.description_was} deposit?" } },
-          class: "btn btn-ghost text-error" %>
+    <%= render "components/delete_button", path: deposit_path(@deposit),
+          confirm: "Delete the #{@deposit.description_was} deposit?",
+          params: { from: origin, month: @month.to_param }.compact %>
   <% end %>
 
   <%= render "form", deposit: @deposit, cancel_path: return_path(@month) %>

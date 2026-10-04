@@ -1,6 +1,12 @@
 <% content_for :title, "#{@month.name} · Budgie" %>
 <% budget = @month.budget %>
 <% ready_to_assign = @month.ready_to_assign %>
+<%# Amounts are shown through the money partial wherever they are, so a negative one is signed and red here too. %>
+<% ready_to_assign_description = safe_join([
+     "Carried over", render("components/money", amount: ready_to_assign.carried_over, budget: budget),
+     "·",
+     "Deposited", render("components/money", amount: ready_to_assign.deposited, budget: budget)
+   ], " ") %>
 
 <%= render "components/page_header", title: @month.name do %>
   <%= link_to "New deposit", new_deposit_path(month: @month, from: "month"), class: "btn btn-primary" %>
@@ -14,8 +20,7 @@
 <div class="mt-8">
   <%= render "components/stat_card", title: "Ready to Assign",
         value: render("components/money", amount: ready_to_assign.amount, budget: budget),
-        description: "Carried over #{money(ready_to_assign.carried_over, budget: budget)} · Deposited #{money(ready_to_assign.deposited, budget: budget)}",
-        href: month_deposits_path(@month) %>
+        description: ready_to_assign_description, href: month_deposits_path(@month) %>
 </div>
 
 <div class="mt-8">

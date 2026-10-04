@@ -140,6 +140,24 @@ RSpec.describe Budget::Deposit, type: :model do
     end
   end
 
+  describe ".months_for" do
+    it "is the month of a date and the month after it, as the 1st of each, whichever day of the month it is" do
+      expect(Budget::Deposit.months_for(Date.new(2026, 9, 30))).to eq([ Date.new(2026, 9, 1), Date.new(2026, 10, 1) ])
+      expect(Budget::Deposit.months_for(Date.new(2026, 1, 31))).to eq([ Date.new(2026, 1, 1), Date.new(2026, 2, 1) ])
+    end
+
+    it "goes into the next year from December" do
+      expect(Budget::Deposit.months_for(Date.new(2026, 12, 15))).to eq([ Date.new(2026, 12, 1), Date.new(2027, 1, 1) ])
+    end
+
+    it "is what a Deposit's month is checked against" do
+      deposit = build(:budget_deposit, date: Date.new(2026, 12, 15), month: Date.new(2027, 1, 1))
+
+      expect(Budget::Deposit.months_for(deposit.date)).to include(deposit.month)
+      expect(deposit).to be_valid
+    end
+  end
+
   describe ".for_month" do
     it "lists the Deposits that count toward the month, whichever day of it is asked about" do
       budget = create(:budget)

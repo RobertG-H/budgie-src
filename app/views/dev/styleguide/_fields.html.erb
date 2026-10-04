@@ -32,6 +32,16 @@
       <%= form.check_box :sample_checkbox, **field %>
     <% end %>
 
+    <%= render "components/field", form: form, attribute: :favourite_colour, control: :radios,
+          hint: "A group of radio buttons has a legend, and each choice its own label." do |field| %>
+      <% [ "Blue", "Green" ].each do |colour| %>
+        <label class="flex items-center gap-3">
+          <%= form.radio_button :favourite_colour, colour.downcase, **field %>
+          <span><%= colour %></span>
+        </label>
+      <% end %>
+    <% end %>
+
     <%= render "components/field", form: form, attribute: :name_with_error, label: "Name",
           error: "Name can't be blank" do |field| %>
       <%= form.text_field :name_with_error, **field %>

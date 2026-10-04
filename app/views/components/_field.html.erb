@@ -1,17 +1,19 @@
 <%# locals: (form:, attribute:, control: :input, label: nil, hint: nil, error: nil) %>
-<%# A labelled form control with an optional hint and error under it. The block renders the control and is given a hash to splat onto it: the daisyUI classes for `control` (:input, :select, :textarea or :checkbox) and the aria attributes that tie it to its hint and error. %>
+<%# A labelled form control with an optional hint and error under it. The block renders the control and is given a hash to splat onto it: the daisyUI classes for `control` (:input, :select, :textarea, :checkbox or :radios) and the aria attributes that tie it to its hint and error. %>
+<%# `:radios` is one group of choices: a fieldset with a legend, where the block renders every radio button, each with its own label, and splats the hash onto each. %>
 <%# The form's error summary (application/_form_errors) carries the messages, so a field is only marked invalid when its attribute has errors. Pass `error` to show one under the field too. %>
 <%# The 55% border is for contrast: a plain daisyUI input's default border is 20% of base-content, 1.49:1
     against the 3:1 WCAG asks of a control's edge; border-base-content/55 is 3.11:1. A checkbox doesn't need
     this — checkbox-primary (6.09:1) and checkbox-error (6.85:1) set its border colour unconditionally,
-    checked or not, and both already clear 3:1. %>
+    checked or not, and both already clear 3:1. A radio button's border is its colour too. %>
 <%
   invalid = error.present? || form.object.try(:errors)&.include?(attribute)
   styles = {
     input: { default: "input w-full border-base-content/55", invalid: "input w-full input-error" },
     select: { default: "select w-full border-base-content/55", invalid: "select w-full select-error" },
     textarea: { default: "textarea w-full border-base-content/55", invalid: "textarea w-full textarea-error" },
-    checkbox: { default: "checkbox checkbox-primary", invalid: "checkbox checkbox-error" }
+    checkbox: { default: "checkbox checkbox-primary", invalid: "checkbox checkbox-error" },
+    radios: { default: "radio radio-primary", invalid: "radio radio-error" }
   }
   hint_id = form.field_id(attribute, :hint)
   error_id = form.field_id(attribute, :error)
@@ -23,12 +25,15 @@
     }
   }
 %>
-<div class="space-y-2">
+<%= content_tag (control == :radios ? :fieldset : :div), class: "space-y-2" do %>
   <% if control == :checkbox %>
     <div class="flex items-center gap-3">
       <%= yield field %>
       <%= form.label attribute, label, class: "font-medium" %>
     </div>
+  <% elsif control == :radios %>
+    <legend class="mb-2 font-medium"><%= label || form.object.try(:class)&.try(:human_attribute_name, attribute) || attribute.to_s.humanize %></legend>
+    <%= yield field %>
   <% else %>
     <%= form.label attribute, label, class: "block font-medium" %>
     <%= yield field %>
@@ -40,4 +45,4 @@
   <% if error %>
     <p id="<%= error_id %>" class="text-sm font-medium text-error"><%= error %></p>
   <% end %>
-</div>
+<% end %>

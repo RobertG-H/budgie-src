@@ -77,6 +77,17 @@ RSpec.describe "components", type: :view do
     end
   end
 
+  describe "_record_list" do
+    it "is a bordered list holding the block, which is the rows" do
+      render inline: <<~ERB
+        <%= render "components/record_list" do %><li>First</li><li>Second</li><% end %>
+      ERB
+
+      assert_select "ul.list.rounded-box.border > li", count: 2
+      assert_select "ul.list > li:first-child", text: "First"
+    end
+  end
+
   describe "_modal" do
     before do
       render inline: <<~ERB

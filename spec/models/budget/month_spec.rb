@@ -146,7 +146,22 @@ RSpec.describe Budget::Month, type: :model do
       expect(Budget::Month.from_param(budget, month.to_param).date).to eq(Date.new(2026, 1, 1))
     end
 
-    [ "2026-13", "2026-00", "2026-9", "26-09", "2026-09-01", "2026-09\n", " 2026-09", "0000-05", "-001-05", "10000-01", "September", "", nil ].each do |param|
+    # A date field accepts years up to 275760, and a Deposit can be dated in any of them.
+    it "reads years of more than four digits, so every date a form can send has a month to be found in" do
+      { "10000-01" => Date.new(10_000, 1, 1), "20266-09" => Date.new(20_266, 9, 1), "275760-09" => Date.new(275_760, 9, 1) }.each do |param, date|
+        month = Budget::Month.from_param(budget, param)
+
+        expect(month.date).to eq(date)
+        expect(month.to_param).to eq(param)
+      end
+    end
+
+    it "can move on from the last year with four digits, and the first with five" do
+      expect(Budget::Month.from_param(budget, "9999-12").next.to_param).to eq("10000-01")
+      expect(Budget::Month.from_param(budget, "10000-01").previous.to_param).to eq("9999-12")
+    end
+
+    [ "2026-13", "2026-00", "2026-9", "26-09", "2026-09-01", "2026-09\n", " 2026-09", "0000-05", "-001-05", "1000000-01", "September", "", nil ].each do |param|
       it "reads nothing from #{param.inspect}" do
         expect(Budget::Month.from_param(budget, param)).to be_nil
       end
@@ -189,7 +204,7 @@ RSpec.describe Budget::Month, type: :model do
       expect(with_twenty).to eq(with_one_envelope)
     end
 
-    it "is nothing until a figure is asked for, and nothing again for one it has already worked out" do
+    it "asks the database nothing until a figure is wanted, and only once for a figure a page reads again" do
       create(:budget_envelope, budget: budget)
       deposit 100, month
       figures = Budget::Month.new(budget, month)

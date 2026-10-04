@@ -19,6 +19,13 @@ class Budget::Deposit < ApplicationRecord
   scope :for_month, ->(month) { where(month: month) }
   scope :newest_first, -> { order(date: :desc, created_at: :desc, id: :desc) }
 
+  # The months a Deposit dated `date` can count toward: the month of its date, and the month after it, each as
+  # the 1st. The database checks the same thing (budget_deposits_month_of_date_or_next).
+  def self.months_for(date)
+    this_month = date.beginning_of_month
+    [ this_month, this_month.next_month ]
+  end
+
   private
     # A Deposit counts toward the month of its date unless it's marked for the month after.
     def default_month
@@ -28,10 +35,9 @@ class Budget::Deposit < ApplicationRecord
     def month_is_that_of_the_date_or_the_month_after
       return unless date && month
 
-      this_month = date.beginning_of_month
-      next_month = this_month.next_month
+      this_month, next_month = self.class.months_for(date)
       return if [ this_month, next_month ].include?(month)
 
-      errors.add(:month, "must be #{this_month.strftime("%B %Y")} or #{next_month.strftime("%B %Y")}")
+      errors.add(:month, "must be #{this_month.to_fs(:month_and_year)} or #{next_month.to_fs(:month_and_year)}")
     end
 end

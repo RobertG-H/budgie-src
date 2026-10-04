@@ -74,6 +74,20 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#fields [role=alert] li", text: "Name can't be blank"
       end
 
+      it "shows a group of radio buttons under a legend, with a hint" do
+        with_development_routes { get :show }
+
+        assert_select "#fields fieldset > legend", text: "Favourite colour"
+        assert_select "#fields fieldset input.radio[type=radio]", minimum: 2
+        assert_select "#fields fieldset p[id$=_hint]"
+      end
+
+      it "shows the delete button, which asks first" do
+        with_development_routes { get :show }
+
+        assert_select "#buttons form[data-turbo-confirm] button.btn-ghost.text-error", text: "Delete"
+      end
+
       it "shows money columns, with a negative Available that says Overspent" do
         with_development_routes { get :show }
 
