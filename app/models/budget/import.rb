@@ -16,28 +16,23 @@ class Budget::Import < ApplicationRecord
   has_many :bank_transactions, dependent: :restrict_with_error
 
   validates :file_name, presence: true
-  validates :duplicates_skipped, :zero_rows_skipped, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :duplicates_skipped, :zero_rows_skipped, :money_in_count, :money_out_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :csv_format_is_in_the_accounts_budget
 
   scope :latest_first, -> { order(created_at: :desc, id: :desc) }
 
-  # What the Import brought in, which is all its summary shows: the dates, how many bank transactions were money in and how
-  # many money out, and what they add up to, and the first row as it was read, so a wrong sign or a swapped day and month,
-  # which both read without error, is seen straight away. A date range and a first row are none when it added nothing.
-  Summary = Data.define(:count, :first_date, :last_date, :money_in_count, :money_in_total, :money_out_count, :money_out_total, :first_row)
+  # The first row of the file as the CSV format read it, which the summary shows so that a wrong sign or a swapped day and month,
+  # which both read without error, is seen straight away. None for a file with nothing in it but rows of 0.
+  FirstRow = Data.define(:date, :description, :amount)
 
-  # In two queries, however many bank transactions there are.
-  def summary
-    @summary ||= begin
-      count, first_date, last_date, money_in_count, money_in_total, money_out_count, money_out_total = bank_transactions.pick(
-        Arel.sql("COUNT(*)"), Arel.sql("MIN(date)"), Arel.sql("MAX(date)"),
-        Arel.sql("COUNT(*) FILTER (WHERE amount > 0)"), Arel.sql("COALESCE(SUM(amount) FILTER (WHERE amount > 0), 0)"),
-        Arel.sql("COUNT(*) FILTER (WHERE amount < 0)"), Arel.sql("COALESCE(SUM(amount) FILTER (WHERE amount < 0), 0)")
-      )
+  def first_row
+    FirstRow.new(date: first_row_date, description: first_row_description, amount: first_row_amount) if first_row_date
+  end
 
-      Summary.new(count: count, first_date: first_date, last_date: last_date, money_in_count: money_in_count, money_in_total: money_in_total,
-        money_out_count: money_out_count, money_out_total: money_out_total, first_row: (bank_transactions.order(:id).first if count.positive?))
-    end
+  # How many bank transactions it brought in, which is what Undo would delete: the rows of the file less those already in the
+  # Account (ADR 0010). It's counted, and not worked out from the file's figures, so what Undo says is what it does.
+  def added_count
+    @added_count ||= bank_transactions.count
   end
 
   # Reads `file` with the CSV format and brings its rows into the Account, and is true when that worked. When the file can't be
@@ -58,6 +53,7 @@ class Budget::Import < ApplicationRecord
       rows = rows_to_insert(reading.rows)
       self.duplicates_skipped = reading.rows.size - rows.size
       self.zero_rows_skipped = reading.zero_rows
+      assign_attributes(file_figures(reading.rows))
       save!
       Budget::BankTransaction.insert_all!(rows.map { |row| row.merge(import_id: id) }) if rows.any?
     end
@@ -98,10 +94,7 @@ class Budget::Import < ApplicationRecord
 
   # How many records of each kind its bank transactions were filed as, which Undo deletes too, so the confirmation can say so.
   def filed_record_counts
-    transactions = Budget::BankTransaction.where(import: self).select(:id)
-
-    { deposits: Budget::DepositLink.where(bank_transaction_id: transactions).count, spends: Budget::SpendLink.where(bank_transaction_id: transactions).count,
-      refunds: Budget::RefundLink.where(bank_transaction_id: transactions).count }
+    Budget::BankTransaction.filed_record_counts(Budget::BankTransaction.where(import: self))
   end
 
   # Whether it's still within 24 hours of the Import running, which is all that undoing it is waiting on, once it's the latest.
@@ -119,6 +112,17 @@ class Budget::Import < ApplicationRecord
   end
 
   private
+    # What the file held, which isn't kept, so it's worked out now for the summary to say later: of every row that isn't of 0,
+    # whether it was already in the Account or not.
+    def file_figures(rows)
+      money_in, money_out = rows.partition { |row| row.amount.positive? }
+      first = rows.first
+
+      { earliest_date: rows.map(&:date).min, latest_date: rows.map(&:date).max,
+        money_in_count: money_in.size, money_in_total: money_in.sum(&:amount), money_out_count: money_out.size, money_out_total: money_out.sum(&:amount),
+        first_row_date: first&.date, first_row_description: first&.description, first_row_amount: first&.amount }
+    end
+
     def refuse(reason)
       errors.clear
       errors.add(:base, reason)

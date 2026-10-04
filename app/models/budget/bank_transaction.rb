@@ -19,6 +19,9 @@ class Budget::BankTransaction < ApplicationRecord
   # asked.
   class Refused < StandardError; end
 
+  # Why a bank transaction can't be filed, by the state that stops it.
+  FILING_REFUSALS = { filed: "This bank transaction is already filed.", ignored: "This bank transaction is ignored. Un-ignore it first." }.freeze
+
   belongs_to :account
   belongs_to :import
   # What it was filed as, a link for each record. A bank transaction with links can't be deleted: the model refuses, and the
@@ -41,19 +44,32 @@ class Budget::BankTransaction < ApplicationRecord
   # Neither ignored nor filed as anything. Left joins, so a bank transaction with several links is still found once.
   scope :unfiled, -> { where(ignored_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
 
+  # The three kinds of record a bank transaction is filed as, each with the link table that holds it: the record's class, then its
+  # link's. Everything that has to treat the kinds alike, such as inserting them or deleting them, goes through this.
+  def self.links_by_record
+    { Budget::Deposit => Budget::DepositLink, Budget::Spend => Budget::SpendLink, Budget::Refund => Budget::RefundLink }
+  end
+
   # The records that were filed from the bank transactions in `transactions`, and their links, deleted straight from the tables
   # and without asking whether they add up. It's what un-filing, Undo and deleting the Budget all do, in the order that the
   # foreign keys allow: a link, then the record it holds.
   def self.delete_filed_records(transactions)
     ids = transactions.select(:id)
 
-    { Budget::DepositLink => [ :deposit_id, Budget::Deposit ], Budget::SpendLink => [ :spend_id, Budget::Spend ],
-      Budget::RefundLink => [ :refund_id, Budget::Refund ] }.each do |link_class, (column, record_class)|
+    links_by_record.each do |record_class, link_class|
       links = link_class.where(bank_transaction_id: ids)
-      record_ids = links.pluck(column)
+      record_ids = links.pluck(:"#{record_class.model_name.element}_id")
       links.delete_all
       record_class.where(id: record_ids).delete_all
     end
+  end
+
+  # How many records of each kind were filed from the bank transactions in `transactions`, by the kind's plural: `{ deposits: 1,
+  # spends: 2, refunds: 0 }`. What Undo says it will delete.
+  def self.filed_record_counts(transactions)
+    ids = transactions.select(:id)
+
+    links_by_record.to_h { |record_class, link_class| [ record_class.model_name.route_key.to_sym, link_class.where(bank_transaction_id: ids).count ] }
   end
 
   # The key of a row: a digest of its Account, date, signed amount and description, with the description trimmed, its

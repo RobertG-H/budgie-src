@@ -1,15 +1,14 @@
 <% content_for :title, "Import of #{@import.file_name} · Budgie" %>
-<% budget = @account.budget %>
-<% summary = @summary %>
+<% budget = Current.budget %>
 
 <%= link_to "Back to #{@account.name}", account_path(@account), class: "link" %>
 
 <div class="mt-4">
   <%# Undo sits beside the figures it takes back. It's only there while the Import can be undone; otherwise the reason is under the title. %>
   <%= render "components/page_header", title: "Import",
-        description: "#{@import.file_name}, into #{@account.name}, #{@import.created_at.strftime("%b %-d, %Y at %-l:%M %p")}" do %>
+        description: "#{@import.file_name}, into #{@account.name}, #{spelled_time(@import.created_at)}" do %>
     <% if @undo_refusal.nil? %>
-      <%= render "components/delete_button", path: import_path(@import), label: "Undo", confirm: undo_confirmation(@import, summary.count) %>
+      <%= render "components/delete_button", path: import_path(@import), label: "Undo", confirm: undo_confirmation(@import, @import.added_count) %>
     <% end %>
   <% end %>
 </div>
@@ -18,42 +17,42 @@
   <% if @undo_refusal %>
     <%= @undo_refusal %>
   <% else %>
-    You can undo this Import until <%= @import.undo_window_ends_at.strftime("%b %-d, %Y at %-l:%M %p") %>, while it's the latest in this account.
+    You can undo this Import until <%= spelled_time(@import.undo_window_ends_at) %>, while it's the latest in this account.
   <% end %>
 </p>
 
-<%# What the Import brought in, so a wrong sign or a swapped day and month, which both read without error, is seen here, straight away. %>
-<% if summary.count.zero? %>
+<%# What the file held and what the Import did with it, so a wrong sign or a swapped day and month, which both read without error, is seen here, straight away. The dates, the money and the first row are of the whole file, as it was read, including rows that were already in the account. Only Added is what was new. %>
+<% in_file = @import.money_in_count + @import.money_out_count %>
+<% if @import.added_count.zero? %>
   <div class="mt-8">
-    <%= render "components/empty_state", message: "Nothing new was added. Every row in the file was already in this account, or was a row of 0." %>
-  </div>
-<% else %>
-  <div class="mt-8 grid gap-4 sm:grid-cols-2">
-    <%= render "components/stat_card", title: "Added", value: summary.count, description: "bank transaction".pluralize(summary.count) %>
-    <%# A range of dates is longer than a figure, so it's set smaller than the others' numbers. %>
-    <%= render "components/stat_card", title: "Dates",
-          value: tag.span((summary.first_date == summary.last_date ? spelled_date(summary.first_date) : "#{spelled_date(summary.first_date)} to #{spelled_date(summary.last_date)}"), class: "text-xl") %>
-    <%= render "components/stat_card", title: "Money in", value: render("components/money", amount: summary.money_in_total, budget: budget),
-          description: pluralize(summary.money_in_count, "bank transaction") %>
-    <%= render "components/stat_card", title: "Money out", value: render("components/money", amount: summary.money_out_total, budget: budget),
-          description: pluralize(summary.money_out_count, "bank transaction") %>
+    <%= render "components/empty_state", message: (in_file.zero? ? "Nothing new was added. Every row in the file was a row of 0." : "Nothing new was added. Every row in the file was already in this account.") %>
   </div>
 <% end %>
 
-<div class="mt-4 grid gap-4 sm:grid-cols-2">
+<div class="mt-8 grid gap-4 sm:grid-cols-2">
+  <%= render "components/stat_card", title: "Added", value: @import.added_count, description: "bank transaction".pluralize(@import.added_count) %>
+  <% if in_file.positive? %>
+    <%# A range of dates is longer than a figure, so it's set smaller than the others' numbers. %>
+    <%= render "components/stat_card", title: "Dates", description: "In the file",
+          value: tag.span((@import.earliest_date == @import.latest_date ? spelled_date(@import.earliest_date) : "#{spelled_date(@import.earliest_date)} to #{spelled_date(@import.latest_date)}"), class: "text-xl") %>
+    <%= render "components/stat_card", title: "Money in", value: render("components/money", amount: @import.money_in_total, budget: budget),
+          description: "#{pluralize(@import.money_in_count, "bank transaction")} in the file" %>
+    <%= render "components/stat_card", title: "Money out", value: render("components/money", amount: @import.money_out_total, budget: budget),
+          description: "#{pluralize(@import.money_out_count, "bank transaction")} in the file" %>
+  <% end %>
   <%= render "components/stat_card", title: "Duplicates skipped", value: @import.duplicates_skipped, description: "Already in this account" %>
   <%= render "components/stat_card", title: "Rows of 0 skipped", value: @import.zero_rows_skipped, description: "Not kept" %>
 </div>
 
-<% if summary.first_row %>
+<% if @import.first_row %>
   <div class="mt-8">
     <h2 class="text-xl font-semibold">First row</h2>
-    <p class="mt-2 text-base-content/70">As it was read.</p>
+    <p class="mt-2 text-base-content/70">The first row of the file, as it was read.</p>
 
     <div class="mt-4">
       <%= render "components/record_list" do %>
-        <%= render "components/record_row", href: nil, date: summary.first_row.date, description: summary.first_row.description,
-              counterpart: (summary.first_row.amount.negative? ? "Money out" : "Money in"), amount: summary.first_row.amount, budget: budget, with_year: true %>
+        <%= render "components/record_row", href: nil, date: @import.first_row.date, description: @import.first_row.description,
+              counterpart: money_direction(@import.first_row.amount), amount: @import.first_row.amount, budget: budget, with_year: true %>
       <% end %>
     </div>
   </div>

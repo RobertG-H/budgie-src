@@ -228,9 +228,9 @@ RSpec.describe "Imports", type: :request do
       assert_select "h1", text: "Import"
       expect(visible_text).to include("september.csv", "Chequing")
       expect(visible_text).to include("Added 5 bank transactions")
-      expect(visible_text).to include("Dates Sep 1, 2026 to Sep 9, 2026")
-      expect(visible_text).to include("Money in $2,812.25 2 bank transactions")
-      expect(visible_text).to include("Money out -$152.20 3 bank transactions")
+      expect(visible_text).to include("Dates Sep 1, 2026 to Sep 9, 2026 In the file")
+      expect(visible_text).to include("Money in $2,812.25 2 bank transactions in the file")
+      expect(visible_text).to include("Money out -$152.20 3 bank transactions in the file")
       expect(visible_text).to include("Duplicates skipped 0")
       expect(visible_text).to include("Rows of 0 skipped 1")
     end
@@ -250,7 +250,7 @@ RSpec.describe "Imports", type: :request do
       expect(css_select("main ul.list li").map { |row| row.text.squish }).to eq([ "Sep 2, 2026 Loblaws Money out -$82.45" ])
     end
 
-    it "says how many were duplicates, when a file overlaps what's there" do
+    it "says how many were duplicates, when a file overlaps what's there, and still says what the whole file held" do
       import
       overlap = account.imports.build(csv_format: csv_format, file_name: "october.csv").tap do |i|
         i.run("Date,Description,Amount\n2026-09-09,Hydro rebate,12.25\n2026-09-20,Gym,-30.00\n")
@@ -260,20 +260,42 @@ RSpec.describe "Imports", type: :request do
 
       expect(visible_text).to include("Added 1 bank transaction")
       expect(visible_text).to include("Duplicates skipped 1")
-      expect(visible_text).to include("Dates Sep 20, 2026")
-      expect(visible_text).not_to include("to Sep 20")
+      expect(visible_text).to include("Dates Sep 9, 2026 to Sep 20, 2026 In the file")
+      expect(visible_text).to include("Money in $12.25 1 bank transaction in the file", "Money out -$30.00 1 bank transaction in the file")
     end
 
-    it "says nothing new was added, when it added nothing, but still what it skipped" do
+    it "shows the file's first row, even when it was already in the account, which is the row a wrong sign would show on" do
+      import
+      overlap = account.imports.build(csv_format: csv_format, file_name: "october.csv").tap do |i|
+        i.run("Date,Description,Amount\n2026-09-09,Hydro rebate,12.25\n2026-09-20,Gym,-30.00\n")
+      end
+
+      get import_path(overlap)
+
+      expect(css_select("main ul.list li").map { |row| row.text.squish }).to eq([ "Sep 9, 2026 Hydro rebate Money in $12.25" ])
+    end
+
+    it "says nothing new was added, when it added nothing, but still what the file held and what it skipped" do
       import
       again = account.imports.build(csv_format: csv_format, file_name: "again.csv").tap { |i| i.run(File.read(file_fixture("signed-sample.csv"))) }
 
       get import_path(again)
 
-      expect(visible_text).to include("Nothing new was added.")
-      expect(visible_text).to include("Duplicates skipped 5", "Rows of 0 skipped 1")
+      expect(visible_text).to include("Nothing new was added. Every row in the file was already in this account.")
+      expect(visible_text).to include("Added 0 bank transactions", "Duplicates skipped 5", "Rows of 0 skipped 1")
+      expect(visible_text).to include("Dates Sep 1, 2026 to Sep 9, 2026 In the file", "Money in $2,812.25", "Money out -$152.20")
+      assert_select "main h2", text: "First row"
+      expect(css_select("main ul.list li").map { |row| row.text.squish }).to eq([ "Sep 1, 2026 Paycheck Money in $2,800.00" ])
+    end
+
+    it "says nothing new was added for a file of nothing but rows of 0, with no dates, money or first row" do
+      zeros = account.imports.build(csv_format: csv_format, file_name: "zeros.csv").tap { |i| i.run("Date,Description,Amount\n2026-09-02,Interest,0.00\n") }
+
+      get import_path(zeros)
+
+      expect(visible_text).to include("Nothing new was added. Every row in the file was a row of 0.", "Rows of 0 skipped 1")
+      expect(visible_text).not_to include("Dates", "Money in", "Money out")
       assert_select "main h2", text: "First row", count: 0
-      expect(visible_text).not_to include("Money in")
     end
 
     describe "Undo" do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_170000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_180100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -79,9 +79,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_170000) do
     t.check_constraint "amount_style::text = ANY (ARRAY['signed'::character varying, 'in_and_out'::character varying, 'direction'::character varying]::text[])", name: "budget_csv_formats_amount_style_known"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_csv_formats_name_not_blank"
     t.check_constraint "cardinality(description_columns) >= 1 AND (1 <= ALL (description_columns)) AND (column_count >= ALL (description_columns))", name: "budget_csv_formats_description_columns_within_count"
+    t.check_constraint "column_count <= 100", name: "budget_csv_formats_column_count_at_most_100"
     t.check_constraint "column_count >= 1", name: "budget_csv_formats_column_count_positive"
     t.check_constraint "date_column >= 1 AND date_column <= column_count", name: "budget_csv_formats_date_column_within_count"
     t.check_constraint "date_format::text = ANY (ARRAY['YYYY-MM-DD'::character varying, 'MM/DD/YYYY'::character varying, 'DD/MM/YYYY'::character varying, 'YYYYMMDD'::character varying]::text[])", name: "budget_csv_formats_date_format_known"
+    t.check_constraint "rows_to_skip <= 1000", name: "budget_csv_formats_rows_to_skip_at_most_1000"
     t.check_constraint "rows_to_skip >= 0", name: "budget_csv_formats_rows_to_skip_not_negative"
   end
 
@@ -146,10 +148,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_170000) do
     t.integer "zero_rows_skipped", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.date "earliest_date"
+    t.date "latest_date"
+    t.integer "money_in_count", default: 0, null: false
+    t.decimal "money_in_total", precision: 20, scale: 2, default: "0.0", null: false
+    t.integer "money_out_count", default: 0, null: false
+    t.decimal "money_out_total", precision: 20, scale: 2, default: "0.0", null: false
+    t.date "first_row_date"
+    t.string "first_row_description"
+    t.decimal "first_row_amount", precision: 15, scale: 2
     t.index ["account_id", "created_at"], name: "index_budget_imports_on_account_id_and_created_at"
     t.index ["csv_format_id"], name: "index_budget_imports_on_csv_format_id"
+    t.check_constraint "(earliest_date IS NULL) = ((money_in_count + money_out_count) = 0) AND (latest_date IS NULL) = (earliest_date IS NULL) AND (earliest_date IS NULL OR earliest_date <= latest_date)", name: "budget_imports_dates_match_rows"
+    t.check_constraint "(first_row_date IS NULL) = ((money_in_count + money_out_count) = 0) AND (first_row_description IS NULL) = (first_row_date IS NULL) AND (first_row_amount IS NULL) = (first_row_date IS NULL) AND (first_row_description IS NULL OR btrim(first_row_description::text) <> ''::text) AND (first_row_amount IS NULL OR first_row_amount <> 0::numeric)", name: "budget_imports_first_row_matches_rows"
+    t.check_constraint "(money_in_count = 0) = (money_in_total = 0::numeric) AND money_in_total >= 0::numeric", name: "budget_imports_money_in_total_matches_count"
+    t.check_constraint "(money_out_count = 0) = (money_out_total = 0::numeric) AND money_out_total <= 0::numeric", name: "budget_imports_money_out_total_matches_count"
     t.check_constraint "btrim(file_name::text) <> ''::text", name: "budget_imports_file_name_not_blank"
     t.check_constraint "duplicates_skipped >= 0", name: "budget_imports_duplicates_skipped_not_negative"
+    t.check_constraint "money_in_count >= 0 AND money_out_count >= 0", name: "budget_imports_money_counts_not_negative"
     t.check_constraint "zero_rows_skipped >= 0", name: "budget_imports_zero_rows_skipped_not_negative"
   end
 

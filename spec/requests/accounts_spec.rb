@@ -304,8 +304,11 @@ RSpec.describe "Accounts", type: :request do
 
     describe "Undo of the latest Import" do
       it "is offered beside it, with a confirmation listing what it deletes, within 24 hours" do
-        import = create(:budget_import, account: account, file_name: "newest.csv", created_at: 1.hour.ago)
-        create_list(:budget_bank_transaction, 2, account: account, import: import)
+        import = nil
+        travel_to(1.hour.ago) do
+          import = account.imports.build(csv_format: create(:budget_csv_format, budget: budget), file_name: "newest.csv")
+          import.run("2026-09-01,Paycheck,10.00\n2026-09-02,Loblaws,-5.00\n")
+        end
 
         get account_path(account)
 

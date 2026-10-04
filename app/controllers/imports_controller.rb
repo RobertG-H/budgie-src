@@ -8,7 +8,7 @@ class ImportsController < ApplicationController
   end
 
   # The file is read in the request: if it can't be read nothing is created, and the form comes back with the first row
-  # that can't be, by its line. Otherwise the Import is made, and what it did is its summary.
+  # that can't be, by its line. Otherwise the Import is made, and what the file held and what it added is its summary.
   def create
     @import = @account.imports.build(csv_format: csv_format, file_name: file&.original_filename)
 
@@ -22,7 +22,6 @@ class ImportsController < ApplicationController
   # What the Import did, and whether it can still be undone, and if it can't, why.
   def show
     @account = @import.account
-    @summary = @import.summary
     @undo_refusal = @import.undo_refusal
   end
 

@@ -6,7 +6,7 @@ module CsvFormatsHelper
     description = "Description in #{"column".pluralize(columns.size)} #{columns.to_sentence}."
     amount = case csv_format.amount_style
     when "signed" then "Amount in column #{csv_format.amount_column}, with money out as a negative amount."
-    when "in_and_out" then "Money in in column #{csv_format.money_in_column}, and money out in column #{csv_format.money_out_column}."
+    when "in_and_out" then "Money in is in column #{csv_format.money_in_column}, and money out is in column #{csv_format.money_out_column}."
     when "direction"
       "Amount in column #{csv_format.amount_column}, with money in when column #{csv_format.direction_column} says #{csv_format.money_in_value}."
     end
@@ -17,5 +17,10 @@ module CsvFormatsHelper
   # A date as a person reads it, spelled out so that a month can't be mistaken for a day: "Sep 3, 2026".
   def spelled_date(date)
     date.strftime("%b %-d, %Y")
+  end
+
+  # The same with the time of day, for when something ran: "Sep 3, 2026 at 11:08 AM".
+  def spelled_time(time)
+    time.strftime("%b %-d, %Y at %-l:%M %p")
   end
 end

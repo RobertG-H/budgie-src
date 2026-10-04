@@ -136,9 +136,9 @@ RSpec.describe "Filing bank transactions", type: :request do
     it "starts with one record, with a button to add another and no way to remove the only one" do
       get new_bank_transaction_filing_path(money_out)
 
-      assert_select "[data-controller~=filing-split] button[type=button][data-action='filing-split#add']", text: "Add another record"
+      assert_select "[data-controller~=filing-split] button[type=button][data-action='filing-split#addRecord']", text: "Add another record"
       assert_select "[data-filing-split-target=records] fieldset[data-filing-split-target=record]", count: 1
-      assert_select "[data-filing-split-target=records] fieldset button[type=button][data-action='filing-split#remove'][hidden]", text: "Remove"
+      assert_select "[data-filing-split-target=records] fieldset button[type=button][data-action='filing-split#removeRecord'][hidden]", text: "Remove"
       assert_select "[data-filing-split-target=records] fieldset legend[hidden]", text: "Record 1"
     end
 
@@ -244,7 +244,7 @@ RSpec.describe "Filing bank transactions", type: :request do
       file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "30") ]
 
       assert_select "[data-filing-split-target=total]", text: "Adds up to $90.00 of $100.00, with $10.00 left."
-      assert_select "[data-filing-split-target=records] fieldset button[data-action='filing-split#remove'][hidden]", count: 0
+      assert_select "[data-filing-split-target=records] fieldset button[data-action='filing-split#removeRecord'][hidden]", count: 0
       assert_select "[data-filing-split-target=records] fieldset legend[hidden]", count: 0
       expect(css_select("[data-filing-split-target=records] legend").map { |legend| legend.text.squish }).to eq([ "Record 1", "Record 2" ])
     end

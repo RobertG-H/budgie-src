@@ -127,7 +127,7 @@ RSpec.describe "The words on the pages", type: :request do
     it "says what an Import did in words a person uses, with no column names" do
       get import_path(import)
 
-      expect(visible_text).to include("Added 2 bank transactions", "Money in $2,800.00 1 bank transaction", "Money out -$82.45 1 bank transaction",
+      expect(visible_text).to include("Added 2 bank transactions", "Money in $2,800.00 1 bank transaction in the file", "Money out -$82.45 1 bank transaction in the file",
         "Duplicates skipped 0", "Rows of 0 skipped 1", "First row", "Oct 1, 2026 Paycheck Money in $2,800.00")
       expect(response.body).not_to match(/budget_|zero_rows|duplicates_skipped|content_key|occurrence/)
     end

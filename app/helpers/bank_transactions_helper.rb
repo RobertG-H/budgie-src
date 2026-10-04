@@ -15,9 +15,10 @@ module BankTransactionsHelper
     edit_polymorphic_path(record, month: month.strftime("%Y-%m"))
   end
 
-  # A bank transaction's money in or money out, in words, since colour and a sign aren't the only way to say it.
-  def money_direction(bank_transaction)
-    bank_transaction.amount.negative? ? "Money out" : "Money in"
+  # Which way money went, in words, since colour and a sign aren't the only way to say it: "Money out" for a negative amount, and
+  # "Money in" for a positive one.
+  def money_direction(amount)
+    amount.negative? ? "Money out" : "Money in"
   end
 
   # What a filing form's records add up to, as they've been entered, against the bank transaction's amount: whether it's all of it,

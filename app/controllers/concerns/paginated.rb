@@ -8,7 +8,7 @@ module Paginated
   MAX_PAGE = 1_000_000
 
   included do
-    helper_method :page
+    helper_method :page, :more_pages?
   end
 
   private
@@ -18,10 +18,10 @@ module Paginated
     end
 
     # The rows of one page of `scope`, in the order it's in. Whether there's a page after it is `more_pages?`.
-    def paginate(scope, per: PER_PAGE)
-      rows = scope.limit(per + 1).offset((page - 1) * per).to_a
-      @more_pages = rows.size > per
-      rows.first(per)
+    def paginate(scope)
+      rows = scope.limit(PER_PAGE + 1).offset((page - 1) * PER_PAGE).to_a
+      @more_pages = rows.size > PER_PAGE
+      rows.first(PER_PAGE)
     end
 
     def more_pages?

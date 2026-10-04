@@ -1,60 +1,45 @@
 <%# locals: (bank_transaction:, budget:, from:, show_account: false, show_state: true) %>
-<%# One bank transaction in a list: its date, its description, which Account it's in when the list has several, and its signed amount, money out red. What happens to it depends on its state: %>
+<%# One bank transaction in a list, as a record row: its date, its description, which Account it's in when the list has several, and its signed amount, money out red. What happens to it depends on its state: %>
 <%# - unfiled: the whole row opens the filing form, which comes back to the page the list is on (`from`) %>
 <%# - filed: the records it was filed as, which are ordinary and open where they're edited, a flag when they no longer add up to it, and Un-file %>
 <%# - ignored: Un-ignore %>
 <%# The state is said in a word, so it isn't only in what's offered. A list of nothing but unfiled ones, such as the Unfiled list, leaves it out with `show_state: false`. Preload the links and records of every one, so a list runs the same number of queries however long it is. %>
 <% state = bank_transaction.state %>
 <% records = bank_transaction.filed_records %>
-<% row = capture do %>
-  <span class="w-24 tabular-nums text-base-content/70"><%= spelled_date(bank_transaction.date) %></span>
-  <span class="list-col-grow">
-    <span class="block"><%= bank_transaction.description %></span>
-    <% if show_account %>
-      <span class="block text-base-content/70"><%= bank_transaction.account.name %></span>
-    <% end %>
+<% action_class = "btn btn-ghost btn-sm -ml-3" %>
 
-    <% if show_state %>
-      <span class="mt-1 flex flex-wrap items-center gap-2">
-        <span class="badge badge-ghost badge-sm"><%= state.to_s.capitalize %></span>
-      </span>
-    <% end %>
+<%= render "components/record_row", href: (new_bank_transaction_filing_path(bank_transaction, from: from) if state == :unfiled),
+      date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount, budget: budget, with_year: true,
+      counterpart: (bank_transaction.account.name if show_account) do %>
+  <% if show_state %>
+    <span class="mt-1 flex flex-wrap items-center gap-2"><%= render "components/label_badge", text: state.to_s.capitalize %></span>
+  <% end %>
 
-    <% if state == :filed %>
-      <%# Each record on a line of its own, with its amount when there's more than one to tell apart. %>
-      <span class="mt-1 block space-y-1">
-        <% records.each do |record| %>
-          <span class="block">
-            <%= link_to filed_record_label(record), filed_record_path(record), class: "link" %><%= ", #{money(record.amount, budget: budget)}" if records.size > 1 %>
-          </span>
-        <% end %>
-      </span>
-
-      <% unless bank_transaction.adds_up? %>
-        <span class="mt-1 flex flex-wrap items-center gap-2">
-          <span class="badge badge-warning badge-sm">Doesn't add up</span>
-          <span class="text-base-content/70">Its records add up to <%= money(bank_transaction.filed_total, budget: budget) %>, not <%= money(bank_transaction.amount.abs, budget: budget) %>.</span>
+  <% if state == :filed %>
+    <%# Each record on a line of its own, with its amount when there's more than one to tell apart. %>
+    <span class="mt-1 block space-y-1">
+      <% records.each do |record| %>
+        <span class="block">
+          <%= link_to filed_record_label(record), filed_record_path(record), class: "link" %><%= ", #{money(record.amount, budget: budget)}" if records.size > 1 %>
         </span>
       <% end %>
+    </span>
 
-      <span class="mt-1 block">
-        <%= button_to "Un-file", bank_transaction_filing_path(bank_transaction), method: :delete, params: { from: from }.compact,
-              form: { class: "inline", data: { turbo_confirm: "Un-file this bank transaction? This deletes the records it was filed as." } },
-              class: "btn btn-ghost btn-sm -ml-3" %>
-      </span>
-    <% elsif state == :ignored %>
-      <span class="mt-1 block">
-        <%= button_to "Un-ignore", bank_transaction_ignore_path(bank_transaction), method: :delete, params: { from: from }.compact,
-              form: { class: "inline" }, class: "btn btn-ghost btn-sm -ml-3" %>
+    <% unless bank_transaction.adds_up? %>
+      <span class="mt-1 flex flex-wrap items-center gap-2">
+        <span class="badge badge-warning badge-sm">Doesn't add up</span>
+        <span class="text-base-content/70">Its records add up to <%= money(bank_transaction.filed_total, budget: budget) %>, not <%= money(bank_transaction.amount.abs, budget: budget) %>.</span>
       </span>
     <% end %>
-  </span>
-  <span class="text-right tabular-nums"><%= render "components/money", amount: bank_transaction.amount, budget: budget %></span>
-<% end %>
-<li>
-  <% if state == :unfiled %>
-    <%= link_to new_bank_transaction_filing_path(bank_transaction, from: from), class: "list-row items-baseline hover:bg-base-200" do %><%= row %><% end %>
-  <% else %>
-    <div class="list-row items-baseline"><%= row %></div>
+
+    <span class="mt-1 block">
+      <%= button_to "Un-file", bank_transaction_filing_path(bank_transaction), method: :delete, params: { from: from }.compact,
+            form: { class: "inline", data: { turbo_confirm: "Un-file this bank transaction? This deletes the records it was filed as." } }, class: action_class %>
+    </span>
+  <% elsif state == :ignored %>
+    <span class="mt-1 block">
+      <%= button_to "Un-ignore", bank_transaction_ignore_path(bank_transaction), method: :delete, params: { from: from }.compact,
+            form: { class: "inline" }, class: action_class %>
+    </span>
   <% end %>
-</li>
+<% end %>

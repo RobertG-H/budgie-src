@@ -67,7 +67,39 @@ RSpec.describe Budget::Import, type: :model do
       expect { update_import(import, "zero_rows_skipped = -1") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_zero_rows_skipped_not_negative/)
     end
 
-    %w[ account_id csv_format_id file_name duplicates_skipped zero_rows_skipped ].each do |column|
+    describe "what the file held" do
+      let(:import) { create(:budget_import, earliest_date: Date.new(2026, 9, 1), latest_date: Date.new(2026, 9, 2), money_in_count: 1, money_in_total: 10,
+        money_out_count: 1, money_out_total: -5, first_row_date: Date.new(2026, 9, 1), first_row_description: "Paycheck", first_row_amount: 10) }
+
+      it "is consistent as made" do
+        expect(import.reload).to be_persisted
+      end
+
+      it "rejects negative counts, a money in total that isn't positive when there's some, and a money out total that isn't negative" do
+        expect { update_import(import, "money_in_count = -1, money_out_count = 0, money_out_total = 0") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_money_counts_not_negative/)
+        expect { update_import(import, "money_in_total = 0") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_money_in_total_matches_count/)
+        expect { update_import(import, "money_in_total = -10") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_money_in_total_matches_count/)
+        expect { update_import(import, "money_out_total = 5") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_money_out_total_matches_count/)
+        expect { update_import(import, "money_out_count = 0") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_money_out_total_matches_count/)
+      end
+
+      it "rejects dates that aren't there when there are rows, are there when there aren't, or run backwards" do
+        expect { update_import(import, "earliest_date = NULL") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_dates_match_rows/)
+        expect { update_import(import, "earliest_date = '2026-09-03'") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_dates_match_rows/)
+        expect { update_import(create(:budget_import), "earliest_date = '2026-09-01', latest_date = '2026-09-01'") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_dates_match_rows/)
+      end
+
+      it "rejects a first row that's partly there, blank, of 0, or there when the file had no rows" do
+        expect { update_import(import, "first_row_description = NULL") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_first_row_matches_rows/)
+        expect { update_import(import, "first_row_description = ' '") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_first_row_matches_rows/)
+        expect { update_import(import, "first_row_amount = 0") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_first_row_matches_rows/)
+        expect { update_import(import, "first_row_date = NULL") }.to raise_error(ActiveRecord::CheckViolation, /budget_imports_first_row_matches_rows/)
+        expect { update_import(create(:budget_import), "first_row_date = '2026-09-01', first_row_description = 'x', first_row_amount = 1") }
+          .to raise_error(ActiveRecord::CheckViolation, /budget_imports_first_row_matches_rows/)
+      end
+    end
+
+    %w[ account_id csv_format_id file_name duplicates_skipped zero_rows_skipped money_in_count money_in_total money_out_count money_out_total ].each do |column|
       it "requires a #{column}" do
         expect { update_import(import, "#{column} = NULL") }.to raise_error(ActiveRecord::NotNullViolation)
       end
@@ -186,6 +218,74 @@ RSpec.describe Budget::Import, type: :model do
 
         expect(import.run(september)).to be(false)
         expect(import.errors.full_messages).to eq([ "CSV format can't be blank" ])
+      end
+    end
+
+    describe "what the file held, which its summary says without the file" do
+      it "is the dates it spans, how many rows were money in and money out and what each adds up to, and its first row as it was read" do
+        import = import_of(september)
+
+        expect(import).to have_attributes(
+          earliest_date: Date.new(2026, 9, 1), latest_date: Date.new(2026, 9, 2),
+          money_in_count: 1, money_in_total: 2800, money_out_count: 3, money_out_total: BigDecimal("-90.95"),
+          first_row_date: Date.new(2026, 9, 1), first_row_description: "Paycheck", first_row_amount: 2800
+        )
+        expect(import.reload).to have_attributes(money_out_total: BigDecimal("-90.95"), first_row_description: "Paycheck")
+      end
+
+      it "is of the whole file, so an overlapping file's figures include the rows that were already there" do
+        import_of("2026-09-01,Paycheck,2800.00\n2026-09-02,Loblaws,-82.45\n")
+
+        overlapping = import_of("2026-09-02,Loblaws,-82.45\n2026-09-03,Hydro,-65.50\n2026-09-04,Gym,-30.00\n")
+
+        expect(overlapping).to have_attributes(
+          duplicates_skipped: 1, earliest_date: Date.new(2026, 9, 2), latest_date: Date.new(2026, 9, 4),
+          money_in_count: 0, money_in_total: 0, money_out_count: 3, money_out_total: BigDecimal("-177.95"),
+          first_row_description: "Loblaws", first_row_amount: BigDecimal("-82.45")
+        )
+        expect(overlapping.added_count).to eq(2)
+      end
+
+      it "is still there when nothing was added, since the same file read again is the same file" do
+        import_of(september)
+
+        again = import_of(september)
+
+        expect(again).to have_attributes(duplicates_skipped: 4, added_count: 0, earliest_date: Date.new(2026, 9, 1), money_out_count: 3, first_row_description: "Paycheck")
+      end
+
+      it "has no dates and no first row for a file of nothing but rows of 0, and counts nothing" do
+        import = import_of("2026-09-02,Interest,0.00\n")
+
+        expect(import).to have_attributes(earliest_date: nil, latest_date: nil, first_row_date: nil, first_row_description: nil, first_row_amount: nil,
+          money_in_count: 0, money_in_total: 0, money_out_count: 0, money_out_total: 0, added_count: 0)
+        expect(import.first_row).to be_nil
+      end
+
+      it "reads the first row after the rows to skip, and as the CSV format read it, with the sign inverted" do
+        format = create(:budget_csv_format, budget: account.budget, rows_to_skip: 1, invert_sign: true)
+
+        import = import_of("Date,Description,Amount\n2026-09-05,Gym,-30.00\n2026-09-06,Refund,5.00\n", csv_format: format)
+
+        expect(import.first_row).to have_attributes(date: Date.new(2026, 9, 5), description: "Gym", amount: 30)
+        expect(import).to have_attributes(money_in_count: 1, money_in_total: 30, money_out_count: 1, money_out_total: -5)
+      end
+
+      it "counts what was added, which is the rows of the file less the ones already there, and is what Undo would delete" do
+        import = import_of(september)
+        again = import_of("2026-09-01,Paycheck,2800.00\n2026-09-05,Gym,-30.00\n")
+
+        expect(import.added_count).to eq(4)
+        expect(again.added_count).to eq(1)
+        expect(again.duplicates_skipped).to eq(1)
+        expect { again.undo }.to change(Budget::BankTransaction, :count).by(-again.added_count)
+      end
+
+      it "is nothing for a file that's refused, which creates no Import" do
+        import = import_of("2026-09-01,Paycheck,2800.00\n2026-13-45,Loblaws,-82.45\n")
+
+        expect(import).not_to be_persisted
+        expect(import.money_in_count).to eq(0)
       end
     end
 

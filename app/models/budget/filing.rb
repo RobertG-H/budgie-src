@@ -15,7 +15,6 @@
 # inserted in one statement.
 class Budget::Filing
   KINDS_BY_SIGN = { in: %w[ deposit refund ], out: %w[ spend ] }.freeze
-  LINKS = { Budget::Deposit => Budget::DepositLink, Budget::Spend => Budget::SpendLink, Budget::Refund => Budget::RefundLink }.freeze
   # Far more than a bank transaction is ever split into, so that one that's been sent a lot of them is refused.
   MAX_RECORDS = 50
 
@@ -89,7 +88,7 @@ class Budget::Filing
     def check_unfiled(entries)
       ids = entries.map { |entry| entry.bank_transaction.id }
       locked = Budget::BankTransaction.where(id: @budget.bank_transactions.where(id: ids).select(:id)).lock.index_by(&:id)
-      filed = LINKS.values.flat_map { |link| link.where(bank_transaction_id: ids).distinct.pluck(:bank_transaction_id) }.to_set
+      filed = Budget::BankTransaction.links_by_record.values.flat_map { |link| link.where(bank_transaction_id: ids).distinct.pluck(:bank_transaction_id) }.to_set
 
       entries.each do |entry|
         current = locked[entry.bank_transaction.id]
@@ -97,9 +96,9 @@ class Budget::Filing
         if current.nil?
           entry.errors.add(:base, "This bank transaction isn't in this budget.")
         elsif current.ignored?
-          entry.errors.add(:base, "This bank transaction is ignored. Un-ignore it first.")
+          entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:ignored))
         elsif filed.include?(current.id)
-          entry.errors.add(:base, "This bank transaction is already filed.")
+          entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:filed))
         end
       end
     end
@@ -112,7 +111,7 @@ class Budget::Filing
         ids = record_class.insert_all!(kind_pairs.map { |_, record| record.attributes.except("id", "created_at", "updated_at") }, returning: %w[ id ]).rows.flatten
         column = :"#{record_class.model_name.element}_id"
 
-        LINKS.fetch(record_class).insert_all!(kind_pairs.zip(ids).map { |(bank_transaction, _), id| { bank_transaction_id: bank_transaction.id, column => id } })
+        Budget::BankTransaction.links_by_record.fetch(record_class).insert_all!(kind_pairs.zip(ids).map { |(bank_transaction, _), id| { bank_transaction_id: bank_transaction.id, column => id } })
       end
     end
 

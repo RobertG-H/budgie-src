@@ -11,9 +11,9 @@
     <p class="font-semibold"><%= bank_transaction.description %></p>
     <p class="mt-1 tabular-nums">
       <%= render "components/money", amount: bank_transaction.amount, budget: Current.budget %>
-      <span class="badge badge-ghost badge-sm"><%= money_direction(bank_transaction) %></span>
+      <%= render "components/label_badge", text: money_direction(bank_transaction.amount) %>
     </p>
   </div>
 
-  <%= render "bank_transaction_filings/form", entry: @entry, cancel_path: cancel_path %>
+  <%= render "bank_transaction_filings/form", entry: @entry, cancel_path: origin_path %>
 </div>

@@ -16,7 +16,7 @@
         <tr class="<%= "text-base-content/70" if row.skipped %>">
           <th scope="row" class="whitespace-nowrap tabular-nums">
             <%= row.line %>
-            <% if row.skipped %><span class="badge badge-ghost badge-sm">Skipped</span><% end %>
+            <% if row.skipped %><%= render "components/label_badge", text: "Skipped" %><% end %>
           </th>
           <% sample.width.times do |index| %>
             <%# A long cell is cut short, so one can't push the rest off the page. The whole of it is in the title. %>

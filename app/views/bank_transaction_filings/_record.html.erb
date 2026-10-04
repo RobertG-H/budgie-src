@@ -58,5 +58,5 @@
     <%= form.text_area :notes, rows: 3, **field %>
   <% end %>
 
-  <button type="button" class="btn btn-ghost btn-sm -ml-3 text-error" data-action="filing-split#remove" data-filing-split-target="remove" <%= "hidden" unless removable %>>Remove</button>
+  <button type="button" class="btn btn-ghost" data-action="filing-split#removeRecord" data-filing-split-target="remove" <%= "hidden" unless removable %>>Remove</button>
 </fieldset>

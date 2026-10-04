@@ -5,7 +5,7 @@ class Budget::CsvFormat::Sample
   GRID_ROWS = 10
 
   # A row of the sample: where it started in the file, its cells, and whether the format skips it.
-  Row = Data.define(:line, :cells, :skipped)
+  GridRow = Data.define(:line, :cells, :skipped)
 
   attr_reader :refusal
 
@@ -14,10 +14,10 @@ class Budget::CsvFormat::Sample
   def initialize(file, rows_to_skip: 0)
     @source = Budget::CsvFormat::Source.new(file)
     @rows = @source.each_row.first(rows_to_skip + GRID_ROWS).each_with_index.map do |(line, cells), index|
-      Row.new(line: line, cells: cells, skipped: index < rows_to_skip)
+      GridRow.new(line: line, cells: cells, skipped: index < rows_to_skip)
     end
-  rescue Budget::CsvFormat::Source::Unreadable => unreadable
-    @refusal = unreadable.refusal
+  rescue Budget::CsvFormat::Refused => refused
+    @refusal = refused.refusal
     @rows = []
   end
 

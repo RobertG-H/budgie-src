@@ -1,9 +1,10 @@
 <%# locals: (href:, date:, description:, amount:, budget:, counterpart: nil, notes: nil, with_year: false) %>
 <%# One record in a list, such as a Deposit: its date, its description with any notes as a muted second line under it, and its amount. A record between two envelopes also says where the money went or came from, such as "To Groceries", in a muted line of its own under the description. The whole row links to the record's edit page, or isn't a link when `href` is nil, for a record that's only read, such as a bank transaction. Put rows in components/record_list. The description is the second column, which daisyUI's list lets grow. %>
 <%# The date is the month and day, which is enough in a list of one month. A list that goes back further passes `with_year`, which spells it out. %>
+<%# The block, if there is one, is more under the description, such as a state and what can be done to the row. It can't have a link of its own when `href` is given, so it's for rows that aren't links. %>
 <% row = capture do %>
   <%# A fixed width, so descriptions line up whichever dates the rows have. %>
-  <span class="<%= with_year ? "w-24" : "w-12" %> tabular-nums text-base-content/70"><%= date.strftime(with_year ? "%b %-d, %Y" : "%b %-d") %></span>
+  <span class="<%= with_year ? "w-24" : "w-12" %> tabular-nums text-base-content/70"><%= with_year ? spelled_date(date) : date.strftime("%b %-d") %></span>
   <span class="list-col-grow">
     <span class="block"><%= description %></span>
     <% if counterpart.present? %>
@@ -12,6 +13,7 @@
     <% if notes.present? %>
       <span class="block whitespace-pre-line text-base-content/70"><%= notes %></span>
     <% end %>
+    <%= yield %>
   </span>
   <span class="text-right tabular-nums"><%= render "components/money", amount: amount, budget: budget %></span>
 <% end %>

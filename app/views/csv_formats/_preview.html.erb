@@ -40,7 +40,7 @@
               <td><%= row.description %></td>
               <td class="text-right tabular-nums">
                 <%= render "components/money", amount: row.amount, budget: budget %>
-                <span class="badge badge-ghost badge-sm"><%= row.amount.negative? ? "Money out" : "Money in" %></span>
+                <%= render "components/label_badge", text: money_direction(row.amount) %>
               </td>
             </tr>
           <% end %>

@@ -14,7 +14,7 @@ class CsvFormatsController < ApplicationController
   def create
     @csv_format = Current.budget.csv_formats.new(csv_format_params)
 
-    if @csv_format.save
+    if save_with_sample
       redirect_to csv_formats_path, notice: "CSV format added."
     else
       render :new, status: :unprocessable_content
@@ -25,7 +25,9 @@ class CsvFormatsController < ApplicationController
   end
 
   def update
-    if @csv_format.update(csv_format_params)
+    @csv_format.assign_attributes(csv_format_params)
+
+    if save_with_sample
       redirect_to csv_formats_path, notice: "CSV format updated."
     else
       render :edit, status: :unprocessable_content
@@ -42,6 +44,19 @@ class CsvFormatsController < ApplicationController
   end
 
   private
+    # Saves the format with the column count of the sample that was sent with the form, if one was, which is the sample's whatever the
+    # form's own say: the preview fills it in as the form changes, and a form without JavaScript, or one sent before the preview
+    # answered, has none. A sample that can't be read is refused, with why. Without one, the format keeps the column count it has.
+    def save_with_sample
+      sample = read_sample(@csv_format)
+      @csv_format.column_count = sample.column_count if sample&.column_count
+      return @csv_format.save unless sample&.refusal
+
+      @csv_format.valid?
+      @csv_format.errors.add(:base, sample.refusal.message)
+      false
+    end
+
     # Found through the user's budget, so another user's CSV format is a 404.
     def set_csv_format
       @csv_format = Current.budget.csv_formats.find(params[:id])

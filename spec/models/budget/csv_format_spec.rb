@@ -292,6 +292,11 @@ RSpec.describe Budget::CsvFormat, type: :model do
       expect { update_format(format, "column_count = 0") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_column_count_positive/)
     end
 
+    it "rejects more columns, and more rows to skip, than any bank's file has, as the model does" do
+      expect { update_format(format, "column_count = 101") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_column_count_at_most_100/)
+      expect { update_format(format, "rows_to_skip = 1001") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_rows_to_skip_at_most_1000/)
+    end
+
     it "rejects a date column outside the columns" do
       expect { update_format(format, "date_column = 4") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_date_column_within_count/)
       expect { update_format(format, "date_column = 0") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_date_column_within_count/)

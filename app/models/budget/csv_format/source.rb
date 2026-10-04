@@ -4,16 +4,6 @@
 class Budget::CsvFormat::Source
   MAX_BYTES = 2.megabytes
 
-  # Raised when the file can't be read, and why.
-  class Unreadable < StandardError
-    attr_reader :refusal
-
-    def initialize(refusal)
-      @refusal = refusal
-      super(refusal.message)
-    end
-  end
-
   # `file` is anything that can be read, such as an uploaded file, or the text of one.
   def initialize(file)
     @text = text_of(file)
@@ -36,7 +26,7 @@ class Budget::CsvFormat::Source
         yield start, cells
       end
     rescue CSV::MalformedCSVError => error
-      raise Unreadable, Budget::CsvFormat::Refusal.new(line: line + 1, reason: "isn't valid CSV (#{error.message.sub(/ in line \d+\.?\z/, "")}).")
+      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: line + 1, reason: "isn't valid CSV (#{error.message.sub(/ in line \d+\.?\z/, "")}).")
     end
   end
 
@@ -49,10 +39,10 @@ class Budget::CsvFormat::Source
       refuse("The file is over #{MAX_BYTES / 1.megabyte} MB.") if text.bytesize > MAX_BYTES
       refuse("The file isn't UTF-8 text. Save it again as CSV in UTF-8 and try again.") unless text.valid_encoding?
 
-      text.delete_prefix("﻿")
+      text.delete_prefix("\uFEFF")
     end
 
     def refuse(reason)
-      raise Unreadable, Budget::CsvFormat::Refusal.new(line: nil, reason: reason)
+      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: nil, reason: reason)
     end
 end

@@ -109,34 +109,32 @@ sample_bank = budget.csv_formats.find_or_create_by!(name: "Sample bank") do |csv
     amount_style: "signed", amount_column: 3)
 end
 
-# An Account with the sample file imported into it with that format: five bank transactions, money in and money out, and a
-# sixth row of 0 that's skipped. It's only imported while the Account has no Import, so what a developer has done to it, such
-# as undoing it, isn't redone by seeding again.
+# An Account with the sample file imported into it with that format: five bank transactions, money in and money out, and a sixth
+# row of 0 that's skipped. It's only imported while the Account has no Import, and the bank transactions are only filed and ignored
+# then, straight after, so what a developer has done to them since, such as undoing the Import or un-filing one, isn't redone by
+# seeding again.
 chequing = budget.accounts.find_or_create_by!(name: "Chequing")
 if chequing.imports.none?
   sample = Rails.root.join("spec/fixtures/files/signed-sample.csv")
   sample.open { |file| chequing.imports.build(csv_format: sample_bank, file_name: sample.basename.to_s).run(file) or raise "The sample file wasn't imported." }
-end
 
-# Left unfiled, filed and ignored, so the Unfiled list and the Account's page have each to show. Loblaws is a Spend from Groceries,
-# of its whole amount, which counts in Groceries' September like any other Spend, and Coffee shop is ignored. Paycheck and Hydro
-# rebate stay unfiled. Only an unfiled bank transaction is touched, so one that a developer has filed or ignored another way
-# is left, though one they've un-filed or un-ignored is filed or ignored again by seeding.
-bank_transactions = chequing.bank_transactions.index_by(&:description)
-loblaws = bank_transactions["Loblaws"]
-if loblaws&.unfiled?
-  groceries_envelope = budget.envelopes.find_by!(name: "Groceries")
-  entry = Budget::Filing::Entry.new(bank_transaction: loblaws, drafts: [ Budget::Filing::Draft.for(loblaws, envelope_id: groceries_envelope.id) ])
-  Budget::Filing.new(budget).file([ entry ]) or raise "Loblaws wasn't filed: #{entry.errors.full_messages.to_sentence}"
-end
-# Hydro is a split: $50.00 from Bills and the other $15.50 from Rent, which add up to its $65.50, so a bank transaction filed as
-# several records has something to show. Like the rest it's only filed while it's unfiled.
-hydro = bank_transactions["Hydro"]
-if hydro&.unfiled?
+  # Left unfiled, filed and ignored, so the Unfiled list and the Account's page have each to show. Loblaws is a Spend from Groceries,
+  # of its whole amount, which counts in Groceries' September like any other Spend. Hydro is a split: $50.00 from Bills and the other
+  # $15.50 from Rent, which add up to its $65.50, so a bank transaction filed as several records has something to show. Coffee shop is
+  # ignored. Paycheck and Hydro rebate stay unfiled.
+  bank_transactions = chequing.bank_transactions.index_by(&:description)
+
+  loblaws = bank_transactions.fetch("Loblaws")
+  loblaws_entry = Budget::Filing::Entry.new(bank_transaction: loblaws, drafts: [ Budget::Filing::Draft.for(loblaws, envelope_id: budget.envelopes.find_by!(name: "Groceries").id) ])
+
+  hydro = bank_transactions.fetch("Hydro")
   bills, rent = budget.envelopes.where(name: %w[ Bills Rent ]).order(:name)
-  drafts = [ Budget::Filing::Draft.for(hydro, envelope_id: bills.id, amount: 50), Budget::Filing::Draft.for(hydro, envelope_id: rent.id, amount: 15.5) ]
-  entry = Budget::Filing::Entry.new(bank_transaction: hydro, drafts: drafts)
-  Budget::Filing.new(budget).file([ entry ]) or raise "Hydro wasn't filed: #{(entry.errors.full_messages + drafts.flat_map { |draft| draft.errors.full_messages }).to_sentence}"
+  hydro_entry = Budget::Filing::Entry.new(bank_transaction: hydro,
+    drafts: [ Budget::Filing::Draft.for(hydro, envelope_id: bills.id, amount: 50), Budget::Filing::Draft.for(hydro, envelope_id: rent.id, amount: 15.5) ])
+
+  # Both at once, which is what the operation is for.
+  entries = [ loblaws_entry, hydro_entry ]
+  Budget::Filing.new(budget).file(entries) or raise "The sample wasn't filed: #{entries.flat_map { |entry| entry.errors.full_messages + entry.drafts.flat_map { |draft| draft.errors.full_messages } }.to_sentence}"
+
+  bank_transactions.fetch("Coffee shop").ignore
 end
-coffee_shop = bank_transactions["Coffee shop"]
-coffee_shop.ignore if coffee_shop&.unfiled?

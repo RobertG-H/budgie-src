@@ -132,10 +132,17 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#fields fieldset p[id$=_hint]"
       end
 
-      it "shows the delete button, which asks first" do
+      it "shows the delete button, which asks first, and with another label, such as Undo" do
         with_development_routes { get :show }
 
         assert_select "#buttons form[data-turbo-confirm] button.btn-ghost.text-error", text: "Delete"
+        assert_select "#buttons form[data-turbo-confirm] button.btn-ghost.text-error", text: "Undo"
+      end
+
+      it "shows the label badge, in a row that isn't a link" do
+        with_development_routes { get :show }
+
+        assert_select "#record-rows li div.list-row .badge", text: "Ignored"
       end
 
       it "shows money columns, with a negative Available that says Overspent" do

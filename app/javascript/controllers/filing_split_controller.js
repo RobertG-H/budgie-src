@@ -14,7 +14,7 @@ export default class extends Controller {
   }
 
   // Adds a record that starts with what's left to file, if there's any, and goes to it.
-  add() {
+  addRecord() {
     if (this.recordTargets.length >= this.maxValue) return
 
     this.recordsTarget.insertAdjacentHTML("beforeend", this.templateTarget.innerHTML.replaceAll("NEW_RECORD", Date.now()))
@@ -28,7 +28,7 @@ export default class extends Controller {
   }
 
   // Takes a record out, unless it's the only one, which a bank transaction needs at least.
-  remove(event) {
+  removeRecord(event) {
     if (this.recordTargets.length <= 1) return
 
     event.target.closest("[data-filing-split-target=record]").remove()

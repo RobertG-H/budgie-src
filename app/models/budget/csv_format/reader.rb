@@ -43,14 +43,14 @@ class Budget::CsvFormat::Reader
 
     refuse(nil, "There are no rows to read after the rows to skip.") if rows.empty? && zero_rows.zero?
     Reading.new(rows: rows, zero_rows: zero_rows, refusal: nil)
-  rescue Budget::CsvFormat::Source::Unreadable => unreadable
-    Reading.new(rows: [], zero_rows: 0, refusal: unreadable.refusal)
+  rescue Budget::CsvFormat::Refused => refused
+    Reading.new(rows: [], zero_rows: 0, refusal: refused.refusal)
   end
 
   private
     # Stops reading, and says why. Nothing is read from a file that has anything wrong with it.
     def refuse(line, reason)
-      raise Budget::CsvFormat::Source::Unreadable, Budget::CsvFormat::Refusal.new(line: line, reason: reason)
+      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: line, reason: reason)
     end
 
     # A value from the file as a refusal quotes it, which isn't more than a little of it.

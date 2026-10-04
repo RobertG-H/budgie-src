@@ -28,7 +28,7 @@
       <% end %>
     </template>
 
-    <button type="button" class="btn" data-action="filing-split#add" data-filing-split-target="add">Add another record</button>
+    <button type="button" class="btn" data-action="filing-split#addRecord" data-filing-split-target="add">Add another record</button>
 
     <p class="<%= entry.remaining.negative? ? "text-error" : "text-base-content/70" %>" data-filing-split-target="total" aria-live="polite"><%= filing_totals(entry, budget) %></p>
   </div>

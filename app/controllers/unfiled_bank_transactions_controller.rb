@@ -3,7 +3,6 @@
 class UnfiledBankTransactionsController < ApplicationController
   include Paginated
 
-  helper_method :more_pages?
 
   # Each one's links are loaded with it, none of them having any, so that saying what state it's in takes no query of its own.
   def index

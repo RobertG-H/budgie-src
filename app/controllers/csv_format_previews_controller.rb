@@ -6,7 +6,7 @@ class CsvFormatPreviewsController < ApplicationController
 
   def create
     @csv_format = build_csv_format
-    @sample = read_sample
+    @sample = read_sample(@csv_format)
     @csv_format.column_count = @sample.column_count if @sample&.column_count
     @preview = Budget::CsvFormat::Preview.new(@csv_format, @sample)
 
@@ -23,13 +23,5 @@ class CsvFormatPreviewsController < ApplicationController
     def build_csv_format
       csv_format = params[:csv_format_id].present? ? Current.budget.csv_formats.find(params[:csv_format_id]) : Current.budget.csv_formats.new
       csv_format.tap { |format| format.assign_attributes(csv_format_params) }
-    end
-
-    # The file that was sent, if one was: anything else in its place is no sample.
-    def read_sample
-      file = params.dig(:csv_format, :sample)
-      return unless file.respond_to?(:original_filename)
-
-      Budget::CsvFormat::Sample.new(file, rows_to_skip: @csv_format.rows_to_skip.to_i.clamp(0, Budget::CsvFormat::MAX_ROWS_TO_SKIP))
     end
 end

@@ -45,7 +45,7 @@ RSpec.describe "CSV formats", type: :request do
 
       get csv_formats_path
 
-      expect(response.body).to include("Description in column 2. Money in in column 4, and money out in column 3.")
+      expect(response.body).to include("Description in column 2. Money in is in column 4, and money out is in column 3.")
       expect(response.body).to include("Description in columns 2 and 1. Amount in column 3, with money in when column 4 says Credit. The sign is inverted.")
     end
 
@@ -170,6 +170,62 @@ RSpec.describe "CSV formats", type: :request do
         .to change(Budget::CsvFormat, :count).by(1)
 
       expect(Budget::CsvFormat.column_names).not_to include("sample", "file", "contents", "content")
+    end
+
+    describe "with the sample it was built from, which is sent with the form" do
+      def sample(text = nil)
+        text ? Rack::Test::UploadedFile.new(StringIO.new(text), "text/csv", original_filename: "sample.csv") : Rack::Test::UploadedFile.new(file_fixture("signed-sample.csv"), "text/csv")
+      end
+
+      it "takes the column count from the sample, which is the sample's whatever the form says, or doesn't, as without JavaScript" do
+        post csv_formats_path, params: { csv_format: format_params.except(:column_count).merge(sample: sample) }
+
+        expect(budget.csv_formats.sole.column_count).to eq(3)
+
+        post csv_formats_path, params: { csv_format: format_params.merge(name: "Another", column_count: "9", sample: sample) }
+
+        expect(budget.csv_formats.find_by!(name: "Another").column_count).to eq(3)
+      end
+
+      it "takes it from the first row the format reads, so the rows to skip decide it" do
+        text = "Account: Chequing\nDate,Description,Amount,Extra\n2026-09-01,Paycheck,10.00,x\n"
+
+        post csv_formats_path, params: { csv_format: format_params.merge(rows_to_skip: "2", amount_column: "4", sample: sample(text)) }
+
+        expect(budget.csv_formats.sole).to have_attributes(column_count: 4, rows_to_skip: 2, amount_column: 4)
+      end
+
+      it "refuses a sample that can't be read, saying why, and creates nothing" do
+        expect { post csv_formats_path, params: { csv_format: format_params.merge(sample: sample("2026-09-01,Caf\xE9,-5.00\n".b)) } }.not_to change(Budget::CsvFormat, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_select "[role=alert] li", text: "The file isn't UTF-8 text. Save it again as CSV in UTF-8 and try again."
+      end
+
+      it "says the columns must be in the sample's, when it names one that isn't" do
+        post csv_formats_path, params: { csv_format: format_params.merge(date_column: "5", sample: sample) }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_select "[role=alert] li", text: "Date column must be one of the sample's columns, 1 to 3"
+      end
+
+      it "doesn't keep it, or read it past the request" do
+        expect { post csv_formats_path, params: { csv_format: format_params.merge(sample: sample) } }.to change(Budget::CsvFormat, :count).by(1)
+
+        expect(Budget::CsvFormat.column_names).not_to include("sample", "file", "contents", "content")
+      end
+
+      it "takes it again when a format is changed with a new sample, and keeps the old one without" do
+        format = create(:budget_csv_format, budget: budget, column_count: 3)
+
+        patch csv_format_path(format), params: { csv_format: { name: "Wider", amount_style: "in_and_out", money_in_column: "4", money_out_column: "3", sample: sample("a,b,c,d\n") } }
+
+        expect(format.reload).to have_attributes(column_count: 4, amount_style: "in_and_out")
+
+        patch csv_format_path(format), params: { csv_format: { name: "Same width" } }
+
+        expect(format.reload.column_count).to eq(4)
+      end
     end
 
     it "refuses what's wrong with it, keeping what was entered, and creates nothing" do

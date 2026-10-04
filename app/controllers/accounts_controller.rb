@@ -3,7 +3,6 @@ class AccountsController < ApplicationController
 
   before_action :set_account, only: %i[ show edit update destroy ]
 
-  helper_method :more_pages?
 
   def index
     @accounts = Current.budget.accounts.alphabetical

@@ -18,10 +18,12 @@
   <% end %>
 
   <h3 class="font-semibold">Read only</h3>
-  <p class="text-base-content/70">A record that can't be opened, such as a bank transaction, is a row that isn't a link. A list that goes back past a year spells out the year.</p>
+  <p class="text-base-content/70">A record that can't be opened, such as a bank transaction, is a row that isn't a link. A list that goes back past a year spells out the year. The block of a row is more under its description, such as a state, shown here as a label badge.</p>
 
   <%= render "components/record_list" do %>
-    <%= render "components/record_row", href: nil, date: Date.new(2026, 9, 12), description: "Loblaws", amount: -82.45, budget: budget, with_year: true %>
+    <%= render "components/record_row", href: nil, date: Date.new(2026, 9, 12), description: "Loblaws", amount: -82.45, budget: budget, with_year: true do %>
+      <span class="mt-1 block"><%= render "components/label_badge", text: "Ignored" %></span>
+    <% end %>
     <%= render "components/record_row", href: nil, date: Date.new(2025, 9, 12), description: "Paycheck", counterpart: "Money in",
           amount: 2800, budget: budget, with_year: true %>
   <% end %>

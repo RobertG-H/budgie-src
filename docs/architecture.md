@@ -258,7 +258,7 @@ rows. A row of 0 is skipped and counted, not refused.
 
 **The sample isn't kept.** The builder sends the sample file with the form each time a choice changes, and the server answers
 with the grid and the preview, so the sample only exists for a request, and there's no reader written in JavaScript to keep
-in step with the real one. Saving a format never imports the sample: the person uploads the file again to import it.
+in step with the real one. Saving a format never imports the sample: the person chooses the file again to import it.
 
 **Accounts, Imports and bank transactions.** An Account is a real bank or card account, with only a name: Budgie doesn't track what's
 in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). A person imports a CSV file into one with a CSV format,
@@ -276,8 +276,9 @@ Filing rule reads it is a separate, generated column that follows the descriptio
 
 **One request, one Import.** It runs in the request, holds the Account's row lock and inserts every row at once, so it makes the same
 number of queries for 10 rows as for 1,000, a double submit imports once, and there's no job to wait for. Its summary is a page of
-its own, worked out from the rows it added: the dates, the money in and money out, and the first row as it was read, so a wrong
-sign or a swapped day and month, which both read without error, is noticed straight away. An Account's page lists its bank
+its own, and says what the whole file held, which is worked out when it's read since the file isn't kept: the dates, the money in and
+money out, and the first row as it was read, so a wrong sign or a swapped day and month, which both read without error, is noticed
+straight away, even when most of the file was already there. It also says how many bank transactions were added. An Account's page lists its bank
 transactions a page at a time, since one Import can bring in 5,000.
 
 **Undo.** An Import commits as soon as its file has been checked, with no preview, so Undo is its safety net

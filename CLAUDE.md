@@ -147,8 +147,11 @@ The builder (`CsvFormatsController`, `/csv_formats`) takes a sample file in the 
 `#csv-format-preview` (the first 5 rows as they'd be imported, with the date spelled out and money in and money out in words, or
 the first row that would be refused, or what's still to choose). The Stimulus `csv-format-builder` controller sends the form after a
 pause, and shows only the columns the chosen amount style uses; without JavaScript the Preview button posts the same form and the
-answer is the whole page. The sample is read for the request and never kept: saving ignores it, and there's no column or storage for it.
-Saving a format needs a sample, so that `column_count` is known; editing without one keeps the format's. Another user's format is a
+answer is the whole page. The sample is read for the request and never kept: there's no column or storage for it. The form sends it with
+every change and with Save, and Save takes `column_count` from it (`CsvFormatsController#save_with_sample`, whatever the form's hidden
+field says, which a form without JavaScript, or one sent before the preview answered, doesn't fill in) and refuses one that can't be read.
+Saving a format needs a sample, so that `column_count` is known; editing without one keeps the format's. `column_count` is at most 100
+and `rows_to_skip` at most 1000, in the model and in check constraints. Another user's format is a
 404, `budget_id` is never a permitted param, and the notices are "CSV format added.", "CSV format updated." and "CSV format deleted.".
 
 The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Accounts and CSV formats now, and
@@ -159,8 +162,8 @@ the importer's other pages join it. It's left out until the person has a budget.
 `Budget::Account` (`budget_accounts`, `budget_id`) is a real bank or card account that bank transactions come from, and has only a
 name, unique per budget ignoring case: no balance, currency, kind or last four digits (ADR 0001), and no default CSV format, since
 the Import form pre-selects the format of the Account's `latest_import`. `Budget::Import` (`budget_imports`) is one CSV file read
-into one Account: `csv_format_id`, `file_name` (the file isn't kept), `duplicates_skipped` and `zero_rows_skipped`, with
-`created_at` as when it ran and no `user_id`. `Budget::BankTransaction` (`budget_bank_transactions`) is the bank's record of money
+into one Account: `csv_format_id`, `file_name` (the file isn't kept), `duplicates_skipped` and `zero_rows_skipped`, and the figures of the file as it
+was read (below), with `created_at` as when it ran and no `user_id`. `Budget::BankTransaction` (`budget_bank_transactions`) is the bank's record of money
 moving: `date`, `description` (as the bank gave it, trimmed), a signed `amount` that's never 0, `import_id` (not null while an
 Import is the only way one is made) and `account_id`, and no `budget_id`: it belongs to its budget through its Account, as a Spend
 does through its envelope, so `Current.budget.bank_transactions`, `.imports` and `.accounts` (`has_many :through`, for reading
@@ -171,13 +174,15 @@ deletes its bank transactions, then Imports, then Accounts and CSV formats in `d
 records, and `user:delete`'s confirmation counts them.
 
 **Duplicates (ADR 0010).** A row's `content_key` is a SHA-256 digest of its Account, date, signed amount (as `%.2f`) and
-normalised description (squished and case folded), and its `occurrence` numbers the same key's rows in the Account from 1; both are
+normalised description (squished and case folded, by Ruby), and its `occurrence` numbers the same key's rows in the Account from 1; both are
 written once, when the row is made, and never recomputed, and `(account_id, content_key, occurrence)` is unique. For each key an
 Import adds `max(0, rows in the file - rows already in the Account)`, whatever has been done with the existing rows, taking the
 file's later rows as the new ones and numbering them on from the last occurrence; the rest are `duplicates_skipped`. The
 normalised description is also stored, as a generated column (`normalized_description`, `lower(regexp_replace(btrim(description),
 '\s+', ' ', 'g'))`, stored), so it follows `description` when bank sync updates it in place and needs no backfill: a Filing rule
-(#69) matches it and a Guess (#70) can index it, and the key, which records how a row first looked, is what stays put.
+(#69) matches it and a Guess (#70) can index it, and the key, which records how a row first looked, is what stays put. Ruby's `squish` and
+`downcase(:fold)` (the key's) and SQL's `\s+` and `lower` (the column's) can differ on an unusual space or case fold; nothing compares
+one to the other.
 
 `Budget::Import#run(file)` does an Import, and is true when it worked: `file` is read with the CSV format's reader, a refusal creates
 nothing and is the first error (by line), and otherwise, holding the Account's row lock so that a double submit imports once and the
@@ -201,10 +206,13 @@ beside its latest Import; both ask first with `undo_confirmation`, which lists w
 This deletes its 2 bank transactions."). It applies to Imports only: rows bank sync brings in later aren't one.
 
 An Import's summary is a page of its own, `/imports/:id` (`ImportsController#show`), which Importing redirects to and the Account's
-page links to for its latest. It's worked out from the Import's own bank transactions in two queries, plus `zero_rows_skipped`, so it
-needs nothing else stored: the dates, the count and total of money in and of money out, the first row as it was read (its date
-spelled out, and "Money in" or "Money out" in words), and the duplicates and rows of 0 skipped, or "Nothing new was added." The
-figures are of what the Import added, which is what Undo would delete. Pages: `/accounts` (add, rename, delete; "Account added.",
+page links to for its latest. The file isn't kept, so what it held is worked out when it's read and stored on the Import, in
+nullable or defaulted columns with check constraints that tie them together: `earliest_date` and `latest_date`, `money_in_count` and
+`money_in_total`, `money_out_count` and `money_out_total`, and `first_row_date`, `first_row_description` and `first_row_amount`, of every
+row that isn't of 0 whether it was already in the Account or not, and none of the dates or the first row for a file of nothing but rows of
+0. The page shows those (the dates, the count and total of money in and of money out, and the first row as it was read, its date spelled
+out and "Money in" or "Money out" in words), `added_count` (counted, the rows of the file less `duplicates_skipped`, which is what Undo would
+delete, so what Undo says is what it does), and the duplicates and rows of 0 skipped, with "Nothing new was added." when that's none. Pages: `/accounts` (add, rename, delete; "Account added.",
 "Account updated.", "Account deleted."), an Account's page (`/accounts/:id`: Import, Edit, its latest Import and its bank
 transactions newest first, 50 a page through the `Paginated` concern and `components/pager`, with a fixed number of queries), and
 `/accounts/:account_id/imports/new`. Accounts are in the header's section links.
@@ -218,12 +226,13 @@ per kind, `budget_deposit_links`, `budget_spend_links` and `budget_refund_links`
 `RefundLink`, sharing the `BankTransactionLink` concern), each a `bank_transaction_id` and a unique `deposit_id`, `spend_id` or
 `refund_id`, so a record comes from at most one bank transaction, with `ON DELETE RESTRICT` foreign keys; the core tables get no
 import columns (ADR 0002). `Budget::Deposit`, `Spend` and `Refund` each have `has_one :bank_transaction_link, dependent: :destroy`
-(and `has_one :bank_transaction, through:`), so deleting a record deletes its link and, when it was the last, leaves the bank
+(and `has_one :bank_transaction, through:`, both from the `FiledFromBankTransaction` concern), so deleting a record deletes its link and, when it was the last, leaves the bank
 transaction unfiled. `Budget::BankTransaction.delete_filed_records(transactions)` deletes the records of a set of bank transactions
 and their links straight from the tables, in the order the foreign keys allow, and is what un-filing, Undo and destroying a Budget
 use; `Budget#delete_importer_records` runs it first, which is how `delete_envelope_records` and the Deposits never meet a link. Undo
 deletes the filed records with their links, then the bank transactions, then the Import, its confirmation counts them by kind
-(`Import#filed_record_counts`), and the month view's figures go back.
+(`Import#filed_record_counts`), and the month view's figures go back. `delete_filed_records`, `filed_record_counts` and `Filing` all go
+through `BankTransaction.links_by_record`, the one place the three kinds are listed with their link tables.
 
 **The filing operation** is `Budget::Filing#file(entries)`, which every way of filing calls: it takes `Budget::Filing::Entry`s, each a bank
 transaction and its `Budget::Filing::Draft`s (a record as it's asked for, which is what a form sends and what a Filing rule or a
