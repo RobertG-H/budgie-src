@@ -31,6 +31,9 @@ en:
   hello: "Hello world"
 
   activerecord:
+    models:
+      # What a Reallocation is called to a person, such as on the form's button.
+      budget/envelope_reallocation: Reallocation
     attributes:
       # What the form calls the month a Deposit counts toward.
       budget/deposit:
@@ -38,6 +41,10 @@ en:
       # An Assignment has one amount, and it's what the month view calls Assigned.
       budget/assignment:
         amount: Assigned
+      # A Reallocation is from one envelope to another.
+      budget/envelope_reallocation:
+        from_envelope: From
+        to_envelope: To
     errors:
       models:
         # A Spend or a Refund with no envelope is told so the way every other missing field is, not with Rails' "must exist".
@@ -48,6 +55,13 @@ en:
         budget/refund:
           attributes:
             envelope:
+              required: "can't be blank"
+        # A Reallocation with no From or To is told so the same way, which is also what another budget's envelope becomes.
+        budget/envelope_reallocation:
+          attributes:
+            from_envelope:
+              required: "can't be blank"
+            to_envelope:
               required: "can't be blank"
         # What's shown when an envelope with records is deleted. The reason is the same whatever the records are.
         budget/envelope:

@@ -1,0 +1,48 @@
+<%# locals: (record:) %>
+<%# The form for a Reallocation to an envelope, new or saved. Both envelopes can be any of the budget's, alphabetically, on a prompt to choose one until they are chosen, and the first one still to choose has the focus. Once saved, To is shown as text and can't change. %>
+<% envelopes = Current.budget.envelopes.alphabetical.pluck(:name, :id) %>
+
+<%= form_with model: record, scope: :reallocation, url: (record.persisted? ? envelope_reallocation_path(record) : reallocations_path),
+      class: "mt-8 space-y-6" do |form| %>
+  <%= render "form_errors", record: record %>
+  <%= render "origin_fields", month: @month %>
+  <%# The envelope whose page this was opened from, so that saving can go back to it. %>
+  <%= hidden_field_tag :envelope, opened_from.id, id: nil if origin == "envelope" && opened_from %>
+
+  <%# The errors are on the envelope, which is what the select sets through its id. %>
+  <%= render "components/field", form: form, attribute: :from_envelope_id, label: "From", control: :select,
+        error: record.errors.full_messages_for(:from_envelope).to_sentence.presence do |field| %>
+    <%= form.select :from_envelope_id, envelopes, { prompt: "Choose an envelope" }, required: true, autofocus: record.from_envelope.nil?, **field %>
+  <% end %>
+
+  <% if record.persisted? %>
+    <div class="space-y-2">
+      <p class="font-medium">To</p>
+      <p><%= record.to_envelope.name %></p>
+      <p class="text-sm text-base-content/70">It can't be changed. Delete this Reallocation and add another to send the money somewhere else.</p>
+    </div>
+  <% else %>
+    <%= render "components/field", form: form, attribute: :to_envelope_id, label: "To", control: :select,
+          error: record.errors.full_messages_for(:to_envelope).to_sentence.presence do |field| %>
+      <%= form.select :to_envelope_id, envelopes, { prompt: "Choose an envelope" }, required: true, autofocus: record.from_envelope.present? && record.to_envelope.nil?, **field %>
+    <% end %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :description, hint: "Such as Covering the dentist" do |field| %>
+    <%= form.text_field :description, required: true, autofocus: record.from_envelope.present? && (record.persisted? || record.to_envelope.present?), **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :date do |field| %>
+    <%= form.date_field :date, required: true, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :amount do |field| %>
+    <%= form.number_field :amount, step: 0.01, required: true, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
+    <%= form.text_area :notes, rows: 3, **field %>
+  <% end %>
+
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path(record) %>
+<% end %>

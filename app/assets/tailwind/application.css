@@ -57,7 +57,8 @@
 }
 
 /* Tables. daisyUI pads each cell 1rem either side, which leaves no room for three money columns beside a name at
-   375px, so below sm they get a quarter. It also mutes table headings to 60% of base-content (4.16:1, under AA) and won't let
+   375px, so below sm they get a quarter, and from sm up, where the month view has seven columns in a 768px page,
+   three quarters. It also mutes table headings to 60% of base-content (4.16:1, under AA) and won't let
    them wrap; here they're 70% (5.70:1) and can. This sits in the utilities layer to beat daisyUI's own rules,
    at zero specificity so that a utility on a table still beats it. See DESIGN.md. */
 @layer utilities {
@@ -67,7 +68,7 @@
 
   @media (width >= 40rem) {
     :where(.table) :where(th, td) {
-      padding-inline: 1rem;
+      padding-inline: 0.75rem;
     }
   }
 

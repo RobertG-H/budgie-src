@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_030830) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -39,6 +39,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_030830) do
     t.check_constraint "amount > 0::numeric", name: "budget_deposits_amount_positive"
     t.check_constraint "btrim(description::text) <> ''::text", name: "budget_deposits_description_not_blank"
     t.check_constraint "month = date_trunc('month'::text, date::timestamp without time zone)::date OR month = (date_trunc('month'::text, date::timestamp without time zone) + 'P1M'::interval)::date", name: "budget_deposits_month_of_date_or_next"
+  end
+
+  create_table "budget_envelope_reallocations", force: :cascade do |t|
+    t.bigint "from_envelope_id", null: false
+    t.bigint "to_envelope_id", null: false
+    t.string "description", null: false
+    t.date "date", null: false
+    t.decimal "amount", precision: 15, scale: 2, null: false
+    t.text "notes", default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["from_envelope_id", "date"], name: "index_envelope_reallocations_on_from_envelope_id_and_date"
+    t.index ["to_envelope_id", "date"], name: "index_envelope_reallocations_on_to_envelope_id_and_date"
+    t.check_constraint "amount > 0::numeric", name: "budget_envelope_reallocations_amount_positive"
+    t.check_constraint "btrim(description::text) <> ''::text", name: "budget_envelope_reallocations_description_not_blank"
+    t.check_constraint "from_envelope_id <> to_envelope_id", name: "budget_envelope_reallocations_envelopes_differ"
   end
 
   create_table "budget_envelopes", force: :cascade do |t|
@@ -132,6 +148,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_030830) do
 
   add_foreign_key "budget_assignments", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_deposits", "budgets", on_delete: :restrict
+  add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "from_envelope_id", on_delete: :restrict
+  add_foreign_key "budget_envelope_reallocations", "budget_envelopes", column: "to_envelope_id", on_delete: :restrict
   add_foreign_key "budget_envelopes", "budgets", on_delete: :restrict
   add_foreign_key "budget_refunds", "budget_envelopes", column: "envelope_id", on_delete: :restrict
   add_foreign_key "budget_spends", "budget_envelopes", column: "envelope_id", on_delete: :restrict

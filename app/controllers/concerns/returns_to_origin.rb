@@ -1,7 +1,7 @@
 # Where a form goes once it's saved, deleted or cancelled: back to the page it was opened from. That page is named
 # by the form's `from` param, which can only be one of PAGES, never a URL, so it can't be made to redirect
 # somewhere else. Which month the page shows depends on the form: an envelope's is the month it was opened from,
-# a Deposit's is the month it counts toward, and a Spend's or a Refund's is the month of its date. See application/_origin_fields.
+# a Deposit's is the month it counts toward, and a Spend's, a Refund's or a Reallocation's is the month of its date. See application/_origin_fields.
 #
 # The home page is the month view of the current month at /, as well as at /months/YYYY-MM, and they're two pages to
 # Turbo, which only refreshes a page in place when it's sent back to the address it's on. So `home` is a page of its

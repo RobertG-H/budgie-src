@@ -73,7 +73,7 @@ shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spa
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
 page scroll at 375px: tables are the one place content can outgrow a phone, so they scroll in their own
 `overflow-x-auto` wrapper rather than the page, and their cell padding drops to a quarter of daisyUI's below `sm:` so
-three money columns fit without that. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row or a row of links, as the Assigned cell's and the month links' do).
+three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven fit the page. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row or a row of links, as the Assigned cell's and the month links' do).
 
 ## Money and numbers
 
@@ -104,7 +104,7 @@ second use turns it into a partial. The partials:
 | `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. Given an `error`, it says in words what's wrong with the number, under the description and in the error colour, so a negative Ready to Assign isn't only red. |
 | `_month_links` | Links to the months either side of the one being viewed, named for them, and back to the current month when viewing another. Each page passes a `path` that turns a month into its own address, so the links stay on that page. |
 | `_record_list` | The bordered list that holds record rows. |
-| `_record_row` | One record in a `_record_list`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. The whole row links to the record's edit page, where it's also deleted. |
+| `_record_row` | One record in a `_record_list`, such as a Deposit: its date, its description with any notes as a muted second line, and its amount. A record between two envelopes, a Reallocation, also has where the money went or came from, such as "To Groceries" or "From Dining out", as a muted line of its own, and its amount signed from the page's side. The whole row links to the record's edit page, where it's also deleted. |
 | `_form_actions` | What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. |
 | `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. A form of its own, so it goes in a page's header actions. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |

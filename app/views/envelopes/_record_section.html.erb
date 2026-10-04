@@ -1,5 +1,6 @@
-<%# locals: (title:, records:, budget:, edit_path:, empty_message: nil) %>
+<%# locals: (title:, records:, budget:, edit_path:, empty_message: nil, counterpart: nil, amount: nil) %>
 <%# One kind of record on an envelope's page, such as its Spends for the month, under a heading. With no records it says `empty_message`, if there is one. `edit_path` is given a record and returns where it's edited. Whether to show the section at all is up to the page. %>
+<%# A record that is between two envelopes is read from this one's side: `counterpart` is given a record and returns the other envelope, such as "To Groceries", and `amount` returns its amount signed from this side. Without them a row shows the record's own amount. %>
 <div class="mt-8">
   <h2 class="text-xl font-semibold"><%= title %></h2>
 
@@ -8,7 +9,8 @@
       <%= render "components/record_list" do %>
         <% records.each do |record| %>
           <%= render "components/record_row", href: edit_path.call(record),
-                date: record.date, description: record.description, notes: record.notes, amount: record.amount, budget: budget %>
+                date: record.date, description: record.description, counterpart: counterpart&.call(record), notes: record.notes,
+                amount: (amount ? amount.call(record) : record.amount), budget: budget %>
         <% end %>
       <% end %>
     <% elsif empty_message %>

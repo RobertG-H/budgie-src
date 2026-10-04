@@ -4,4 +4,6 @@
 # is in DatedEnvelopeRecord.
 class Budget::Refund < ApplicationRecord
   include DatedEnvelopeRecord
+
+  belongs_to :envelope
 end

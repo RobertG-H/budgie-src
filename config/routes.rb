@@ -29,6 +29,10 @@ Rails.application.routes.draw do
   resources :envelopes, except: [ :index, :show ]
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]
+  # One Reallocate form makes either kind of Reallocation, and its To decides which. Editing and deleting are per kind,
+  # since ids repeat across the two tables: this one is a Reallocation to an envelope.
+  resources :reallocations, only: [ :new, :create ]
+  resources :envelope_reallocations, path: "reallocations/to-envelope", only: [ :edit, :update, :destroy ]
 
   # Local development only: the styleguide, and a shortcut that signs in as the seeded user. Testing and
   # production both run RAILS_ENV=production, so this is checked against development, never against

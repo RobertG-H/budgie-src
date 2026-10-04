@@ -35,6 +35,16 @@ FactoryBot.define do
     notes { "" }
   end
 
+  # Between two envelopes of one budget, unless given others.
+  factory :budget_envelope_reallocation, class: "Budget::EnvelopeReallocation" do
+    from_envelope { association :budget_envelope }
+    to_envelope { association :budget_envelope, budget: from_envelope&.budget }
+    sequence(:description) { |n| "Reallocation #{n}" }
+    date { Date.new(2026, 9, 15) }
+    amount { 100 }
+    notes { "" }
+  end
+
   factory :budget_assignment, class: "Budget::Assignment" do
     association :envelope, factory: :budget_envelope
     month { Date.new(2026, 9, 1) }
