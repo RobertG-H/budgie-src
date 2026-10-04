@@ -233,7 +233,7 @@ RSpec.describe "Archived envelopes", type: :request do
     end
 
     def row_names
-      css_select("tbody tr td:first-child").map { |cell| cell.text.squish }
+      css_select("tbody tr[id] td:first-child").map { |cell| cell.text.squish }
     end
 
     it "shows an archived envelope in a month where it has figures, with an Archived badge and its Assigned as plain text" do

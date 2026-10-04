@@ -43,6 +43,43 @@ class Budget::Month
       available.negative?
     end
 
+    # How much of what the envelope had to spend is left, below which it's "a little" and not "plenty". Exactly this is plenty.
+    A_LITTLE = Rational(1, 4)
+
+    # What the envelope had to spend this month: Carried over, Assigned, Refunded and Reallocated added up, counting only
+    # the positive part of Carried over (an Overspent envelope carries a negative one) and of Reallocated (the net of money in
+    # and out), so Available is never more than this and its share of it is never over 100%.
+    def had_to_spend
+      [ carried_over, ZERO ].max + assigned + refunded + [ reallocated, ZERO ].max
+    end
+
+    # How Available the envelope is, from this line's own figures, for the bar under Available: :overspent (below zero, even
+    # when it had nothing to spend), :none (nothing to spend, no Spends: no bar), :little (under a quarter of what it had to
+    # spend, so everything spent is a little) or :plenty.
+    def available_level
+      return :overspent if overspent?
+      return :none if had_to_spend.zero? && spent.zero?
+
+      available_share < A_LITTLE ? :little : :plenty
+    end
+
+    # Available as a share of what the envelope had to spend, exactly, between 0 and 1: 0 when it had nothing to spend.
+    def available_share
+      return Rational(0) if had_to_spend.zero?
+
+      Rational(available.clamp(ZERO, had_to_spend), had_to_spend)
+    end
+
+    # The bar's length in whole percent, 0 to 100: the share rounded down, so a bar reads 25 or more only when the level is plenty
+    # and 100 only when nothing is spent, however tiny the share, a full bar when Overspent, and nil when there's no bar.
+    def available_percent
+      case available_level
+      when :none then nil
+      when :overspent then 100
+      else (available_share * 100).floor
+      end
+    end
+
     # Whether every figure on the line is zero. Available is the sum of the others, so it is too.
     def empty?
       [ carried_over, assigned, spent, refunded, reallocated ].all?(&:zero?)

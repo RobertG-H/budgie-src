@@ -35,43 +35,61 @@
 
 <div class="mt-8">
   <% if @month.envelopes.any? %>
-    <div class="overflow-x-auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th scope="col">Envelope</th>
-            <th scope="col" class="hidden text-right sm:table-cell">Carried over</th>
-            <th scope="col" class="text-right">Assigned</th>
-            <th scope="col" class="text-right">Spent</th>
-            <th scope="col" class="hidden text-right sm:table-cell">Refunded</th>
-            <th scope="col" class="hidden text-right sm:table-cell">Reallocated</th>
-            <th scope="col" class="text-right">Available</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% @month.envelopes.each do |line| %>
-            <tr id="<%= dom_id(line.envelope) %>">
-              <td>
-                <%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %>
-                <% if line.envelope.archived? %><%= render "components/archived_badge" %><% end %>
-              </td>
-              <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
-              <%# An archived envelope's Assigned is read-only, so it's plain text and not the input's button. %>
-              <td class="text-right tabular-nums">
-                <% if line.envelope.archived? %>
-                  <%= render "components/money", amount: line.assigned, budget: budget %>
-                <% else %>
-                  <%= render "assignments/cell", line: line, month: @month, from: origin_page %>
-                <% end %>
-              </td>
-              <td class="text-right tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
-              <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.refunded, budget: budget %></td>
-              <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.reallocated, budget: budget %></td>
-              <td class="text-right tabular-nums"><%= render "components/money", amount: line.available, budget: budget, overspent: line.overspent? %></td>
+    <%# Carried over, Refunded and Reallocated are behind the toggle: columns from sm: up, and below it a second row of labelled figures under each envelope's own, so each envelope is a tbody of its own. See months/_details_toggle. %>
+    <div data-controller="month-details" data-action="turbo:morph@document->month-details#sync">
+      <%= render "months/details_toggle" %>
+
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Envelope</th>
+              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Carried over</th>
+              <th scope="col" class="text-right">Assigned</th>
+              <th scope="col" class="text-right">Spent</th>
+              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Refunded</th>
+              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Reallocated</th>
+              <th scope="col" class="text-right">Available</th>
             </tr>
+          </thead>
+          <% @month.envelopes.each do |line| %>
+            <tbody>
+              <tr id="<%= dom_id(line.envelope) %>" class="in-data-[details=on]:max-sm:*:border-b-0">
+                <td class="align-top leading-8">
+                  <%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %>
+                  <% if line.envelope.archived? %><%= render "components/archived_badge" %><% end %>
+                </td>
+                <td class="hidden text-right align-top leading-8 tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
+                <%# An archived envelope's Assigned is read-only, so it's plain text and not the input's button. %>
+                <td class="text-right align-top leading-8 tabular-nums">
+                  <% if line.envelope.archived? %>
+                    <%= render "components/money", amount: line.assigned, budget: budget %>
+                  <% else %>
+                    <%= render "assignments/cell", line: line, month: @month, from: origin_page %>
+                  <% end %>
+                </td>
+                <td class="text-right align-top leading-8 tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
+                <td class="hidden text-right align-top leading-8 tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.refunded, budget: budget %></td>
+                <td class="hidden text-right align-top leading-8 tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.reallocated, budget: budget %></td>
+                <td class="text-right align-top leading-8 tabular-nums">
+                  <%= render "components/money", amount: line.available, budget: budget %>
+                  <%= render "components/available_bar", line: line %>
+                </td>
+              </tr>
+              <%# On a phone, with details on: the three figures the columns above hold from sm: up. Four columns show there, so it spans four. %>
+              <tr class="hidden in-data-[details=on]:max-sm:table-row">
+                <td colspan="4" class="pt-0">
+                  <dl class="grid grid-cols-3 gap-2 text-xs">
+                    <div><dt class="text-base-content/70">Carried over</dt><dd class="tabular-nums"><%= render "components/money", amount: line.carried_over, budget: budget %></dd></div>
+                    <div><dt class="text-base-content/70">Refunded</dt><dd class="tabular-nums"><%= render "components/money", amount: line.refunded, budget: budget %></dd></div>
+                    <div><dt class="text-base-content/70">Reallocated</dt><dd class="tabular-nums"><%= render "components/money", amount: line.reallocated, budget: budget %></dd></div>
+                  </dl>
+                </td>
+              </tr>
+            </tbody>
           <% end %>
-        </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   <% else %>
     <%# Envelopes in use always show, so a table with none is the budget with none at all, or with all of them archived and none of them with a figure this month. %>

@@ -73,13 +73,19 @@ shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spa
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
 page scroll at 375px: tables are the one place content can outgrow a phone, so they scroll in their own
 `overflow-x-auto` wrapper rather than the page, and their cell padding drops to a quarter of daisyUI's below `sm:` so
-three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven fit the page. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row, a list row or a row of links, as the Assigned cell's, a bank transaction's Un-file and the month links' do).
+three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven (with Show details on) fit the page. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row, a list row or a row of links, as the Assigned cell's, a bank transaction's Un-file and the month links' do).
 
 ## Money and numbers
 
 - Amounts go through the `components/money` partial, which wraps `money(amount, budget:)` (itself
   `number_to_currency`). It turns a negative amount's text red and, when passed `overspent: true`, adds an
   "Overspent" badge — colour is never the only cue.
+- An envelope's Available on the month view has a bar under its figure (`components/available_bar`): a native
+  `<progress aria-hidden="true">`, `w-16` and right-aligned, with no word for it, since the figure beside it is the text and
+  its colour (`progress-success` for plenty, `progress-warning` for a little) and its length say which. Overspent is a full
+  `progress-error` bar, and keeps its word in the badge on a line under it (`components/overspent_badge`), so the figure
+  stays right-aligned; `money`'s `overspent:` puts the same badge beside a figure elsewhere. An envelope with nothing to
+  spend has no bar. It's a `<progress>` and not a styled `div`, since its length would need a `style=` attribute.
 - Amount columns and cells are right-aligned with `tabular-nums` (`text-right tabular-nums`).
 - Negatives always carry a sign (`-$30.00`); overspending also says so in words.
 - The currency code appears once, in the header (`Budget in USD`).
@@ -99,7 +105,9 @@ second use turns it into a partial. The partials:
 | `_flash` | One flash message (`notice`/`alert`/`info`/`warning`), used by the layout and shown for every type on `/styleguide`. |
 | `_page_header` | A page's `h1`, optional `badge` beside it, optional description, and actions block (e.g. the "New envelope" button). |
 | `_archived_badge` | The "Archived" badge beside an archived envelope's name, on the month view's row and by the title on its page (`_page_header`'s `badge`). A `badge-neutral badge-sm` word, never only a colour, as Overspent isn't. |
-| `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent. |
+| `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent beside it. |
+| `_overspent_badge` | The "Overspent" badge, the one place its markup lives: beside a figure through `_money`, and on a line under the Available bar. |
+| `_available_bar` | The month view's bar under an envelope's Available figure, and the Overspent badge under it for an Overspent one. It has no word, so it's hidden from assistive technology; its colour and length are the level. |
 | `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:file`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. `hide_label` takes the label out of sight but not away from assistive technology, for a control whose place makes its purpose clear, such as an amount inside a table cell. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
 | `_stat_card` | One headline number with a label (e.g. Ready to Assign), built on daisyUI's `stats`. Given an `href`, the whole card links to the records behind the number. Given an `error`, it says in words what's wrong with the number, under the description and in the error colour, so a negative Ready to Assign isn't only red. |
@@ -115,6 +123,8 @@ second use turns it into a partial. The partials:
 | `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. It says Delete unless it's given another label, for what it takes back, such as Undo. A form of its own, so it goes in a page's header actions. |
 | `_panel` | A bordered box that holds things that belong together and are apart from what's around them, such as the bank transaction on the filing form and the Filing rule it offers to make. A `div` unless given another `tag`, such as a `fieldset` for a group of fields with a legend, and a `class` or `data` goes on it. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |
+
+A table's least-used columns can go behind one toggle, as the month view's Carried over, Refunded and Reallocated do (`months/_details_toggle`): a `btn btn-sm` above the table, right-aligned, with `aria-pressed` and "Show details" / "Hide details", and a muted hint beside it, left, that says what hiding them means. **The table never moves when the toggle changes**: every hint and label is rendered, stacked in one grid cell with the one that doesn't apply `invisible`, so the row is as tall and wide as the longer in either state. From `sm:` the hidden figures are columns; below it each envelope is its own `<tbody>` with a second full-width row of labelled `text-xs` figures (a `dl`, three columns), there only while details are on, and the first row's bottom border goes while it is. The state is `data-details="on|off"` on `<html>`, read with `in-data-[details=on]:` variants. Every figure in an envelope's row sits on the row's first line (`align-top leading-8`, a line as tall as the Assigned button), so the bar and badge under Available don't pull the others off it.
 
 An envelope's archived state is a word and not a colour: the badge beside its name, and its Assigned as plain text where an envelope in use has the button that opens the input, since it's read-only. The month view lists every archived envelope in a native `<details>` ("Archived envelopes") below the table, bordered like a record list (`rounded-box border border-base-300`), each name a `link` filling a row, and only when the budget has some.
 
