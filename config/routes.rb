@@ -43,14 +43,20 @@ Rails.application.routes.draw do
   end
   resources :imports, only: [ :show, :destroy ]
   # Filing a bank transaction, as the Deposits, Spends and Refunds it was (create), taking that back (destroy), and ignoring
-  # it (and un-ignoring it). Every bank transaction that isn't filed or ignored, across the Accounts, is the Unfiled list.
-  resources :bank_transactions, only: [] do
+  # it (and un-ignoring it). Every bank transaction, in any state, across the Accounts, is the index, which can be narrowed to the
+  # unfiled ones, the filed ones or the ignored ones.
+  resources :bank_transactions, only: :index do
     resource :filing, only: [ :new, :create, :destroy ], controller: "bank_transaction_filings"
     # What "Always file like this" would do with the text as it stands on the filing form, which the form asks for as the text is edited.
     resource :rule_preview, only: :show, path: "filing/rule", controller: "bank_transaction_rule_previews"
     resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
   end
-  get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions
+  # The Unfiled list was a page of its own before it was a state of the Bank transactions page, so a link to it still lands there, keeping
+  # the page of the list, which is only ever a number.
+  get "unfiled", as: :unfiled_bank_transactions, to: redirect(status: 301) { |_params, request|
+    page = request.query_parameters["page"].to_s[/\A\d{1,7}\z/]
+    "/bank_transactions?#{{ filter: { state: "unfiled" }, page: page }.compact.to_query}"
+  }
   # "File N as guessed": a page of the Unfiled list's Guesses, reviewed (new) and then filed as they were reviewed (create), in one go.
   resource :guessed_filing, only: [ :new, :create ], path: "unfiled/guessed", controller: "guessed_filings"
   # Standing instructions that file or ignore the bank transactions that come in, the same way each time: all of them in one place, where

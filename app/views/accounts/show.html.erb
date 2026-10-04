@@ -29,7 +29,7 @@
   <% if @bank_transactions.any? %>
     <%= render "components/record_list" do %>
       <% @bank_transactions.each do |bank_transaction| %>
-        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, from: "account" %>
+        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, origin_params: { from: "account" } %>
       <% end %>
     <% end %>
 

@@ -11,11 +11,13 @@
   <% if count.zero? %>
     <div class="mt-8">
       <%= render "components/empty_state", message: "Nothing here has a Guess to file." do %>
-        <%= link_to "Back to Unfiled", unfiled_page_path, class: "btn" %>
+        <%= link_to "Back to Unfiled", unfiled_path, class: "btn" %>
       <% end %>
     </div>
   <% else %>
     <%= form_with url: guessed_filing_path, method: :post, class: "mt-8 space-y-6" do |form| %>
+      <%# Which Account's unfiled bank transactions the review was for, and which page, so that filing goes back to the same ones. %>
+      <% @list.account_params.each do |name, value| %><%= hidden_field_tag "filter[#{name}]", value, id: nil %><% end %>
       <%= hidden_field_tag :page, page_param if page_param %>
 
       <%= render "components/record_list" do %>
@@ -29,7 +31,7 @@
         <% end %>
       <% end %>
 
-      <%= render "components/form_actions", form: form, cancel_path: unfiled_page_path, submit: "File as guessed" %>
+      <%= render "components/form_actions", form: form, cancel_path: unfiled_path, submit: "File as guessed" %>
     <% end %>
   <% end %>
 </div>

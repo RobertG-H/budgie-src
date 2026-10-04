@@ -13,7 +13,7 @@ RSpec.describe "Navigation", type: :request do
     assert_select "header nav[aria-label=Sections] a[href='#{root_path}']:not([aria-current])", text: "Budget"
     assert_select "header nav[aria-label=Sections] a[href='#{records_path}']:not([aria-current])", text: "Records"
     assert_select "header nav[aria-label=Sections] a[href='#{accounts_path}']:not([aria-current])", text: "Accounts"
-    assert_select "header nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}']:not([aria-current])", text: "Unfiled"
+    assert_select "header nav[aria-label=Sections] a[href='#{bank_transactions_path}']:not([aria-current])", text: "Bank transactions"
     assert_select "header nav[aria-label=Sections] a[href='#{filing_rules_path}']:not([aria-current])", text: "Filing rules"
     assert_select "header nav[aria-label=Sections] a[href='#{csv_formats_path}'][aria-current=page]", text: "CSV formats"
   end
@@ -38,13 +38,23 @@ RSpec.describe "Navigation", type: :request do
     assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
   end
 
-  it "says Unfiled is the one they're on in the Unfiled list" do
+  it "says Bank transactions is the one they're on in the list, in any state, and in the review of what's guessed" do
     sign_in_as budget.user
 
-    get unfiled_bank_transactions_path
+    [ bank_transactions_path, bank_transactions_path(filter: { state: "unfiled" }), new_guessed_filing_path ].each do |path|
+      get path
 
-    assert_select "nav[aria-label=Sections] a[href='#{unfiled_bank_transactions_path}'][aria-current=page]", text: "Unfiled"
-    assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+      assert_select "nav[aria-label=Sections] a[href='#{bank_transactions_path}'][aria-current=page]", text: "Bank transactions"
+      assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+    end
+  end
+
+  it "has no link to the Unfiled list any more, which is a state of the Bank transactions page" do
+    sign_in_as budget.user
+
+    get root_path
+
+    assert_select "nav[aria-label=Sections] a", text: "Unfiled", count: 0
   end
 
   it "says Filing rules is the one they're on in the list, and while making or changing one" do

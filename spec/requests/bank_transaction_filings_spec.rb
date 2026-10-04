@@ -11,6 +11,10 @@ RSpec.describe "Filing bank transactions", type: :request do
 
   before { sign_in_as budget.user }
 
+  # The Bank transactions page the forms are opened from, in its Unfiled state, and the same page again, which is where they go back to.
+  let(:filter) { { state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30" } }
+  let(:bank_transactions_page) { bank_transactions_path(filter: filter) }
+
   def visible_text
     Nokogiri::HTML(response.body).at("main").text.squish
   end
@@ -86,10 +90,29 @@ RSpec.describe "Filing bank transactions", type: :request do
     end
 
     it "carries which page it was opened from, so saving, ignoring or cancelling can go back" do
+      get new_bank_transaction_filing_path(money_out, from: "bank_transactions", filter: filter, page: 2)
+
+      assert_select "input[type=hidden][name=from][value=bank_transactions]"
+      assert_select "input[type=hidden][name='filter[state]'][value=unfiled]"
+      assert_select "input[type=hidden][name='filter[date_from]'][value='2026-09-01']"
+      assert_select "input[type=hidden][name='filter[date_to]'][value='2026-09-30']"
+      assert_select "input[type=hidden][name=page][value='2']"
+      assert_select "a.btn[href='#{bank_transactions_path(filter: filter, page: 2)}']", text: "Cancel"
+    end
+
+    it "carries the Account that was chosen, and nothing it doesn't understand" do
+      get new_bank_transaction_filing_path(money_out, from: "bank_transactions", filter: filter.merge(account: account.id.to_s, state: "//evil.example"))
+
+      assert_select "input[type=hidden][name='filter[account]'][value='#{account.id}']"
+      assert_select "input[type=hidden][name='filter[state]']", count: 0
+      expect(response.body).not_to include("evil")
+    end
+
+    it "no longer has an Unfiled page to come back to: it goes back to the Account, as for any page it doesn't know" do
       get new_bank_transaction_filing_path(money_out, from: "unfiled")
 
-      assert_select "input[type=hidden][name=from][value=unfiled]"
-      assert_select "a.btn[href='#{unfiled_bank_transactions_path}']", text: "Cancel"
+      assert_select "a.btn[href='#{account_path(account)}']", text: "Cancel"
+      assert_select "form input[type=hidden][name=from]", count: 0
     end
 
     it "goes back to the Account when it isn't told where it was opened from, or is told something else" do
@@ -106,8 +129,8 @@ RSpec.describe "Filing bank transactions", type: :request do
       filed = create(:budget_bank_transaction, :filed, account: account)
       ignored = create(:budget_bank_transaction, :ignored, account: account)
 
-      get new_bank_transaction_filing_path(filed, from: "unfiled")
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      get new_bank_transaction_filing_path(filed, from: "bank_transactions", filter: filter)
+      expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=alert]", text: "This bank transaction is already filed."
 
@@ -185,18 +208,19 @@ RSpec.describe "Filing bank transactions", type: :request do
     def file(bank_transaction = money_out, records:, from: nil)
       params = { filing: { records: records.each_with_index.to_h { |record, index| [ index.to_s, record ] } } }
       params[:from] = from if from
+      params[:filter] = filter if from == "bank_transactions"
       post bank_transaction_filing_path(bank_transaction), params: params
     end
 
     it "files money out as a Spend from each of several envelopes, which add up to it, and goes back with one notice" do
-      expect { file records: [ record_params(amount: "60", description: "Costco, groceries"), record_params(envelope_id: household.id, amount: "40", description: "Costco, household") ], from: "unfiled" }
+      expect { file records: [ record_params(amount: "60", description: "Costco, groceries"), record_params(envelope_id: household.id, amount: "40", description: "Costco, household") ], from: "bank_transactions" }
         .to change(Budget::Spend, :count).by(2)
 
       expect(groceries.spends.sole).to have_attributes(description: "Costco, groceries", amount: 60)
       expect(household.spends.sole).to have_attributes(description: "Costco, household", amount: 40)
       expect(money_out.reload).to be_filed
       expect(money_out.spend_links.count).to eq(2)
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction filed."
     end
@@ -310,6 +334,7 @@ RSpec.describe "Filing bank transactions", type: :request do
     def file(bank_transaction = money_out, records: [ record_params ], from: nil)
       params = { filing: { records: records.each_with_index.to_h { |record, index| [ index.to_s, record ] } } }
       params[:from] = from if from
+      params[:filter] = filter if from == "bank_transactions"
       post bank_transaction_filing_path(bank_transaction), params: params
     end
 
@@ -338,9 +363,9 @@ RSpec.describe "Filing bank transactions", type: :request do
       expect(money_in.reload.refund_links.sole.refund).to eq(household.refunds.sole)
     end
 
-    it "goes back to the page it was opened from, the Unfiled list or the Account" do
-      file from: "unfiled"
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+    it "goes back to the page it was opened from, the Bank transactions page as it was or the Account" do
+      file from: "bank_transactions"
+      expect(response).to redirect_to(bank_transactions_page)
 
       file money_in, records: [ { kind: "deposit", description: "Paycheck", date: "2026-09-30", amount: "3000" } ], from: "account"
       expect(response).to redirect_to(account_path(account))
@@ -491,10 +516,10 @@ RSpec.describe "Filing bank transactions", type: :request do
 
   describe "POST and DELETE /bank_transactions/:bank_transaction_id/ignore" do
     it "ignores an unfiled bank transaction, and goes back to the page it was opened from with a notice" do
-      post bank_transaction_ignore_path(money_out), params: { from: "unfiled" }
+      post bank_transaction_ignore_path(money_out), params: { from: "bank_transactions", filter: filter }
 
       expect(money_out.reload).to be_ignored
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction ignored."
     end

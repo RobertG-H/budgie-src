@@ -346,8 +346,8 @@ wherever a bank transaction shows what it was filed as, its records are listed t
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
 or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
-transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Unfiled list shows
-every bank transaction across the Accounts that's still to do, and an Account's page shows each one's state.
+transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Bank transactions page shows
+every bank transaction across the Accounts, in any state, filtered by state, Account and dates (every unfiled one whatever its date), and an Account's page shows each of its own, with its state.
 
 **Filing rules.** A Filing rule is a standing instruction, such as "anything from Loblaws goes to Groceries": when an Import creates a
 bank transaction that a rule fits, Budgie files it the way the rule says, or ignores it, straight away and with no confirmation, through the same
@@ -400,13 +400,13 @@ or filed into an archived envelope, since it never proposes one. When several ou
 of queries however much the Budget has filed, because the history is counted in the database in one query and compared in Ruby, which needs no extension. Where the Guess comes from is
 behind one seam, so an LLM call or a bank-sync provider's category can be added later as another source, each with its own decision.
 
-**Filing a page of Guesses.** After an Import there can be a page of Guesses that are right, so the Unfiled list shows each row's Guess and, when the page has any, offers "File N as guessed". It
+**Filing a page of Guesses.** After an Import there can be a page of Guesses that are right, so the Bank transactions page shows each unfiled row's Guess and, when it's in its Unfiled state and the page has any, offers "File N as guessed". It
 opens a review of those rows first, each ticked and with what it was like and what it would be filed as, so any can be left out, and filing is a second click. What's filed is what was reviewed,
 never a newer Guess that wasn't seen, and it goes through the same operation a person's filing does, so it files all or none, and what filing by hand would refuse, such as an envelope archived since
 the review, it refuses, saying which bank transaction and why. It makes no Filing rule, because a Guess isn't one, and what it files is ordinary: Undo and un-filing treat it like anything else. A Guess is
 never filed without that click, at any likeness.
 
-The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled, Filing rules and CSV formats.
+The header has a second row of links to the pages that aren't a month's: the budget, Records, Accounts, Bank transactions, Filing rules and CSV formats.
 
 ### Frontend
 

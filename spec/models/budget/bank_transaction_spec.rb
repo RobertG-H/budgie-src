@@ -226,6 +226,55 @@ RSpec.describe Budget::BankTransaction, type: :model do
 
       expect(Budget::BankTransaction.unfiled).to contain_exactly(unfiled)
     end
+
+    describe "the state scopes" do
+      let!(:unfiled) { create(:budget_bank_transaction) }
+      let!(:ignored) { create(:budget_bank_transaction, :ignored) }
+      let!(:deposited) { create(:budget_bank_transaction, :filed, amount: 25) }
+      let!(:spent) { create(:budget_bank_transaction, :filed) }
+      let!(:refunded) { create(:budget_bank_transaction, amount: 5).tap { |transaction| create(:budget_refund_link, bank_transaction: transaction) } }
+      let!(:split) do
+        create(:budget_bank_transaction, amount: -10).tap do |transaction|
+          2.times { create(:budget_spend_link, bank_transaction: transaction) }
+        end
+      end
+
+      it "has .filed for what's filed as at least one record, of any kind, and each only once, however many links it has" do
+        expect(Budget::BankTransaction.filed).to contain_exactly(deposited, spent, refunded, split)
+        expect(Budget::BankTransaction.filed.count).to eq(4)
+      end
+
+      it "has .ignored for what's ignored" do
+        expect(Budget::BankTransaction.ignored).to contain_exactly(ignored)
+      end
+
+      it "puts every bank transaction in exactly one of the three" do
+        all = Budget::BankTransaction.all.to_a
+
+        expect(Budget::BankTransaction.unfiled.to_a + Budget::BankTransaction.filed.to_a + Budget::BankTransaction.ignored.to_a).to match_array(all)
+      end
+
+      it "keeps .filed and .ignored apart even for one that somehow has both, since the model refuses to make one" do
+        # A bank transaction is never both ignored and filed (the model refuses it), so one that is has been made some other way, and is
+        # ignored, since that's the state ignored? gives it.
+        spent.update_columns(ignored_at: Time.current)
+
+        expect(Budget::BankTransaction.ignored).to include(spent)
+        expect(Budget::BankTransaction.filed).not_to include(spent)
+        expect(spent.reload.state).to eq(:ignored)
+      end
+
+      it "combine with the others and with a budget's own bank transactions, which are found through its Accounts" do
+        budget = create(:budget)
+        account = create(:budget_account, budget: budget)
+        mine = create(:budget_bank_transaction, :filed, account: account)
+        create(:budget_bank_transaction, account: account)
+
+        expect(budget.bank_transactions.filed).to contain_exactly(mine)
+        expect(budget.bank_transactions.filed.newest_first.preload(:account).to_a).to eq([ mine ])
+        expect(budget.bank_transactions.ignored).to be_empty
+      end
+    end
   end
 
   describe "#ignore" do

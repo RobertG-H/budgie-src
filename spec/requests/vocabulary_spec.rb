@@ -108,7 +108,11 @@ RSpec.describe "The words on the pages", type: :request do
     "an Account's page" => -> { account_path(account) },
     "the Import form" => -> { new_account_import_path(account) },
     "an Import's summary" => -> { import_path(import) },
-    "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the Bank transactions" => -> { bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Bank transactions, Unfiled" => -> { bank_transactions_path(filter: { state: "unfiled" }) },
+    "the Bank transactions, Filed" => -> { bank_transactions_path(filter: { state: "filed", date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Bank transactions, Ignored" => -> { bank_transactions_path(filter: { state: "ignored", date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Bank transactions, with nothing that matches" => -> { bank_transactions_path(filter: { state: "ignored", date_from: "2000-01-01", date_to: "2000-01-31" }) },
     "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
     "the Records, filtered to Reallocations" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", kind: "reallocation" }) },
     "the Records, of an envelope" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", envelope: bills.id.to_s }) },
@@ -118,7 +122,7 @@ RSpec.describe "The words on the pages", type: :request do
     "the Filing rules" => -> { filing_rules_path },
     "the Filing rule form" => -> { new_filing_rule_path },
     "the Filing rule edit form" => -> { edit_filing_rule_path(budget.filing_rules.find_by!(text: "loblaws")) },
-    "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "unfiled") },
+    "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "bank_transactions", filter: { state: "unfiled" }) },
     "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
@@ -238,14 +242,14 @@ RSpec.describe "The words on the pages", type: :request do
         later_paycheck = create(:budget_bank_transaction, account: account, description: "Paycheck", date: Date.new(2026, 10, 15), amount: 2800)
         similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
 
-        get new_bank_transaction_filing_path(similar.reload, from: "unfiled")
+        get new_bank_transaction_filing_path(similar.reload, from: "bank_transactions", filter: { state: "unfiled" })
 
         expect(visible_text).to include("Guess: like Loblaws → Groceries")
         expect(visible_text).not_to match(/\w+_\w+/)
         expect(visible_text).not_to match(retired_terms)
         expect(response.body).not_to match(/guess_|_guess|draft_attributes/)
 
-        get new_bank_transaction_filing_path(later_paycheck.reload, from: "unfiled")
+        get new_bank_transaction_filing_path(later_paycheck.reload, from: "bank_transactions", filter: { state: "unfiled" })
 
         expect(visible_text).not_to include("Guess")
       end
@@ -254,7 +258,7 @@ RSpec.describe "The words on the pages", type: :request do
         post bank_transaction_filing_path(loblaws_row), params: file_params
         similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
 
-        get unfiled_bank_transactions_path
+        get bank_transactions_path(filter: { state: "unfiled" })
 
         expect(visible_text).to include("File 1 as guessed", "Guess: like Loblaws → Groceries")
         expect(visible_text).not_to match(/\w+_\w+/)

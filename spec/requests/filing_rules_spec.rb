@@ -104,7 +104,7 @@ RSpec.describe "Filing rules", type: :request do
       get filing_rules_path
 
       assert_select "nav[aria-label=Sections] a[href='#{filing_rules_path}'][aria-current=page]", text: "Filing rules"
-      get unfiled_bank_transactions_path
+      get bank_transactions_path
       assert_select "nav[aria-label=Sections] a[href='#{filing_rules_path}']:not([aria-current])", text: "Filing rules"
     end
 

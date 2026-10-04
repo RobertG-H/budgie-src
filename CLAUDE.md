@@ -164,7 +164,7 @@ Saving a format needs a sample, so that `column_count` is known; editing without
 and `rows_to_skip` at most 1000, in the model and in check constraints. Another user's format is a
 404, `budget_id` is never a permitted param, and the notices are "CSV format added.", "CSV format updated." and "CSV format deleted.".
 
-The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Records, Accounts, Unfiled, Filing rules and CSV formats now, and
+The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Records, Accounts, Bank transactions, Filing rules and CSV formats now, and
 the importer's other pages join it. It's left out until the person has a budget. The "Main" nav stays only Sign out.
 
 #### Accounts, Imports and bank transactions
@@ -258,9 +258,10 @@ submit files once), one query per link table to find what's filed, and one `inse
 `BankTransaction#ignore`, `#unignore` and `#unfile` hold the row lock and raise `Budget::BankTransaction::Refused` with a message when the
 state doesn't allow them.
 
-Pages: `/unfiled` (`UnfiledBankTransactionsController`, in the header's section links) lists every unfiled bank transaction in the
-budget across its Accounts, newest first, 50 a page, each with its Account, date, description and signed amount, and its Guess (see Guesses), opening the filing form;
-an Account's page shows each one's state in a word (`bank_transactions/_bank_transaction`): an unfiled one opens the form, a filed one
+Pages: `/bank_transactions` (`BankTransactionsController`, in the header's section links) lists every bank transaction in the budget, from every Account and
+in any state, newest first (`date`, then `id`), 50 a page, each with its Account, date, description, signed amount and state in a word, and an unfiled one's Guess (see Guesses),
+opening the filing form (see "The Bank transactions page" below); an Account's page, which lists its own bank transactions in every state with no filters,
+shows each one's state in a word as well (`bank_transactions/_bank_transaction`, which takes `origin_params:`, the `from` and for the Bank transactions page its `filter` and `page`): an unfiled one opens the form, a filed one
 shows the records it was filed as ("Spend from Groceries", "Refund to Groceries" or "Deposit", each opening where it's edited, with
 amounts when there are several) and Un-file, an ignored one says so and has Un-ignore. A filed one whose records no longer add up to its
 amount (`adds_up?`, so a typo fixed on a record, or its amount changed, trips it, and blocks nothing) shows a "Doesn't add up" badge in
@@ -279,9 +280,30 @@ date, a Deposit's month choice (`month-choice`) and notes, and the `filing-recor
 and the month for a Deposit. A split never offers "Always file like this" (see #78). File posts it (`POST .../filing`), Ignore sends the same form to `POST .../ignore`, which only
 reads where it was opened from, Un-file is `DELETE .../filing` and Un-ignore `DELETE .../ignore`; the notices are "Bank transaction
 filed.", "Bank transaction ignored.", "Bank transaction unfiled." and "Bank transaction un-ignored.", and a refusal is an alert. `from`
-gains the pages `unfiled` and `account` in `ReturnsToOrigin` (which also takes no month for them, and goes back to the bank transaction's
-Account without one). Another user's bank transaction is a 404. A filed record's edit page says it was filed from a bank transaction, in
+gains the pages `bank_transactions` and `account` in `ReturnsToOrigin` (which also takes no month for them, and goes back to the bank transaction's
+Account without one); `bank_transactions` carries the page's `filter` and `page` and goes back to `bank_transactions_path(filter:, page:)`, with the filter rebuilt by
+`Budget::BankTransactionList.parse` and never passed through. Another user's bank transaction is a 404. A filed record's edit page says it was filed from a bank transaction, in
 which Account, and that deleting it un-files that bank transaction (`application/_bank_transaction_note`).
+
+#### The Bank transactions page
+
+`GET /bank_transactions` (`BankTransactionsController#index`) is one page for every bank transaction in any state, instead of Unfiled plus one list per Account. Its filters are one nested
+`filter` param, as on the Records page: `filter[state]` (`all`, the default, `unfiled`, `filed` or `ignored`), `filter[account]` (an Account id of the budget; blank, unknown or another budget's is all Accounts), and
+`filter[date_from]`/`filter[date_to]` (the shared `DateRangeFilter`, defaulting to the current month), plus `page`. `Budget::BankTransactionList.parse(budget, params[:filter])` reads all of it, keeps only what it
+understands and finds the bank transactions through the budget's Accounts, so another budget's never appear. **The range applies only to states other than Unfiled**: in All, every unfiled bank transaction is
+listed whatever its date, together with the filed and ignored ones whose date is in the range (the scope is "unfiled, or in the range", combined as a `where(id: unfiled.select(:id))` subquery, since `unfiled`
+is a left join and `.or` can't take it); in Filed and Ignored the range applies; in Unfiled it doesn't, the date fields are shown disabled with "Unfiled bank transactions are listed whatever their date." and the
+presets are left out, and a range that can't be used isn't an error there. Pressing Apply after changing the state re-renders: there's no JavaScript toggling. The states are scopes on `Budget::BankTransaction`:
+`unfiled`, `filed` (has a link, not ignored, found by `where(id: link.select(:bank_transaction_id))` for each kind so one with two links is found once) and `ignored`.
+Each row is `bank_transactions/_bank_transaction` with `show_account: true` and the state in a word on every row but in Unfiled, where it's all the same. A filed row shows its records and Un-file, an ignored one
+Un-ignore, both name the Filing rule that did it, and "Doesn't add up" stays; an unfiled row shows its Guess wherever it appears, in any state filter, since it costs no extra query. `BankTransactionsPage`
+(`app/controllers/concerns/`) loads a page for the index and for `GuessedFilingsController`: the rows with their Account, links and records, and the Filing rule with its envelope (the union of what the old
+Unfiled list and an Account's page preloaded), and the Guesses of the unfiled ones on it, so a page runs the same number of queries whatever the mix of states and however many rows, rules or filed bank
+transactions there are, which `spec/requests/bank_transactions_spec.rb` checks. **`/unfiled` is a permanent redirect** to `/bank_transactions?filter[state]=unfiled`, keeping `page` when it's a number; the
+`UnfiledBankTransactionsController` and `from=unfiled` are gone. "File N as guessed" is in the header actions only in the Unfiled state when the page has Guesses; its review
+(`/unfiled/guessed/new`, `new_guessed_filing_path`) and create (`/unfiled/guessed`) stay where they were but take `filter[account]` as well as `page`, review that page of that Account's unfiled rows,
+and filing goes back to the Unfiled state of the same filter. Empty states: "Every bank transaction has been filed or ignored." for Unfiled with none, and "No bank transactions match." with a link to
+reset the filters otherwise.
 
 #### Filing rules
 
@@ -404,19 +426,19 @@ most often, then the one filed most recently (by date, then id), so it's never a
 the database (a `WITH` over the three link tables from `BankTransaction.links_by_record`), so a page of Guesses runs the same number of queries (the rules and that one) for 5 rows or
 100 and for 10 filed bank transactions or 1,000, which `spec/models/budget/guesser_spec.rb` checks; there's no `pg_trgm`, extension or migration.
 
-The Unfiled list shows each unfiled row's Guess, if it has one, in a muted line under the Account ("Guess: like LOBLAWS #1234 → Groceries"), and choosing a row still opens
-the filing form, which starts on it. `UnfiledPage` (`app/controllers/concerns/`) loads a page of rows with their Guesses for both `UnfiledBankTransactionsController` and
-`GuessedFilingsController`, so a page runs the same number of queries (the rows with their Account and links, the rules and the one history query) however many rows, rules or filed
-bank transactions there are, which `spec/requests/unfiled_bank_transactions_spec.rb` checks. An Account's page shows no Guesses: the Unfiled list is where they're worked through.
+The Bank transactions page shows each unfiled row's Guess, if it has one, in a muted line under the Account ("Guess: like LOBLAWS #1234 → Groceries"), in any state filter, and choosing a row still opens
+the filing form, which starts on it. `BankTransactionsPage` (`app/controllers/concerns/`) loads a page of rows with their Guesses for both `BankTransactionsController` and
+`GuessedFilingsController`, so a page runs the same number of queries (the rows with their Account, links and records, the rules and the one history query) however many rows, rules or filed
+bank transactions there are, which `spec/requests/bank_transactions_spec.rb` checks. An Account's page shows no Guesses: the Unfiled state of the Bank transactions page is where they're worked through.
 
-"File N as guessed" is the one bulk action. When the page being viewed has Guesses, the Unfiled list's header has it (N is the rows on that page that have one, at most 50), and it opens
-a review, `GET /unfiled/guessed/new?page=` (`GuessedFilingsController#new`): those rows, each with a ticked checkbox named `guessed[<bank transaction id>]` so any can be left out, and
+"File N as guessed" is the one bulk action. When the Bank transactions page is in its Unfiled state and the page being viewed has Guesses, its header has it (N is the rows on that page that have one, at most 50), and it opens
+a review, `GET /unfiled/guessed/new?page=&filter[account]=` (`GuessedFilingsController#new`, for that page of that Account's unfiled rows, or every Account's): those rows, each with a ticked checkbox named `guessed[<bank transaction id>]` so any can be left out, and
 File as guessed, `POST /unfiled/guessed`. The checkbox's value is the outcome that was reviewed (`Guess#review_value`: "spend:5", "refund:5" or "deposit:"), and `#create` files each ticked row as
 it was reviewed and not as its Guess is now, so a Guess that changed in between never files something that wasn't seen, through `Budget::Filing`, all or none, like a person's filing. So what
 filing by hand refuses, it refuses: an envelope archived since the review, a row filed since, a kind that doesn't suit the money, or an envelope that isn't the budget's refuse the lot, which
 files nothing and goes back to the review (which is then without a Guess for that row) with "Nothing was filed. COSTCO #99: Envelope is archived." Another user's bank transaction is a 404, and
 nothing ticked is "Choose at least one bank transaction to file." It makes no Filing rule and notes none (`filing_rule_id` is null, and `filed_by_rule` nothing), because a Guess isn't a rule: only a person
-asking for "Always file like this" makes one. It goes back to the Unfiled list's page with "2 bank transactions filed as guessed.", and what it filed is ordinary: Undo deletes it with the rest of the latest
+asking for "Always file like this" makes one. It goes back to the Unfiled state of the Bank transactions page, for the same Account and page, with "2 bank transactions filed as guessed.", and what it filed is ordinary: Undo deletes it with the rest of the latest
 Import, and un-filing puts one back. Nothing is ever filed as guessed without that click, at any likeness.
 
 The filing form (`BankTransactionFilingsController#new`) starts as the Guess: its kind and envelope are chosen, with the label above the records, and "Always file like this" is still

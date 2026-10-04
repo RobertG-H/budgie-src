@@ -2,13 +2,15 @@
 # by the form's `from` param, which can only be one of PAGES, never a URL, so it can't be made to redirect
 # somewhere else. Which month the page shows depends on the form: an envelope's is the month it was opened from,
 # a Deposit's is the month it counts toward, and a Spend's, a Refund's or a Reallocation's is the month of its date. See application/_origin_fields.
-# A bank transaction's forms are opened from the Unfiled list or from its Account's page, which don't have a month, and without
+# A bank transaction's forms are opened from the Bank transactions page or from its Account's page, which don't have a month, and without
 # one they go back to its Account.
 #
-# The Records page (`records`) lists records from every month and kind, so a form opened from one of its rows carries the page's
-# filter, its date range, Kind and envelope, and the page of the list it was on, and goes back to the same filtered page. The
-# filter is never passed through: it's rebuilt by the Records page's own parser (Budget::RecordList.parse), which keeps only what it
-# understands, so the path that comes out is one it made and not anything that was sent.
+# The Records page (`records`) lists records from every month and kind, and the Bank transactions page (`bank_transactions`) every bank
+# transaction in any state, so a form opened from one of their rows carries the page's filter (the date range, Kind and envelope; or the
+# state, Account and date range) and the page of the list it was on, and goes back to the same filtered page. The filter is never passed
+# through: it's rebuilt by that page's own parser (Budget::RecordList.parse, Budget::BankTransactionList.parse), which keeps only what it
+# understands, so the path that comes out is one it made and not anything that was sent. A bank transaction's forms are also opened from its
+# Account's page (`account`), which has no filters.
 #
 # The home page is the month view of the current month at /, as well as at /months/YYYY-MM, and they're two pages to
 # Turbo, which only refreshes a page in place when it's sent back to the address it's on. So `home` is a page of its
@@ -16,7 +18,7 @@
 module ReturnsToOrigin
   extend ActiveSupport::Concern
 
-  PAGES = %w[ home month deposits envelope unfiled account records ].freeze
+  PAGES = %w[ home month deposits envelope account records bank_transactions ].freeze
 
   included do
     helper_method :origin, :return_path, :origin_filter, :origin_page, :origin_params
@@ -27,14 +29,18 @@ module ReturnsToOrigin
       params[:from].presence_in(PAGES)
     end
 
-    # The Records page's filter as that page reads it, as the params that spell it, when the form was opened from it.
+    # The filter of the Records page or the Bank transactions page, as that page reads it, as the params that spell it, when the form was
+    # opened from one of them.
     def origin_filter
-      Budget::RecordList.parse(Current.budget, params[:filter]).to_params if origin == "records"
+      case origin
+      when "records" then Budget::RecordList.parse(Current.budget, params[:filter]).to_params
+      when "bank_transactions" then Budget::BankTransactionList.parse(Current.budget, params[:filter]).to_params
+      end
     end
 
-    # The page of the Records list the form was opened from: a number past the first, and nothing for the first.
+    # The page of the list the form was opened from, for the pages that have one: a number past the first, and nothing for the first.
     def origin_page
-      return unless origin == "records"
+      return unless origin.in?(%w[ records bank_transactions ])
 
       page = params[:page].to_s.to_i.clamp(1, Paginated::MAX_PAGE)
       page unless page == 1
@@ -55,8 +61,8 @@ module ReturnsToOrigin
       when "home" then month.current? ? root_path : month_path(month)
       when "deposits" then month_deposits_path(month)
       when "envelope" then envelope ? month_envelope_path(month, envelope) : month_path(month)
-      when "unfiled" then unfiled_bank_transactions_path
       when "records" then records_path(filter: origin_filter, page: origin_page)
+      when "bank_transactions" then bank_transactions_path(filter: origin_filter, page: origin_page)
       when "account" then account ? account_path(account) : accounts_path
       else account ? account_path(account) : month_path(month)
       end

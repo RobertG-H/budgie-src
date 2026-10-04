@@ -8,7 +8,7 @@
 
 <%= form_with scope: :filing, url: bank_transaction_filing_path(bank_transaction), method: :post, class: "mt-8 space-y-6" do |form| %>
   <%= render "form_errors", messages: entry.full_messages + offer.errors.full_messages %>
-  <%= render "origin_fields" %>
+  <%= render "origin_fields", filter: origin_filter, page: origin_page %>
 
   <% if guess %>
     <p class="text-base-content/70"><%= guess.label %></p>

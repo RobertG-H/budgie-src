@@ -22,8 +22,12 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
   # What the form sends: its records, and what "Always file like this" has, which is nothing at all for a form that doesn't offer it.
   def file_params(rule: { make: "1", text: "costco wholesale #123" }, **attributes)
-    { filing: { records: { "0" => record(**attributes) }, rule: rule }.compact, from: "unfiled" }
+    { filing: { records: { "0" => record(**attributes) }, rule: rule }.compact, from: "bank_transactions", filter: filter }
   end
+
+  # The Bank transactions page the forms here are opened from, and where they go back to.
+  let(:filter) { { state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30" } }
+  let(:bank_transactions_page) { bank_transactions_path(filter: filter) }
 
   describe "GET /bank_transactions/:bank_transaction_id/filing/new" do
     it "offers 'Always file like this', ticked, with the bank's description as the text, normalised, to be edited right there" do
@@ -45,7 +49,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       expect { post bank_transaction_filing_path(unusual), params: file_params(rule: { make: "1", text: "b\u00E4ckerei strasse 12" }, amount: "9") }
         .to change(budget.filing_rules, :count).by(1)
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      expect(response).to redirect_to(bank_transactions_page)
     end
 
     it "has no Account or amount to choose, which is for the Filing rules page" do
@@ -107,7 +111,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
     it "files the bank transaction and makes a Filing rule from what was done: the text, and the outcome with its envelope, and no Account or amount" do
       expect { post bank_transaction_filing_path(money_out), params: file_params }.to change(Budget::FilingRule, :count).by(1).and change(Budget::Spend, :count).by(1)
 
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction filed."
       expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "spend", envelope: groceries, account_id: nil, amount: nil)
@@ -259,7 +263,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
     it "makes none when the box is unticked, or the form doesn't have it" do
       post bank_transaction_ignore_path(money_out), params: file_params(rule: { make: "0", text: "costco wholesale #123" })
-      post bank_transaction_ignore_path(money_in), params: { from: "unfiled" }
+      post bank_transaction_ignore_path(money_in), params: { from: "bank_transactions", filter: filter }
 
       expect(Budget::FilingRule.count).to eq(0)
       expect([ money_out.reload, money_in.reload ]).to all(be_ignored)
@@ -297,7 +301,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       expect { post bank_transaction_ignore_path(money_out), params: file_params }.not_to change(Budget::FilingRule, :count)
 
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=alert]", text: "This bank transaction is filed. Un-file it before ignoring it."
     end
@@ -437,7 +441,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       it "files the other bank transactions the rule fits, the way the rule says, in the same request, with the rule noted on each" do
         post bank_transaction_filing_path(money_out), params: file_params(rule: rule_params)
 
-        expect(response).to redirect_to(unfiled_bank_transactions_path)
+        expect(response).to redirect_to(bank_transactions_page)
         follow_redirect!
         assert_select "[role=status]", text: "Bank transaction filed. The Filing rule also filed 2 other bank transactions."
         rule = budget.filing_rules.sole

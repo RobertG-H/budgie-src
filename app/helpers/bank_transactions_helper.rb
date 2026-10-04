@@ -15,6 +15,16 @@ module BankTransactionsHelper
     edit_polymorphic_path(record, month: month.strftime("%Y-%m"))
   end
 
+  # The options of the State select on the Bank transactions page: every state, then each one.
+  def bank_transaction_state_options
+    [ [ "All", "all" ], [ "Unfiled", "unfiled" ], [ "Filed", "filed" ], [ "Ignored", "ignored" ] ]
+  end
+
+  # The options of its Account select: all of them, then each Account alphabetically.
+  def bank_transaction_account_options(accounts)
+    [ [ "All accounts", "" ] ] + accounts.map { |account| [ account.name, account.id ] }
+  end
+
   # Which way money went, in words, since colour and a sign aren't the only way to say it: "Money out" for a negative amount, and
   # "Money in" for a positive one.
   def money_direction(amount)
