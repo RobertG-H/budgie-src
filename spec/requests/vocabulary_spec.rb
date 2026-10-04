@@ -161,10 +161,21 @@ RSpec.describe "The words on the pages", type: :request do
         create(:budget_filing_rule, :ignore, budget: budget, text: "hydro")
         hydro = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
         Budget::FilingRule::Applier.new(budget).apply([ hydro.reload ])
+        create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 5), amount: -20)
 
         get new_bank_transaction_filing_path(loblaws_row, from: "account")
 
-        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files these as Spend from Groceries now.")
+        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files these as Spend from Groceries now.",
+          "1 other unfiled bank transaction fits.", "File or ignore them the same way now", "Only the ones that went the same way as this one.")
+
+        get bank_transaction_rule_preview_path(loblaws_row), params: { filing: { rule: { text: "loblaws", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
+
+        frame_text = Nokogiri::HTML(response.body).text.squish
+        expect(frame_text).to include("1 other unfiled bank transaction fits.")
+        expect(frame_text).not_to match(/\w+_\w+/)
+        expect(frame_text).not_to match(retired_terms)
+
+        get new_bank_transaction_filing_path(loblaws_row, from: "account")
         expect(visible_text).not_to match(/\w+_\w+/)
         expect(visible_text).not_to match(retired_terms)
 

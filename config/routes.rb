@@ -43,6 +43,8 @@ Rails.application.routes.draw do
   # it (and un-ignoring it). Every bank transaction that isn't filed or ignored, across the Accounts, is the Unfiled list.
   resources :bank_transactions, only: [] do
     resource :filing, only: [ :new, :create, :destroy ], controller: "bank_transaction_filings"
+    # What "Always file like this" would do with the text as it stands on the filing form, which the form asks for as the text is edited.
+    resource :rule_preview, only: :show, path: "filing/rule", controller: "bank_transaction_rule_previews"
     resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
   end
   get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions

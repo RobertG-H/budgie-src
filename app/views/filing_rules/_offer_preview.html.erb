@@ -1,6 +1,11 @@
 <%# locals: (offer:) %>
-<%# What making the rule would do, which depends on its text: it says so when a Filing rule with that text exists, which is updated in place and not made again. %>
+<%# What making the rule would do, which depends on its text, so the filing form asks for this again as the text is edited (the sweep-preview controller sets the frame's address): it says when a Filing rule with that text exists, which is updated in place and not made again, and how many other unfiled bank transactions it would file or ignore, with a box to do that, ticked to start with. A text that isn't one a rule can have has neither, and the form says what's wrong when it's sent. %>
 <% existing = offer.existing_rule %>
-<% if existing %>
-  <p class="font-medium">Updates the Filing rule for '<%= existing.text %>', which <%= existing.outcome == "ignore" ? "ignores these" : "files these as #{existing.outcome_label}" %> now.</p>
-<% end %>
+<turbo-frame id="filing-rule-preview" class="block space-y-4" data-sweep-preview-target="frame">
+  <% if existing %>
+    <p class="font-medium">Updates the Filing rule for '<%= existing.text %>', which <%= existing.outcome == "ignore" ? "ignores these" : "files these as #{existing.outcome_label}" %> now.</p>
+  <% end %>
+  <% if offer.valid_text? %>
+    <%= render "filing_rules/sweep_option", scope: "filing[rule]", count: offer.sweep_count, checked: offer.sweep, others: true %>
+  <% end %>
+</turbo-frame>

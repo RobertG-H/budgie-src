@@ -1,7 +1,8 @@
 <%# locals: (offer:) %>
 <%# "Always file like this", on the filing form: a Filing rule made from what's done to this bank transaction, whether that's filing it or ignoring it, which files or ignores the bank transactions that come in with the same text in their description, the same way. The text starts as the bank's whole description, normalised, and can be trimmed right there. It has no Account or amount, which is for the Filing rules page, and it's never offered for a split, which the filing-split controller turns off by disabling this fieldset. A description too short to make a rule from says so instead. %>
 <% if offer.available? %>
-  <fieldset class="space-y-4 rounded-box border border-base-300 p-4" data-filing-split-target="rule">
+  <fieldset class="space-y-4 rounded-box border border-base-300 p-4" data-filing-split-target="rule"
+    data-controller="sweep-preview" data-sweep-preview-url-value="<%= bank_transaction_rule_preview_path(offer.bank_transaction) %>" data-sweep-preview-scope-value="filing[rule]">
     <legend class="px-2 font-medium">Filing rule</legend>
     <%= fields_for "filing[rule]", offer do |rule_form| %>
       <%= render "components/field", form: rule_form, attribute: :make, control: :checkbox, label: "Always file like this",
@@ -11,7 +12,7 @@
 
       <%= render "components/field", form: rule_form, attribute: :text, label: "Text to look for",
             hint: "Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
-        <%= rule_form.text_field :text, **field %>
+        <%= rule_form.text_field :text, data: { action: "input->sweep-preview#update" }, **field %>
       <% end %>
 
       <%= render "filing_rules/offer_preview", offer: offer %>

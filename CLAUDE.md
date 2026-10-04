@@ -325,6 +325,20 @@ Spend rule into Ignore and drops its envelope) and the form says "Updates the Fi
 bank transaction doesn't record itself on it: a person filed it. A form that doesn't send the box makes no rule. Ignore is a button on the same form, so a rule that's
 refused comes back as the whole filing form, as it was. `FilingFormParams` reads the form for both controllers.
 
+**Sweeping.** Saving a rule can also file the unfiled bank transactions that are already there, so a rule made after an Import tidies that Import up too.
+`Budget::FilingRule::Sweep.new(rule, like: nil)` works it out: `#bank_transactions` and `#count` are what it would file or ignore, changing nothing, and `#run`
+files and ignores them through the Applier (`only: rule`), in one database transaction and a fixed number of queries. It reads the budget's unfiled bank
+transactions (never a filed or ignored one, whatever fits it) and the budget's active rules with this one in place of its saved self, so a rule that's new, or
+changed and not yet saved, is counted as a form says before it's saved, and counts as edited now (`#specificity`, as saving it would make it). It sweeps the
+bank transactions where this rule *wins*, not every one it fits: one that a more specific rule fits is that rule's, as it would have been in an Import, and the count
+is what it files. `like` is the bank transaction a rule is being made from by hand: it's left out and only ones that went the same way (money in, or out) are swept,
+so an Ignore rule, which fits either, doesn't act on the other way's bank transactions, which the person wasn't looking at, and the count is the same for File and Ignore.
+On the filing form the second box, `filing[rule][sweep]`, is ticked by default and only there when there's something to sweep; the count follows the text as it's edited:
+the `sweep-preview` Stimulus controller sends the form's `filing[rule]` fields, after a pause, to `GET /bank_transactions/:id/filing/rule`
+(`BankTransactionRulePreviewsController`, which changes nothing), whose Turbo Frame `#filing-rule-preview` holds the update-in-place note, the count and the box,
+and that frame is where the box sits, so its ticked state travels with the request. `Offer` runs the sweep after saving the rule, in the same database transaction, and
+the notice says what it did: "Bank transaction filed. The Filing rule also filed 2 other bank transactions." A form that doesn't send the box sweeps nothing.
+
 **Deleting.** `Budget::Envelope` and `Budget::Account` have `has_many :filing_rules, dependent: :destroy`, declared after the checks that refuse, so deleting an envelope
 with no records, or an Account with no bank transactions, takes its rules with it, and keeps them when it's refused. Archiving is never blocked by rules. `Budget#delete_importer_records`
 deletes bank transactions, then Filing rules, then Accounts and CSV formats, ahead of the envelopes' records, and `user:delete`'s confirmation counts the rules.

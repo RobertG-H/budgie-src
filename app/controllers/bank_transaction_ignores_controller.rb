@@ -11,7 +11,7 @@ class BankTransactionIgnoresController < ApplicationController
     @offer = filing_rule_offer(records: drafts.size)
 
     if @offer.make? ? @offer.ignore : @bank_transaction.ignore
-      redirect_to origin_path, notice: "Bank transaction ignored."
+      redirect_to origin_path, notice: notice_with_sweep("Bank transaction ignored.", @offer)
     else
       @entry = Budget::Filing::Entry.new(bank_transaction: @bank_transaction, drafts: drafts)
       render "bank_transaction_filings/new", status: :unprocessable_content

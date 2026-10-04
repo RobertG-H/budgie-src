@@ -341,6 +341,12 @@ bank's whole description, and can be trimmed right there, before the wrong rule 
 is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
 filing as one record and when ignoring, and never for a split, since a split has no one outcome to repeat.
 
+**Sweeping what's already there.** A rule made after an Import has nothing to act on, so saving one can also file the unfiled bank transactions it already fits. Rules still never
+run on un-filing, un-ignoring or editing; this is the one time they look back, and only at bank transactions that are unfiled, never at one that's been filed or ignored. The form
+says how many fit, and keeps that up to date as the text is edited, because a rule that's too broad is what ADR 0012 warns about, and the text is where it's trimmed. It
+sweeps the bank transactions where the new rule is the most specific one that fits, so the order rules run in doesn't change, and when a rule is made from a bank transaction it only sweeps
+the ones that went the same way, so an Ignore rule that fits money in and out doesn't act on the other way's. The rule, the filing and the sweep are one database transaction.
+
 The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled and CSV formats so far.
 
 ### Frontend

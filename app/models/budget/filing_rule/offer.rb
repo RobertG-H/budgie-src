@@ -6,18 +6,25 @@
 # with identical conditions exists it's updated in place, and the form says so. A rule made from a bank transaction isn't what filed it:
 # a person did, so the bank transaction has no rule noted, and a rule with overlapping but different text is just another rule.
 #
+# It can also sweep the other unfiled bank transactions the rule fits, in the same database transaction (Budget::FilingRule::Sweep), when
+# that box is ticked as well: only the ones that went the same way as this one, so that an Ignore rule, which fits either, doesn't act on the
+# others, and which the form says how many of as the text is edited.
+#
 #   offer = Budget::FilingRule::Offer.new(bank_transaction, budget: budget, make: true, text: "loblaws")
 #   offer.file(entry)   # files it and makes the rule, or does neither and says why on `errors`
 #   offer.ignore
+#   offer.swept         # what the sweep filed and ignored, if it ran
 class Budget::FilingRule::Offer
   include ActiveModel::Model
   include ActiveModel::Attributes
 
-  # Whether the box is ticked, which it starts as, and the text the rule looks for.
+  # Whether the box is ticked, which it starts as, and the text the rule looks for, and whether the second box is, which also sweeps the
+  # other unfiled bank transactions it fits.
   attribute :make, :boolean, default: true
   attribute :text, :string
+  attribute :sweep, :boolean, default: true
 
-  attr_reader :bank_transaction, :budget
+  attr_reader :bank_transaction, :budget, :swept
 
   # `split` is for a form that holds more than one record, which never makes a rule.
   def initialize(bank_transaction, budget:, split: false, **attributes)
@@ -49,6 +56,21 @@ class Budget::FilingRule::Offer
     budget.filing_rules.includes(:envelope).find_by(text: normalized_text, account_id: nil, amount: nil)
   end
 
+  # Whether the text is one a rule can have, and part of the bank's description, so that there's a rule to say anything about.
+  def valid_text?
+    normalized_text.length >= Budget::FilingRule::MIN_TEXT_LENGTH && bank_transaction.normalized_description.include?(normalized_text)
+  end
+
+  # How many other unfiled bank transactions the rule would file or ignore if it were made as the text stands, as the form says before
+  # it's saved. What it will be is only known once it's done, and it's the same for either: a Spend, a Refund, a Deposit or Ignore fit
+  # the bank transactions that went the same way, which is all that's swept, so it's counted as the one that fits either.
+  def sweep_count
+    rule = existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)
+    rule.assign_attributes(outcome: "ignore", envelope: nil)
+
+    Budget::FilingRule::Sweep.new(rule, like: bank_transaction).count
+  end
+
   # Files the entry, which is one record, and makes the rule it says: what the person chose, and the text. True when both were done.
   def file(entry)
     draft = entry.drafts.sole
@@ -77,6 +99,8 @@ class Budget::FilingRule::Offer
       Budget::BankTransaction.transaction do
         done = yield && rule.save!
         raise ActiveRecord::Rollback unless done
+
+        @swept = Budget::FilingRule::Sweep.new(rule, like: bank_transaction).run if sweep
       end
 
       done
@@ -84,7 +108,7 @@ class Budget::FilingRule::Offer
 
     # The rule that already has these conditions, changed to what's been done, or a new one.
     def build_rule(outcome:, envelope_id:)
-      (existing_rule || budget.filing_rules.new(text: normalized_text)).tap { |rule| rule.assign_attributes(outcome: outcome, envelope_id: envelope_id) }
+      (existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)).tap { |rule| rule.assign_attributes(outcome: outcome, envelope_id: envelope_id) }
     end
 
     # Its text has to be one a rule can have, and part of the bank's description, or it wouldn't fit the bank transaction it's made from.

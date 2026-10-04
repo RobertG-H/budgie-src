@@ -1,0 +1,14 @@
+<%# locals: (scope:, count:, checked:, others: false) %>
+<%# What a Filing rule would do to the unfiled bank transactions that are already there, which it can do when it's saved: how many it fits, and a box to file or ignore them the same way now, ticked to start with. Saving a rule from the filing form sweeps only the other ones, which went the same way as the one being filed. With none it says so, and has no box. %>
+<% noun = "#{"other " if others}unfiled bank #{count == 1 ? "transaction" : "transactions"}" %>
+<% if count.zero? %>
+  <p class="text-base-content/70">No <%= noun %> fit.</p>
+<% else %>
+  <p><%= count %> <%= noun %> <%= count == 1 ? "fits" : "fit" %>.</p>
+  <%= fields_for scope, FilingRulesHelper::SweepChoice.new(sweep: checked) do |sweep_form| %>
+    <%= render "components/field", form: sweep_form, attribute: :sweep, control: :checkbox, label: "File or ignore them the same way now",
+          hint: (others ? "Only the ones that went the same way as this one." : nil) do |field| %>
+      <%= sweep_form.check_box :sweep, **field %>
+    <% end %>
+  <% end %>
+<% end %>

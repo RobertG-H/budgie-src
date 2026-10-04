@@ -30,9 +30,19 @@ module FilingFormParams
     # The rule the form offers to make, as it was sent, or as it starts when `sent` is false: ticked, with the bank's description. A
     # form that didn't send the box leaves it unticked, which is no rule, and a form of more than one record is never a rule.
     def filing_rule_offer(sent: true, records: 1)
-      rule = params.permit(filing: { rule: [ :make, :text ] }).dig(:filing, :rule) if sent
-      make = sent ? rule&.dig(:make) : true
+      rule = params.permit(filing: { rule: [ :make, :text, :sweep ] }).dig(:filing, :rule) if sent
 
-      Budget::FilingRule::Offer.new(@bank_transaction, budget: Current.budget, split: records > 1, make: make, text: rule&.dig(:text))
+      Budget::FilingRule::Offer.new(@bank_transaction, budget: Current.budget, split: records > 1,
+        make: (sent ? rule&.dig(:make) : true), text: rule&.dig(:text), sweep: (sent ? rule&.dig(:sweep) : true))
+    end
+
+    # What's said once it's done, with what the Filing rule's sweep did, if it did anything: "Bank transaction filed. The Filing rule also
+    # filed 2 other bank transactions." A rule has one outcome, so a sweep files or ignores, and never both.
+    def notice_with_sweep(notice, offer)
+      swept = offer.swept
+      return notice if swept.nil? || (swept.filed + swept.ignored).zero?
+
+      verb, count = swept.filed.positive? ? [ "filed", swept.filed ] : [ "ignored", swept.ignored ]
+      "#{notice} The Filing rule also #{verb} #{helpers.pluralize(count, "other bank transaction")}."
     end
 end

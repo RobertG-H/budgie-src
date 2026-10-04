@@ -19,7 +19,7 @@ class BankTransactionFilingsController < ApplicationController
     @offer = filing_rule_offer(records: @entry.drafts.size)
 
     if @offer.make? ? @offer.file(@entry) : Budget::Filing.new(Current.budget).file([ @entry ])
-      redirect_to origin_path, notice: "Bank transaction filed."
+      redirect_to origin_path, notice: notice_with_sweep("Bank transaction filed.", @offer)
     else
       render :new, status: :unprocessable_content
     end
