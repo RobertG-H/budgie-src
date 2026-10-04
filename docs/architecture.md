@@ -368,6 +368,12 @@ or filed into an archived envelope, since it never proposes one. When several ou
 of queries however much the Budget has filed, because the history is counted in the database in one query and compared in Ruby, which needs no extension. Where the Guess comes from is
 behind one seam, so an LLM call or a bank-sync provider's category can be added later as another source, each with its own decision.
 
+**Filing a page of Guesses.** After an Import there can be a page of Guesses that are right, so the Unfiled list shows each row's Guess and, when the page has any, offers "File N as guessed". It
+opens a review of those rows first, each ticked and with what it was like and what it would be filed as, so any can be left out, and filing is a second click. What's filed is what was reviewed,
+never a newer Guess that wasn't seen, and it goes through the same operation a person's filing does, so it files all or none, and what filing by hand would refuse, such as an envelope archived since
+the review, it refuses, saying which bank transaction and why. It makes no Filing rule, because a Guess isn't one, and what it files is ordinary: Undo and un-filing treat it like anything else. A Guess is
+never filed without that click, at any likeness.
+
 The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled, Filing rules and CSV formats.
 
 ### Frontend

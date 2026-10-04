@@ -48,6 +48,8 @@ Rails.application.routes.draw do
     resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
   end
   get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions
+  # "File N as guessed": a page of the Unfiled list's Guesses, reviewed (new) and then filed as they were reviewed (create), in one go.
+  resource :guessed_filing, only: [ :new, :create ], path: "unfiled/guessed", controller: "guessed_filings"
   # Standing instructions that file or ignore the bank transactions that come in, the same way each time: all of them in one place, where
   # they're made from scratch, edited and deleted. The sweep is what a rule would do to the unfiled bank transactions that are already
   # there, which the forms ask for as they're edited. Editing or deleting a rule never changes what it already filed.

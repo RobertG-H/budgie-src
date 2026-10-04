@@ -23,4 +23,18 @@ module FilingHistory
   def unfiled(description, amount: -20, date: Date.new(2026, 10, 2), account: self.account)
     create(:budget_bank_transaction, account: account, description: description, amount: amount, date: date).reload
   end
+
+  # The rows numbered `numbers` of a file ("MERCHANT 3 17" and so on), imported and filed as Spends from `envelope` through the same
+  # operations a person uses, which is far quicker than making them one at a time. For specs that count queries against a lot of history.
+  def file_in_bulk(numbers, envelope)
+    csv_format = budget.csv_formats.first || create(:budget_csv_format, budget: budget)
+    rows = numbers.map { |n| "2026-01-15,MERCHANT #{n % 7} #{n},-10.00" }.join("\n")
+    import = account.imports.build(csv_format: csv_format, file_name: "many.csv")
+    expect(import.run(rows)).to be(true)
+
+    entries = Budget::BankTransaction.where(import_id: import.id).map do |bank_transaction|
+      Budget::Filing::Entry.new(bank_transaction: bank_transaction, drafts: [ Budget::Filing::Draft.for(bank_transaction, envelope_id: envelope.id) ])
+    end
+    expect(Budget::Filing.new(budget).file(entries)).to be(true)
+  end
 end

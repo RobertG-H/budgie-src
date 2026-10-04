@@ -242,30 +242,17 @@ RSpec.describe Budget::Guesser do
     end
 
     describe "its cost" do
-      # The rows numbered `numbers` of a file, imported and filed as Spends from `envelope` through the same operations a person uses,
-      # which is far quicker than making them one at a time.
-      def file_rows(numbers, envelope)
-        csv_format = account.budget.csv_formats.first || create(:budget_csv_format, budget: budget)
-        rows = numbers.map { |n| "2026-01-15,MERCHANT #{n % 7} #{n},-10.00" }.join("\n")
-        expect(account.imports.build(csv_format: csv_format, file_name: "many.csv").run(rows)).to be(true)
-
-        entries = account.bank_transactions.unfiled.map do |bank_transaction|
-          Budget::Filing::Entry.new(bank_transaction: bank_transaction, drafts: [ Budget::Filing::Draft.for(bank_transaction, envelope_id: envelope.id) ])
-        end
-        expect(Budget::Filing.new(budget).file(entries)).to be(true)
-      end
-
       it "makes the same number of queries with 10 filed bank transactions as with 1,000" do
         row = unfiled("MERCHANT 3 1000")
-        file_rows(0...10, groceries)
+        file_in_bulk(0...10, groceries)
         expect(guess(row)).to have_attributes(envelope_id: groceries.id)
         few = count_queries { guess(row) }
 
-        file_rows(10...1000, household)
+        file_in_bulk(10...1000, household)
         expect(guess(row)).to have_attributes(envelope_id: household.id)
         many = count_queries { guess(row) }
 
-        expect(Budget::BankTransaction.filed_record_counts(budget.bank_transactions.where.not(id: row.id))[:spends]).to eq(1000)
+        expect(Budget::BankTransaction.filed_record_counts(budget.bank_transactions)[:spends]).to eq(1000)
         expect(many).to eq(few)
       end
     end

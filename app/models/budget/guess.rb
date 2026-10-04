@@ -9,6 +9,20 @@ class Budget::Guess < Data.define(:kind, :envelope_id, :envelope_name, :like)
     { kind: kind, envelope_id: envelope_id }
   end
 
+  # What the review for "File as guessed" sends back for it, so that what's filed is what was reviewed: "spend:5" or "refund:5", with the
+  # envelope's id, or "deposit:", which has none.
+  def review_value
+    "#{kind}:#{envelope_id}"
+  end
+
+  # The same as `draft_attributes`, from what a review sent back (see `review_value`). Nothing is checked here: it's only what's asked for,
+  # which Budget::Filing refuses if it isn't right.
+  def self.draft_attributes_from(review_value)
+    kind, envelope_id = review_value.to_s.split(":", 2)
+
+    { kind: kind, envelope_id: envelope_id.presence }
+  end
+
   # Where it would put the money, in the words a person uses: the envelope's name for a Spend, "Refund to Groceries" for a Refund, and
   # "Deposit" for a Deposit.
   def destination

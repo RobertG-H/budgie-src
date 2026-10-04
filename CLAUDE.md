@@ -236,7 +236,7 @@ through `BankTransaction.links_by_record`, the one place the three kinds are lis
 
 **The filing operation** is `Budget::Filing#file(entries)`, which every way of filing calls: it takes `Budget::Filing::Entry`s, each a bank
 transaction and its `Budget::Filing::Draft`s (a record as it's asked for, which is what a form sends and what a Filing rule builds, and
-what "File as guessed" will build, with `Draft.for(bank_transaction, **overrides)` giving the defaults: the date and description as the bank gave
+what "File as guessed" builds, with `Draft.for(bank_transaction, **overrides)` giving the defaults: the date and description as the bank gave
 them, the whole amount as a positive figure, a Spend for money out and a Deposit for money in, no envelope). It's true when every
 entry was filed, and when anything is refused nothing at all is created and what's wrong is on the entry (`errors`, for the bank
 transaction: the records don't add up, with by how much, already filed, ignored, not in this budget, no records or more than 50) or on
@@ -249,7 +249,7 @@ submit files once), one query per link table to find what's filed, and one `inse
 state doesn't allow them.
 
 Pages: `/unfiled` (`UnfiledBankTransactionsController`, in the header's section links) lists every unfiled bank transaction in the
-budget across its Accounts, newest first, 50 a page, each with its Account, date, description and signed amount, opening the filing form;
+budget across its Accounts, newest first, 50 a page, each with its Account, date, description and signed amount, and its Guess (see Guesses), opening the filing form;
 an Account's page shows each one's state in a word (`bank_transactions/_bank_transaction`): an unfiled one opens the form, a filed one
 shows the records it was filed as ("Spend from Groceries", "Refund to Groceries" or "Deposit", each opening where it's edited, with
 amounts when there are several) and Un-file, an ignored one says so and has Un-ignore. A filed one whose records no longer add up to its
@@ -393,6 +393,21 @@ envelope) it's been filed as, so "payment" in front of every merchant says littl
 most often, then the one filed most recently (by date, then id), so it's never a toss-up. It's worked out in Ruby from one query that counts the history by description and outcome in
 the database (a `WITH` over the three link tables from `BankTransaction.links_by_record`), so a page of Guesses runs the same number of queries (the rules and that one) for 5 rows or
 100 and for 10 filed bank transactions or 1,000, which `spec/models/budget/guesser_spec.rb` checks; there's no `pg_trgm`, extension or migration.
+
+The Unfiled list shows each unfiled row's Guess, if it has one, in a muted line under the Account ("Guess: like LOBLAWS #1234 → Groceries"), and choosing a row still opens
+the filing form, which starts on it. `UnfiledPage` (`app/controllers/concerns/`) loads a page of rows with their Guesses for both `UnfiledBankTransactionsController` and
+`GuessedFilingsController`, so a page runs the same number of queries (the rows with their Account and links, the rules and the one history query) however many rows, rules or filed
+bank transactions there are, which `spec/requests/unfiled_bank_transactions_spec.rb` checks. An Account's page shows no Guesses: the Unfiled list is where they're worked through.
+
+"File N as guessed" is the one bulk action. When the page being viewed has Guesses, the Unfiled list's header has it (N is the rows on that page that have one, at most 50), and it opens
+a review, `GET /unfiled/guessed/new?page=` (`GuessedFilingsController#new`): those rows, each with a ticked checkbox named `guessed[<bank transaction id>]` so any can be left out, and
+File as guessed, `POST /unfiled/guessed`. The checkbox's value is the outcome that was reviewed (`Guess#review_value`: "spend:5", "refund:5" or "deposit:"), and `#create` files each ticked row as
+it was reviewed and not as its Guess is now, so a Guess that changed in between never files something that wasn't seen, through `Budget::Filing`, all or none, like a person's filing. So what
+filing by hand refuses, it refuses: an envelope archived since the review, a row filed since, a kind that doesn't suit the money, or an envelope that isn't the budget's refuse the lot, which
+files nothing and goes back to the review (which is then without a Guess for that row) with "Nothing was filed. COSTCO #99: Envelope is archived." Another user's bank transaction is a 404, and
+nothing ticked is "Choose at least one bank transaction to file." It makes no Filing rule and notes none (`filing_rule_id` is null, and `filed_by_rule` nothing), because a Guess isn't a rule: only a person
+asking for "Always file like this" makes one. It goes back to the Unfiled list's page with "2 bank transactions filed as guessed.", and what it filed is ordinary: Undo deletes it with the rest of the latest
+Import, and un-filing puts one back. Nothing is ever filed as guessed without that click, at any likeness.
 
 The filing form (`BankTransactionFilingsController#new`) starts as the Guess: its kind and envelope are chosen, with the label above the records, and "Always file like this" is still
 offered. It's only where the form starts, so a form that comes back refused, or ignored, as it was entered has no label, and a record added to split it starts empty.
