@@ -153,8 +153,10 @@ copy, and `Budget#start_new_months` copies into each month after it, up to the c
 row lock and inserts with `unique_by` on `(envelope_id, month)`, so a month is copied into once, an amount the user clears or
 changes afterwards stays as they left it, and the number of queries doesn't grow with the number of envelopes. A month
 begins at midnight Eastern on the 1st. `StartNewMonthsJob` runs every hour in production through `config/recurring.yml`, so
-a month begins within an hour of that and a month missed while the host was down is caught up by the next run. Testing and
-production both run it, as both are `RAILS_ENV=production`. [Operating Budgie](operations.md#starting-new-months) has
+a month begins within an hour of that and a month missed while the host was down is caught up by the next run. A budget
+that can't be started doesn't hold up the others: the job logs it with its id, carries on, and raises the first failure at
+the end so the run shows as failed. Its month rolls back whole, so the next run tries it again. Testing and production
+both run it, as both are `RAILS_ENV=production`. [Operating Budgie](operations.md#starting-new-months) has
 `budget:start_months`, which runs it on demand.
 
 ### Frontend

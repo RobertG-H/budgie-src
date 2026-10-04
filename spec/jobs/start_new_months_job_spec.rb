@@ -46,6 +46,45 @@ RSpec.describe StartNewMonthsJob, type: :job do
     expect(budgets.map { |budget| assigned_in_october(budget) }).to eq([ 400, 400 ])
   end
 
+  describe "when a budget's new month can't be started" do
+    # What was logged while the block ran.
+    def log_during
+      io = StringIO.new
+      logger = ActiveSupport::Logger.new(io)
+      Rails.logger.broadcast_to(logger)
+      yield
+      io.string
+    ensure
+      Rails.logger.stop_broadcasting_to(logger)
+    end
+
+    # The first budget has a currency that isn't supported any more, so marking its month started is refused. Budgets
+    # are started in the order they were created.
+    let!(:broken) { budget_with_groceries.tap { |budget| budget.update_column(:currency, "JPY") } }
+    let!(:other) { budget_with_groceries }
+
+    before { travel_to Time.utc(2026, 10, 1, 4, 1) }
+
+    it "still starts the budgets after it" do
+      expect { described_class.perform_now }.to raise_error(ActiveRecord::RecordInvalid)
+
+      expect(assigned_in_october(other)).to eq(400)
+    end
+
+    it "leaves that budget's month unstarted, for the next run to try again" do
+      expect { described_class.perform_now }.to raise_error(ActiveRecord::RecordInvalid)
+
+      expect(assigned_in_october(broken)).to eq(0)
+      expect(broken.reload.assignments_copied_through).to eq(september)
+    end
+
+    it "fails once the rest are done, saying which budget and why, so it isn't missed" do
+      log = log_during { expect { described_class.perform_now }.to raise_error(ActiveRecord::RecordInvalid, /Currency isn't supported/) }
+
+      expect(log).to include("budget #{broken.id}", "Currency isn't supported")
+    end
+  end
+
   describe "its entry in config/recurring.yml" do
     let(:entry) { Rails.application.config_for(:recurring, env: "production").fetch(:start_new_months) }
 

@@ -92,6 +92,10 @@ start. Running it again does nothing, because each month is copied into once: an
 their month began stays as they left it. A month begins by `config.time_zone`, so the task only does something once
 midnight Eastern on the 1st has passed.
 
+If one budget can't be started, the others still are. The log says `Couldn't start the new months of budget <id>` with
+the reason, the job (or the task) then fails with the first error, and the next hourly run tries that budget again.
+Nothing of its month is left half-copied.
+
 ## Reaching a running host
 
 The other Kamal aliases, all of which need `-d testing` or `-d production`:
