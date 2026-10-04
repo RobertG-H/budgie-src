@@ -3,6 +3,7 @@ class Budget::Envelope < ApplicationRecord
   # An envelope with records can't be deleted: the model refuses with a reason, and the database's ON DELETE RESTRICT
   # is the backstop. Deleting the whole budget deletes the records first (see Budget).
   has_many :assignments, dependent: :restrict_with_error
+  has_many :spends, dependent: :restrict_with_error
 
   normalizes :name, with: ->(name) { name.squish }
 

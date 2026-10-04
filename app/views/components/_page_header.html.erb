@@ -1,5 +1,5 @@
 <%# locals: (title:, description: nil) %>
-<%# A page's h1, with an optional line under it and, from the block, its actions on the right. %>
+<%# A page's h1, with an optional line under it and, from the block, its actions on the right. The actions wrap, so three of them still fit a phone. %>
 <% actions = yield %>
 <div class="flex flex-wrap items-start justify-between gap-4">
   <div class="space-y-2">
@@ -9,6 +9,6 @@
     <% end %>
   </div>
   <% if actions.present? %>
-    <div class="flex items-center gap-2"><%= actions %></div>
+    <div class="flex flex-wrap items-center gap-2"><%= actions %></div>
   <% end %>
 </div>

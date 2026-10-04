@@ -18,6 +18,11 @@ RSpec.describe "The words on the pages", type: :request do
       create(:budget_assignment, envelope: bills, month: Date.new(2026, 9, 1), amount: 5) ]
   end
 
+  # Money spent from Bills, in the month the pages below are for.
+  let!(:spend) do
+    create(:budget_spend, envelope: bills, description: "Hydro", date: Date.new(2026, 10, 12), amount: 65.5, notes: "September's bill")
+  end
+
   before { sign_in_as budget.user }
 
   # What a person reads on the page, not its markup.
@@ -46,6 +51,8 @@ RSpec.describe "The words on the pages", type: :request do
     "the envelope page" => -> { month_envelope_path("2026-10", bills) },
     "the Deposit form" => -> { new_deposit_path(month: "2026-10", from: "month") },
     "the Deposit edit form" => -> { edit_deposit_path(paycheck, month: "2026-10", from: "deposits") },
+    "the Spend form" => -> { new_spend_path(month: "2026-10", from: "envelope", envelope: bills.id) },
+    "the Spend edit form" => -> { edit_spend_path(spend, month: "2026-10", from: "envelope") },
     "the envelope form" => -> { new_envelope_path(month: "2026-10", from: "month") },
     "the envelope edit form" => -> { edit_envelope_path(bills, month: "2026-10", from: "envelope") },
     "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
@@ -87,6 +94,26 @@ RSpec.describe "The words on the pages", type: :request do
     expect(visible_text).to include("This envelope can't be deleted because it has records.")
     expect(visible_text).not_to match(/\w+_\w+/)
     expect(visible_text).not_to match(retired_terms)
+  end
+
+  it "uses the same words for what went wrong when a Spend is refused" do
+    post spends_path, params: { spend: { envelope_id: "", description: "", date: "2026-10-15", amount: "1.005" } }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(visible_text).to include("Envelope can't be blank", "Description can't be blank", "Amount can't have more than 2 decimal places")
+    expect(visible_text).not_to match(/\w+_\w+/)
+    expect(visible_text).not_to match(retired_terms)
+  end
+
+  it "says Spent, and Spends, on the pages where money paid out of an envelope is shown" do
+    get month_envelope_path("2026-10", bills)
+
+    expect(visible_text).to include("Spent $65.50", "Spends", "Hydro")
+
+    get month_path("2026-10")
+
+    expect(visible_text).to include("Spent")
+    expect(visible_text).to include("New spend")
   end
 
   it "uses the same words for what went wrong when a Deposit is refused" do

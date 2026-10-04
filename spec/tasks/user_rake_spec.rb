@@ -11,13 +11,14 @@ RSpec.describe "user rake tasks", type: :task do
       budget = create(:budget, user: user)
       envelopes = create_list(:budget_envelope, 2, budget: budget)
       create_list(:budget_deposit, 3, budget: budget)
-      # Two months of Assigned amounts for each envelope, which an envelope can't be deleted while it has.
+      # Two months of Assigned amounts and three Spends for each envelope, which an envelope can't be deleted while it has.
       envelopes.each do |envelope|
         [ Date.new(2026, 9, 1), Date.new(2026, 10, 1) ].each { |month| create(:budget_assignment, envelope: envelope, month: month) }
+        create_list(:budget_spend, 3, envelope: envelope)
       end
     end
 
-    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts and invite once the email is typed to confirm" do
+    it "deletes the user, their identities, sessions, budget, envelopes, Deposits, Assigned amounts, Spends and invite once the email is typed to confirm" do
       output = nil
 
       expect { output = run_task("user:delete", stdin: "Robin@Example.com\n", "EMAIL" => "robin@example.com") }
@@ -25,36 +26,41 @@ RSpec.describe "user rake tasks", type: :task do
         .and change(Session, :count).by(-1).and change(Invite, :count).by(-1)
         .and change(Budget, :count).by(-1).and change(Budget::Envelope, :count).by(-2)
         .and change(Budget::Deposit, :count).by(-3).and change(Budget::Assignment, :count).by(-4)
-      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits and 4 assignments and their invite", "Deleted robin@example.com.")
+        .and change(Budget::Spend, :count).by(-6)
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 3 deposits, 4 assignments and 6 spends and their invite", "Deleted robin@example.com.")
     end
 
     it "leaves another user's budget alone" do
       others = create(:budget_assignment)
+      others_spend = create(:budget_spend)
 
       run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
       expect(Budget::Assignment.all).to contain_exactly(others)
+      expect(Budget::Spend.all).to contain_exactly(others_spend)
     end
 
-    it "counts a single envelope, a single deposit and a single assignment in the singular" do
+    it "counts a single envelope, a single deposit, a single assignment and a single spend in the singular" do
       kept = user.budget.assignments.first
       Budget::Assignment.where(envelope: user.budget.envelopes).where.not(id: kept.id).delete_all
+      Budget::Spend.where(envelope: user.budget.envelopes).where.not(id: kept.envelope.spends.first.id).delete_all
       user.budget.envelopes.where.not(id: kept.envelope_id).destroy_all
       user.budget.deposits.where.not(id: user.budget.deposits.first.id).destroy_all
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 1 envelope, 1 deposit and 1 assignment and their invite")
+      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment and 1 spend and their invite")
     end
 
     it "counts a budget that has nothing in it" do
       user.budget.assignments.each(&:destroy!)
+      user.budget.spends.each(&:destroy!)
       user.budget.deposits.destroy_all
       user.budget.envelopes.destroy_all
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 0 envelopes, 0 deposits and 0 assignments and their invite")
+      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments and 0 spends and their invite")
     end
 
     it "says when the user has no budget" do

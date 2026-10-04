@@ -1,6 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
-# user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits and what's assigned
-# from them, so the real pages have something to show. Running it again changes nothing that's already there.
+# user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
+# them and what's spent, so the real pages have something to show. Running it again changes nothing that's already
+# there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
 user = User.find_or_create_by!(email: Dev::USER_EMAIL) { |new_user| new_user.name = "Dev Budgie" }
@@ -37,5 +38,35 @@ end
   envelope = budget.envelopes.find_by!(name: name)
   [ last_month, this_month ].zip(amounts).each do |month, amount|
     envelope.assignments.find_or_create_by!(month: month) { |assignment| assignment.amount = amount }
+  end
+end
+
+# What's spent from each envelope last month and this month, as [ description, day of the month, amount ]. Days stay
+# within the 28 every month has. Dining out is spent past what it has this month, which leaves it Overspent, and Fuel
+# has nothing last month, so its page for that month has no Spends to list. Rent is paid on the 1st, and Bills has
+# nothing, so it stays Overspent on its Starting balance alone.
+{
+  "Groceries" => [
+    [ [ "Loblaws", 3, 182.40 ], [ "Costco", 12, 240.15 ], [ "Farm Boy", 24, 96.80 ] ],
+    [ [ "Loblaws", 2, 164.20 ], [ "Farm Boy", 9, 88.35 ] ]
+  ],
+  "Rent" => [
+    [ [ "Landlord", 1, 1500 ] ],
+    [ [ "Landlord", 1, 1500 ] ]
+  ],
+  "Fuel" => [
+    [],
+    [ [ "Shell", 4, 58.40 ], [ "Petro-Canada", 11, 61.15 ] ]
+  ],
+  "Dining out" => [
+    [ [ "Pizza Nova", 6, 38.50 ], [ "Sushi Kai", 19, 72.25 ] ],
+    [ [ "Brunch", 3, 54.10 ], [ "Date night", 5, 187.30 ], [ "Birthday dinner", 8, 340.65 ], [ "Takeout", 10, 126.45 ] ]
+  ]
+}.each do |name, spends_by_month|
+  envelope = budget.envelopes.find_by!(name: name)
+  [ last_month, this_month ].zip(spends_by_month).each do |month, spends|
+    spends.each do |description, day, amount|
+      envelope.spends.find_or_create_by!(description: description, date: month + (day - 1)) { |spend| spend.amount = amount }
+    end
   end
 end

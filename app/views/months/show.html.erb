@@ -15,7 +15,8 @@
    ], " ") %>
 
 <%= render "components/page_header", title: @month.name do %>
-  <%= link_to "New deposit", new_deposit_path(month: @month, from: "month"), class: "btn btn-primary" %>
+  <%= link_to "New spend", new_spend_path(month: @month, from: "month"), class: "btn btn-primary" %>
+  <%= link_to "New deposit", new_deposit_path(month: @month, from: "month"), class: "btn" %>
   <%= link_to "New envelope", new_envelope_path(month: @month, from: "month"), class: "btn" %>
 <% end %>
 
@@ -39,6 +40,7 @@
             <th scope="col">Envelope</th>
             <th scope="col" class="hidden text-right sm:table-cell">Carried over</th>
             <th scope="col" class="text-right">Assigned</th>
+            <th scope="col" class="text-right">Spent</th>
             <th scope="col" class="text-right">Available</th>
           </tr>
         </thead>
@@ -48,6 +50,7 @@
               <td><%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %></td>
               <td class="hidden text-right tabular-nums sm:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
               <td class="text-right tabular-nums"><%= render "assignments/cell", line: line, month: @month, from: origin_page %></td>
+              <td class="text-right tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
               <td class="text-right tabular-nums"><%= render "components/money", amount: line.available, budget: budget, overspent: line.overspent? %></td>
             </tr>
           <% end %>

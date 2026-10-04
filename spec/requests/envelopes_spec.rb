@@ -9,13 +9,19 @@ RSpec.describe "Envelopes", type: :request do
   describe "GET /months/:month/envelopes/:id" do
     let(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries", starting_balance: 250) }
 
-    it "is headed with the envelope's name, the month as its description, and Edit and Delete as its actions" do
+    # What each listed Spend shows, as one line of text apiece.
+    def rows
+      css_select("ul.list li").map { |row| row.text.squish }
+    end
+
+    it "is headed with the envelope's name, the month as its description, and New spend, Edit and Delete as its actions" do
       get month_envelope_path("2026-09", groceries)
 
       expect(response).to have_http_status(:ok)
       assert_select "title", text: "Groceries · September 2026 · Budgie"
       assert_select "h1", text: "Groceries"
       assert_select "h1 + p", text: "September 2026"
+      assert_select "a.btn.btn-primary[href='#{new_spend_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "New spend"
       assert_select "a.btn[href='#{edit_envelope_path(groceries, month: "2026-09", from: "envelope")}']", text: "Edit"
       assert_select "form[action='#{envelope_path(groceries)}'][data-turbo-confirm='Delete the Groceries envelope?']" do
         assert_select "input[name='_method'][value=delete]"
@@ -24,11 +30,11 @@ RSpec.describe "Envelopes", type: :request do
       end
     end
 
-    it "shows what it carried over, what's Assigned to it in the month, and what's Available, in that order" do
+    it "shows what it carried over, what's Assigned to it and Spent from it in the month, and what's Available, in that order" do
       get month_envelope_path("2026-09", groceries)
 
-      expect(css_select(".stat-title").map { |title| title.text.strip }).to eq([ "Carried over", "Assigned", "Available" ])
-      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$250.00", "$0.00", "$250.00" ])
+      expect(css_select(".stat-title").map { |title| title.text.strip }).to eq([ "Carried over", "Assigned", "Spent", "Available" ])
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$250.00", "$0.00", "$0.00", "$250.00" ])
       assert_select ".badge", count: 0
     end
 
@@ -39,7 +45,92 @@ RSpec.describe "Envelopes", type: :request do
 
       get month_envelope_path("2026-09", groceries)
 
-      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$290.00", "$1,234.50", "$1,524.50" ])
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$290.00", "$1,234.50", "$0.00", "$1,524.50" ])
+    end
+
+    it "shows what's Spent in the month, and takes what was Spent before it out of what it carried over" do
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 400)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 8, 31), amount: 60)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 1), amount: 100.25)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 30), amount: 50)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 10, 1), amount: 999)
+
+      get month_envelope_path("2026-09", groceries)
+
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$190.00", "$400.00", "$150.25", "$439.75" ])
+    end
+
+    it "gives the Groceries example in January, February and March, with February Overspent" do
+      envelope = create(:budget_envelope, budget: budget, name: "Weekly groceries", starting_balance: 0)
+      [ "2026-01-01", "2026-02-01", "2026-03-01" ].each { |month| create(:budget_assignment, envelope: envelope, month: month, amount: 400) }
+      create(:budget_spend, envelope: envelope, date: Date.new(2026, 1, 20), amount: 350)
+      create(:budget_spend, envelope: envelope, date: Date.new(2026, 2, 14), amount: 480)
+      create(:budget_spend, envelope: envelope, date: Date.new(2026, 3, 3), amount: 300)
+
+      shown = [ "2026-01", "2026-02", "2026-03" ].map do |month|
+        get month_envelope_path(month, envelope)
+        [ css_select(".stat-value").map { |value| value.text.squish }, css_select(".badge").size ]
+      end
+
+      expect(shown).to eq([
+        [ [ "$0.00", "$400.00", "$350.00", "$50.00" ], 0 ],
+        [ [ "$50.00", "$400.00", "$480.00", "-$30.00 Overspent" ], 1 ],
+        [ [ "-$30.00", "$400.00", "$300.00", "$70.00" ], 0 ]
+      ])
+    end
+
+    it "lists exactly its own Spends dated in the month, the newest first, and no one else's" do
+      create(:budget_spend, envelope: groceries, description: "First of the month", date: Date.new(2026, 9, 1), amount: 10)
+      create(:budget_spend, envelope: groceries, description: "End of the month", date: Date.new(2026, 9, 30), amount: 20.5)
+      create(:budget_spend, envelope: groceries, description: "Month before", date: Date.new(2026, 8, 31))
+      create(:budget_spend, envelope: groceries, description: "Month after", date: Date.new(2026, 10, 1))
+      create(:budget_spend, envelope: create(:budget_envelope, budget: budget), description: "Another envelope's", date: Date.new(2026, 9, 5))
+      create(:budget_spend, envelope: others_envelope, description: "Someone else's", date: Date.new(2026, 9, 5))
+
+      get month_envelope_path("2026-09", groceries)
+
+      expect(rows).to eq([ "Sep 30 End of the month $20.50", "Sep 1 First of the month $10.00" ])
+      expect(response.body).not_to include("Someone else")
+    end
+
+    it "has a Spends heading over the list, and shows each Spend's date, description, notes and amount, linking to where it's edited" do
+      loblaws = create(:budget_spend, envelope: groceries, description: "Loblaws", date: Date.new(2026, 9, 30), amount: 123.45, notes: "Weekly shop")
+      bare = create(:budget_spend, envelope: groceries, description: "Corner store", date: Date.new(2026, 9, 5), amount: 4)
+
+      get month_envelope_path("2026-09", groceries)
+
+      assert_select "h2", text: "Spends"
+      assert_select "ul.list li a[href='#{edit_spend_path(loblaws, month: "2026-09", from: "envelope")}']" do
+        assert_select "span", text: "Sep 30"
+        assert_select "span", text: "Loblaws"
+        assert_select "span[class~='text-base-content/70']", text: "Weekly shop"
+        assert_select "span.text-right", text: "$123.45"
+      end
+      assert_select "ul.list li a[href='#{edit_spend_path(bare, month: "2026-09", from: "envelope")}']" do
+        assert_select "span.text-right", text: "$4.00"
+        assert_select "span.block[class~='text-base-content/70']", count: 0
+      end
+    end
+
+    it "lists the Spends of the month it's opened for, whichever it is" do
+      create(:budget_spend, envelope: groceries, description: "In August", date: Date.new(2026, 8, 31))
+      create(:budget_spend, envelope: groceries, description: "In September", date: Date.new(2026, 9, 1))
+
+      get month_envelope_path("2026-08", groceries)
+      expect(rows).to eq([ "Aug 31 In August $100.00" ])
+
+      get month_envelope_path("2026-09", groceries)
+      expect(rows).to eq([ "Sep 1 In September $100.00" ])
+    end
+
+    it "says when there are none in the month, even when there are in other months" do
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 8, 31))
+
+      get month_envelope_path("2026-09", groceries)
+
+      assert_select "h2", text: "Spends"
+      assert_select "ul.list", count: 0
+      assert_select "main p", text: "No spends in September 2026."
     end
 
     it "shows what's Assigned, with a way back to the month view to change it, and no input of its own for it" do
@@ -60,6 +151,16 @@ RSpec.describe "Envelopes", type: :request do
       assert_select ".badge", text: "Overspent", count: 1
     end
 
+    it "says Overspent when what's Spent takes Available below zero" do
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 100)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 12), amount: 400)
+
+      get month_envelope_path("2026-09", groceries)
+
+      expect(css_select(".stat-value").map { |value| value.text.squish }).to eq([ "$250.00", "$100.00", "$400.00", "-$50.00 Overspent" ])
+      assert_select ".badge", text: "Overspent", count: 1
+    end
+
     it "stops saying Overspent once enough is assigned to cover it" do
       bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
       create(:budget_assignment, envelope: bills, month: Date.new(2031, 12, 1), amount: 30)
@@ -67,7 +168,7 @@ RSpec.describe "Envelopes", type: :request do
       get month_envelope_path("2031-12", bills)
 
       assert_select ".badge", count: 0
-      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "-$30.00", "$30.00", "$0.00" ])
+      expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "-$30.00", "$30.00", "$0.00", "$0.00" ])
     end
 
     it "has month links that stay on this envelope, and a link back to the month view" do
@@ -301,6 +402,32 @@ RSpec.describe "Envelopes", type: :request do
       delete envelope_path(envelope), params: { from: "envelope", month: "2027-03" }
 
       expect(response).to redirect_to(month_envelope_path("2027-03", envelope))
+    end
+
+    it "refuses to delete an envelope with Spends, says why on the envelope's page, and keeps both" do
+      envelope = create(:budget_envelope, budget: budget, name: "Groceries")
+      create(:budget_spend, envelope: envelope, date: Date.new(2026, 9, 12), amount: 100)
+
+      expect { delete envelope_path(envelope), params: { month: "2026-09" } }
+        .to not_change(Budget::Envelope, :count).and not_change(Budget::Spend, :count)
+
+      expect(response).to have_http_status(:see_other)
+      expect(response).to redirect_to(month_envelope_path("2026-09", envelope))
+      follow_redirect!
+      assert_select "[role=alert]", text: "This envelope can't be deleted because it has records."
+      assert_select "[role=status]", count: 0
+      assert_select "h1", text: "Groceries"
+      expect(response.body).not_to include("PG::")
+    end
+
+    it "deletes it once its Spends are deleted" do
+      envelope = create(:budget_envelope, budget: budget)
+      spend = create(:budget_spend, envelope: envelope, date: Date.new(2026, 9, 12))
+
+      spend.destroy!
+
+      expect { delete envelope_path(envelope), params: { month: "2026-09" } }.to change(Budget::Envelope, :count).by(-1)
+      expect(response).to redirect_to(month_path("2026-09"))
     end
 
     it "deletes it once its Assigned amounts are cleared" do

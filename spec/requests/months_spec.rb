@@ -176,12 +176,14 @@ RSpec.describe "Months", type: :request do
 
       assert_select "tr#envelope_#{groceries.id}" do
         assert_select "td:nth-child(2)", text: "$1,325.00"
-        assert_select "td:nth-child(4)", text: "$2,925.00"
+        assert_select "td:nth-child(4)", text: "$0.00"
+        assert_select "td:nth-child(5)", text: "$2,925.00"
       end
       expect(assigned_for(groceries)).to eq("$1,600.00")
       assert_select "tr#envelope_#{rent.id}" do
         assert_select "td:nth-child(2)", text: "$1,500.00"
-        assert_select "td:nth-child(4)", text: "$3,000.00"
+        assert_select "td:nth-child(4)", text: "$0.00"
+        assert_select "td:nth-child(5)", text: "$3,000.00"
       end
       expect(assigned_for(rent)).to eq("$1,500.00")
     end
@@ -221,12 +223,14 @@ RSpec.describe "Months", type: :request do
       assert_select "tbody form[method=get] input[type=hidden][name=from][value=month]", count: 2
     end
 
-    it "keeps Assigned on a phone, where only Carried over is dropped" do
+    it "keeps Assigned and Spent on a phone, where only Carried over is dropped" do
       get month_path("2026-02")
 
       assert_select "thead th", text: "Assigned"
       assert_select "thead th:nth-child(3)[class~='hidden']", count: 0
+      assert_select "thead th:nth-child(4)[class~='hidden']", count: 0
       assert_select "tbody td:nth-child(3)[class~='hidden']", count: 0
+      assert_select "tbody td:nth-child(4)[class~='hidden']", count: 0
       assert_select "tbody td:nth-child(2)[class~='hidden'][class~='sm:table-cell']", count: 2
     end
 
@@ -242,7 +246,7 @@ RSpec.describe "Months", type: :request do
       assert_select ".stat-value .text-error", text: "-$50.00"
       expect(stat_description).to eq("Carried over $50.00 · Deposited $3,000.00 · Assigned $3,100.00")
       assert_select "tr#envelope_#{groceries.id} td:nth-child(2)", text: "$1,475.00"
-      assert_select "tr#envelope_#{groceries.id} td:nth-child(4)", text: "$3,075.00"
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(5)", text: "$3,075.00"
       expect(assigned_for(groceries)).to eq("$1,600.00")
     end
 
@@ -286,6 +290,132 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-01")
 
       expect(assigned_for(groceries)).to eq("£25.00")
+    end
+  end
+
+  describe "Spent" do
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+    let!(:rent) { create(:budget_envelope, budget: budget, name: "Rent") }
+
+    # What the Spent column shows for an envelope.
+    def spent_for(envelope)
+      css_select("tr#envelope_#{envelope.id} td:nth-child(4)").map { |cell| cell.text.squish }.sole
+    end
+
+    # What the Available column shows for an envelope.
+    def available_for(envelope)
+      css_select("tr#envelope_#{envelope.id} td:nth-child(5)").map { |cell| cell.text.squish }.sole
+    end
+
+    # The Groceries worked example: $400 is assigned in each of January to March, and $350, $480 and $300 are spent.
+    def set_up_the_groceries_example
+      [ "2026-01-01", "2026-02-01", "2026-03-01" ].each do |month|
+        create(:budget_assignment, envelope: groceries, month: month, amount: 400)
+      end
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 1, 20), amount: 350)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 2, 14), amount: 480)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 3, 3), amount: 300)
+    end
+
+    it "shows exactly the numbers of the Groceries example in January, February and March, with February Overspent" do
+      set_up_the_groceries_example
+
+      shown = [ "2026-01", "2026-02", "2026-03" ].map do |month|
+        get month_path(month)
+
+        cells = css_select("tr#envelope_#{groceries.id} td").map { |cell| cell.text.squish }
+        [ cells[1], assigned_for(groceries), cells[3], cells[4] ]
+      end
+
+      expect(shown).to eq([
+        [ "$0.00", "$400.00", "$350.00", "$50.00" ],
+        [ "$50.00", "$400.00", "$480.00", "-$30.00 Overspent" ],
+        [ "-$30.00", "$400.00", "$300.00", "$70.00" ]
+      ])
+    end
+
+    it "marks only February Overspent in the Groceries example" do
+      set_up_the_groceries_example
+
+      [ [ "2026-01", 0 ], [ "2026-02", 1 ], [ "2026-03", 0 ] ].each do |month, badges|
+        get month_path(month)
+
+        assert_select ".badge", text: "Overspent", count: badges
+      end
+      get month_path("2026-02")
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(5) .badge", text: "Overspent"
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(5) .text-error", text: "-$30.00"
+    end
+
+    it "shifts every month's Available by a Starting balance: with $25 it's $75, -$5 and $95, and February is still Overspent" do
+      set_up_the_groceries_example
+      groceries.update!(starting_balance: 25)
+
+      shown = [ "2026-01", "2026-02", "2026-03" ].map do |month|
+        get month_path(month)
+        available_for(groceries)
+      end
+
+      expect(shown).to eq([ "$75.00", "-$5.00 Overspent", "$95.00" ])
+    end
+
+    it "carries the balance through a month with no records, with $0.00 Spent" do
+      set_up_the_groceries_example
+
+      get month_path("2026-05")
+
+      expect(spent_for(groceries)).to eq("$0.00")
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(2)", text: "$70.00"
+      expect(available_for(groceries)).to eq("$70.00")
+    end
+
+    it "shows $0.00 for an envelope with nothing spent in the month" do
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 8, 31), amount: 10)
+
+      get month_path("2026-09")
+
+      expect(spent_for(groceries)).to eq("$0.00")
+      expect(spent_for(rent)).to eq("$0.00")
+    end
+
+    it "counts only the Spends dated in the month, each in its own envelope's row" do
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 1), amount: 10)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 30), amount: 5.5)
+      create(:budget_spend, envelope: rent, date: Date.new(2026, 9, 15), amount: 1500)
+      create(:budget_spend, envelope: rent, date: Date.new(2026, 10, 1), amount: 999)
+
+      get month_path("2026-09")
+
+      expect(spent_for(groceries)).to eq("$15.50")
+      expect(spent_for(rent)).to eq("$1,500.00")
+    end
+
+    it "doesn't change Ready to Assign" do
+      create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 9, 1))
+      create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 400)
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 10), amount: 350)
+
+      get month_path("2026-09")
+
+      assert_select ".stat-value", text: "$2,600.00"
+      expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $400.00")
+    end
+
+    it "doesn't count another budget's Spends" do
+      create(:budget_spend, envelope: create(:budget_envelope), date: Date.new(2026, 9, 10), amount: 999)
+
+      get month_path("2026-09")
+
+      expect(spent_for(groceries)).to eq("$0.00")
+    end
+
+    it "is in the budget's currency unit" do
+      budget.update!(currency: "GBP")
+      create(:budget_spend, envelope: groceries, date: Date.new(2026, 9, 10), amount: 25)
+
+      get month_path("2026-09")
+
+      expect(spent_for(groceries)).to eq("£25.00")
     end
   end
 
@@ -441,7 +571,7 @@ RSpec.describe "Months", type: :request do
   end
 
   describe "the envelopes" do
-    it "are listed alphabetically, each name linking to its page, with Carried over, Assigned and Available" do
+    it "are listed alphabetically, each name linking to its page, with Carried over, Assigned, Spent and Available" do
       rent = create(:budget_envelope, budget: budget, name: "rent", starting_balance: 1234.5)
       bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: 40)
       create(:budget_envelope, name: "Someone else's", starting_balance: 5)
@@ -451,16 +581,19 @@ RSpec.describe "Months", type: :request do
       assert_select "thead th", text: "Envelope"
       assert_select "thead th", text: "Carried over"
       assert_select "thead th", text: "Assigned"
+      assert_select "thead th", text: "Spent"
       assert_select "thead th", text: "Available"
       assert_select "thead th:nth-child(2)", text: "Carried over"
       assert_select "thead th:nth-child(3)", text: "Assigned"
-      assert_select "thead th:nth-child(4)", text: "Available"
+      assert_select "thead th:nth-child(4)", text: "Spent"
+      assert_select "thead th:nth-child(5)", text: "Available"
       assert_select "tbody tr", count: 2
       assert_select "tbody tr:nth-child(1) td:nth-child(1) a[href='#{month_envelope_path("2026-09", bills)}']", text: "Bills"
       assert_select "tbody tr:nth-child(1) td:nth-child(2)", text: "$40.00"
-      assert_select "tbody tr:nth-child(1) td:nth-child(4)", text: "$40.00"
+      assert_select "tbody tr:nth-child(1) td:nth-child(4)", text: "$0.00"
+      assert_select "tbody tr:nth-child(1) td:nth-child(5)", text: "$40.00"
       assert_select "tbody tr:nth-child(2) td:nth-child(1) a[href='#{month_envelope_path("2026-09", rent)}']", text: "rent"
-      assert_select "tbody tr:nth-child(2) td:nth-child(4)", text: "$1,234.50"
+      assert_select "tbody tr:nth-child(2) td:nth-child(5)", text: "$1,234.50"
       expect(response.body).not_to include("Someone else")
     end
 
@@ -471,23 +604,24 @@ RSpec.describe "Months", type: :request do
       [ "2026-09", "2024-01", "2031-12" ].each do |month|
         get month_path(month)
 
-        assert_select "tbody tr:nth-child(1) td:nth-child(4)", text: /\A-\$30\.00\s+Overspent\z/
-        assert_select "tbody tr:nth-child(1) td:nth-child(4) .text-error", text: "-$30.00"
-        assert_select "tbody tr:nth-child(2) td:nth-child(4)", text: "$0.00"
+        assert_select "tbody tr:nth-child(1) td:nth-child(5)", text: /\A-\$30\.00\s+Overspent\z/
+        assert_select "tbody tr:nth-child(1) td:nth-child(5) .text-error", text: "-$30.00"
+        assert_select "tbody tr:nth-child(2) td:nth-child(5)", text: "$0.00"
         assert_select ".badge", text: "Overspent", count: 1
       end
     end
 
-    it "right-align their amounts, and drop Carried over on a phone, which keeps Assigned and Available" do
+    it "right-align their amounts, and drop Carried over on a phone, which keeps Assigned, Spent and Available" do
       create(:budget_envelope, budget: budget)
 
       get month_path("2026-09")
 
       assert_select "thead th[scope=col].text-right", text: "Assigned"
+      assert_select "thead th[scope=col].text-right", text: "Spent"
       assert_select "thead th[scope=col].text-right", text: "Available"
       assert_select "thead th[class~='hidden'][class~='sm:table-cell']", text: "Carried over"
       assert_select "thead th[class~='hidden']", count: 1
-      assert_select "tbody td.text-right.tabular-nums", count: 3
+      assert_select "tbody td.text-right.tabular-nums", count: 4
       assert_select "tbody td[class~='hidden'][class~='sm:table-cell']", count: 1
     end
 
@@ -501,10 +635,13 @@ RSpec.describe "Months", type: :request do
   end
 
   describe "the actions" do
-    it "are New deposit, the main one, and New envelope, each remembering the month and page they were opened from" do
+    it "are New spend, the main one, then New deposit and New envelope, each remembering the month and page they were opened from" do
       get month_path("2026-09")
 
-      assert_select "a.btn.btn-primary[href='#{new_deposit_path(month: "2026-09", from: "month")}']", text: "New deposit"
+      assert_select "a.btn.btn-primary[href='#{new_spend_path(month: "2026-09", from: "month")}']", text: "New spend"
+      assert_select "div.gap-2 a.btn-primary", count: 1
+      expect(css_select("div.gap-2 a.btn").map { |action| action.text.strip }).to eq([ "New spend", "New deposit", "New envelope" ])
+      assert_select "a.btn[href='#{new_deposit_path(month: "2026-09", from: "month")}']", text: "New deposit"
       assert_select "a.btn[href='#{new_envelope_path(month: "2026-09", from: "month")}']", text: "New envelope"
     end
   end

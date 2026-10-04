@@ -1,0 +1,11 @@
+<% content_for :title, "Edit spend · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "Edit spend" do %>
+    <%= render "components/delete_button", path: spend_path(@spend),
+          confirm: "Delete the #{@spend.description_was} spend?",
+          params: { from: origin, month: @month.to_param }.compact %>
+  <% end %>
+
+  <%= render "form", spend: @spend, cancel_path: return_path(@month, envelope: @spend.envelope) %>
+</div>

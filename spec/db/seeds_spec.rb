@@ -21,6 +21,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::Assignment, :count)
   end
 
+  it "creates no Spends outside development" do
+    expect { run_seeds }.not_to change(Budget::Spend, :count)
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -78,10 +82,63 @@ RSpec.describe "db/seeds.rb" do
       expect(bills).to have_attributes(assigned: 0, available: -30, overspent?: true)
     end
 
+    it "spends from the envelopes last month and this month, and nothing before last month" do
+      travel_to Time.utc(2026, 10, 15, 16)
+
+      run_seeds
+
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+      by_month = budget.spends.group_by { |spend| spend.date.beginning_of_month }
+      expect(by_month.keys).to contain_exactly(Date.new(2026, 9, 1), Date.new(2026, 10, 1))
+      expect(by_month.values.map { |spends| spends.map { |spend| spend.envelope.name }.uniq.size }).to all(be > 1)
+    end
+
+    it "gives Fuel no Spends last month, so its page for that month has none to list, and some this month" do
+      travel_to Time.utc(2026, 10, 15, 16)
+
+      run_seeds
+
+      fuel = Budget::Envelope.find_by!(name: "Fuel")
+      expect(fuel.spends.dated_in(Date.new(2026, 9, 1))).to be_empty
+      expect(fuel.spends.dated_in(Date.new(2026, 10, 1))).not_to be_empty
+    end
+
+    it "spends enough from Dining out to leave it Overspent this month, and not last month" do
+      travel_to Time.utc(2026, 10, 15, 16)
+      run_seeds
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+
+      dining_out = ->(month) { Budget::Month.new(budget, month).envelopes.find { |line| line.envelope.name == "Dining out" } }
+
+      expect(dining_out.call(Date.new(2026, 9, 1))).to have_attributes(spent: BigDecimal("110.75"), available: BigDecimal("234.50"), overspent?: false)
+      expect(dining_out.call(Date.new(2026, 10, 1))).to have_attributes(spent: BigDecimal("708.50"), available: BigDecimal("-24.00"), overspent?: true)
+    end
+
+    it "leaves Ready to Assign as it was, which Spends don't change" do
+      travel_to Time.utc(2026, 10, 15, 16)
+      run_seeds
+      budget = User.find_by!(email: Dev::USER_EMAIL).budget
+
+      expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign)
+        .to have_attributes(carried_over: 200, deposited: 3000, assigned: 3100, amount: 100)
+    end
+
     it "changes nothing when it's run again" do
       run_seeds
 
-      expect { run_seeds }.not_to change { [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count ] }
+      expect { run_seeds }.not_to change {
+        [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count ]
+      }
+    end
+
+    it "leaves a Spend the developer has changed" do
+      run_seeds
+      spend = Budget::Spend.order(:date, :id).last
+      spend.update!(amount: 1)
+
+      run_seeds
+
+      expect(spend.reload.amount).to eq(1)
     end
 
     it "leaves an Assigned amount the developer has changed" do

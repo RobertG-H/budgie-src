@@ -72,8 +72,8 @@ Mobile-first: design at 375px, add `sm:`/`lg:` for wider. The app shell is a dai
 shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spacing uses Tailwind's scale in
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
 page scroll at 375px: tables are the one place content can outgrow a phone, so they scroll in their own
-`overflow-x-auto` wrapper rather than the page, and their cell padding halves below `sm:` so three money
-columns fit without that. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row or a row of links, as the Assigned cell's and the month links' do).
+`overflow-x-auto` wrapper rather than the page, and their cell padding drops to a quarter of daisyUI's below `sm:` so
+three money columns fit without that. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row or a row of links, as the Assigned cell's and the month links' do).
 
 ## Money and numbers
 
