@@ -1,3 +1,3 @@
 <%# locals: (rule:) %>
 <%# Which Filing rule filed or ignored a bank transaction: its text, which opens the rule on the Filing rules page, and what it sets, as a muted line under the row's state. %>
-<span class="mt-1 block text-base-content/70">Filing rule: <%= link_to rule.text, edit_filing_rule_path(rule), class: "link" %> → <%= rule.outcome_label %></span>
+<%= render "components/row_note" do %>Filing rule: <%= link_to rule.text, edit_filing_rule_path(rule), class: "link" %> → <%= rule.outcome_label %><% end %>

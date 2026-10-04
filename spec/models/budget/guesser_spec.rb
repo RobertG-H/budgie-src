@@ -165,6 +165,14 @@ RSpec.describe Budget::Guesser do
         expect(guess(unfiled("PRE-AUTHORIZED PAYMENT INSURANCE"))).to be_nil
       end
 
+      it "weighs a word by history of the same sign only, so money in doesn't make a merchant's money out less sure" do
+        filed("COSTCO #1", household)
+        filed("COSTCO RETURN", groceries, amount: 18.75)
+        filed("COSTCO REBATE", amount: 5)
+
+        expect(guess(unfiled("COSTCO TORONTO"))).to have_attributes(kind: "spend", envelope_id: household.id, like: "COSTCO #1")
+      end
+
       it "is nothing for a description with no words in it" do
         filed("LOBLAWS #1234", groceries)
 

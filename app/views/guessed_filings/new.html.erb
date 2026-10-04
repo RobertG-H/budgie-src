@@ -16,7 +16,7 @@
     </div>
   <% else %>
     <%= form_with url: guessed_filing_path, method: :post, class: "mt-8 space-y-6" do |form| %>
-      <%= hidden_field_tag :page, page if page > 1 %>
+      <%= hidden_field_tag :page, page_param if page_param %>
 
       <%= render "components/record_list" do %>
         <% @reviewed.each do |bank_transaction| %>
@@ -24,7 +24,7 @@
           <%= render "components/record_row", href: nil, date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount,
                 budget: budget, with_year: true, counterpart: bank_transaction.account.name,
                 leading: check_box_tag("guessed[#{bank_transaction.id}]", guess.review_value, true, id: nil, class: "checkbox checkbox-primary self-start") do %>
-            <span class="mt-1 block text-base-content/70"><%= guess.label %></span>
+            <%= render "components/row_note" do %><%= guess.label %><% end %>
           <% end %>
         <% end %>
       <% end %>

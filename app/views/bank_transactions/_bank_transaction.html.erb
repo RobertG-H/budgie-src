@@ -19,7 +19,7 @@
   <% end %>
 
   <% if guess && state == :unfiled %>
-    <span class="mt-1 block text-base-content/70"><%= guess.label %></span>
+    <%= render "components/row_note" do %><%= guess.label %><% end %>
   <% end %>
 
   <% if state == :filed %>

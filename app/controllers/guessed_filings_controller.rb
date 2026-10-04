@@ -40,8 +40,7 @@ class GuessedFilingsController < ApplicationController
     # Why nothing was filed, for the first row that was refused, in the words filing by hand uses.
     def refusal(entries)
       entry = entries.find(&:refused?)
-      messages = entry.errors.full_messages + entry.drafts.flat_map { |draft| draft.errors.full_messages }
 
-      "Nothing was filed. #{entry.bank_transaction.description}: #{messages.map { |message| message.end_with?(".") ? message : "#{message}." }.join(" ")}"
+      "Nothing was filed. #{entry.bank_transaction.description}: #{entry.full_messages.map { |message| message.end_with?(".") ? message : "#{message}." }.join(" ")}"
     end
 end

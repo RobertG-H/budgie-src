@@ -26,11 +26,11 @@ class Budget::Guesser
 
     # The rules are loaded once, for all of them.
     matcher = Budget::FilingRule::Matcher.new(@budget.filing_rules.active)
-    open = bank_transactions.reject { |bank_transaction| matcher.rule_for(bank_transaction) }
-    return {} if open.empty?
+    unclaimed = bank_transactions.reject { |bank_transaction| matcher.rule_for(bank_transaction) }
+    return {} if unclaimed.empty?
 
     sources.each_with_object({}) do |source, guesses|
-      asked = open.reject { |bank_transaction| guesses.key?(bank_transaction.id) }
+      asked = unclaimed.reject { |bank_transaction| guesses.key?(bank_transaction.id) }
       guesses.merge!(source.guesses(asked)) if asked.any?
     end
   end

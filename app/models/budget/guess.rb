@@ -3,7 +3,7 @@
 # out when it's shown and never stored, and it only suggests: nothing is created from it unless a person files the bank transaction.
 #
 # It's a Spend, a Refund or a Deposit, and never Ignore or an archived envelope. A Deposit has no envelope.
-class Budget::Guess < Data.define(:kind, :envelope_id, :envelope_name, :like)
+Budget::Guess = Data.define(:kind, :envelope_id, :envelope_name, :like) do
   # What the filing form starts as, in place of its own defaults: the kind and the envelope. See Budget::Filing::Draft.for.
   def draft_attributes
     { kind: kind, envelope_id: envelope_id }

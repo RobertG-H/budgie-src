@@ -6,7 +6,7 @@ module UnfiledPage
   include Paginated
 
   included do
-    helper_method :unfiled_page_path
+    helper_method :page_param, :unfiled_page_path
   end
 
   private
