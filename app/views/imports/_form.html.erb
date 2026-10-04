@@ -1,16 +1,27 @@
-<%# locals: (account:, import:, cancel_path:) %>
-<%# The file is read when the form is sent, and isn't kept. The CSV format starts as the one the Account's last Import used. %>
-<%= form_with model: [ account, import ], multipart: true, class: "mt-8 space-y-6" do |form| %>
+<%# locals: (import:, cancel_path:, account: nil, again: false) %>
+<%# The file is read when the form is sent, and isn't kept. The CSV format starts as the one the Account's last Import used, and before its first, the Account's default. %>
+<%# With an `account` the form is that Account's own, and the Account is fixed. Without one it's the whole form, where the Account is chosen along with the file and the CSV format, all three required: it's what a guess that wasn't certain shows, and what the header's Import leads to without JavaScript. `again` is a form that came back from a guess, which the browser fills the file field of again when it can, and otherwise says to choose the file again. %>
+<% csv_formats = Current.budget.csv_formats.alphabetical.pluck(:name, :id) %>
+<%= form_with model: import, url: (account ? account_imports_path(account) : imports_path), scope: :import, multipart: true, class: "mt-8 space-y-6",
+      data: { controller: "import-file" } do |form| %>
   <%= render "form_errors", record: import %>
 
   <%= render "components/field", form: form, attribute: :file, control: :file, label: "File",
-        hint: "A CSV file from your bank. It's read, and isn't kept." do |field| %>
-    <%= form.file_field :file, accept: ".csv,text/csv", required: true, autofocus: true, **field %>
+        hint: safe_join([ "A CSV file from your bank. It's read, and isn't kept.",
+                          (tag.span(" Choose the file again.", class: "font-medium", data: { import_file_target: "again" }) if again) ]) do |field| %>
+    <%= form.file_field :file, accept: ".csv,text/csv", required: true, autofocus: true, data: { import_file_target: "input" }, **field %>
   <% end %>
 
   <%= render "components/field", form: form, attribute: :csv_format_id, control: :select, label: "CSV format",
-        hint: "How your bank lays out its file." do |field| %>
-    <%= form.select :csv_format_id, Current.budget.csv_formats.alphabetical.pluck(:name, :id), { prompt: "Choose a CSV format" }, required: true, **field %>
+        hint: "How your bank lays out its file.", error: import.errors.full_messages_for(:csv_format).to_sentence.presence do |field| %>
+    <%= form.select :csv_format_id, csv_formats, { prompt: "Choose a CSV format" }, required: true, **field %>
+  <% end %>
+
+  <% unless account %>
+    <%= render "components/field", form: form, attribute: :account_id, control: :select, label: "Account",
+          hint: "Which account the file is from.", error: import.errors.full_messages_for(:account).to_sentence.presence do |field| %>
+      <%= form.select :account_id, Current.budget.accounts.alphabetical.pluck(:name, :id), { prompt: "Choose an account" }, required: true, **field %>
+    <% end %>
   <% end %>
 
   <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: "Import" %>

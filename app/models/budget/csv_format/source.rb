@@ -26,7 +26,7 @@ class Budget::CsvFormat::Source
         yield start, cells
       end
     rescue CSV::MalformedCSVError => error
-      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: line + 1, reason: "isn't valid CSV (#{error.message.sub(/ in line \d+\.?\z/, "")}).")
+      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: line + 1, reason: "isn't valid CSV (#{error.message.sub(/ in line \d+\.?\z/, "")}).", file: true)
     end
   end
 
@@ -43,6 +43,6 @@ class Budget::CsvFormat::Source
     end
 
     def refuse(reason)
-      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: nil, reason: reason)
+      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: nil, reason: reason, file: true)
     end
 end

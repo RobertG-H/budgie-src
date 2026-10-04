@@ -6,12 +6,15 @@
 <div class="mt-4">
   <%# Undo sits beside the figures it takes back. It's only there while the Import can be undone; otherwise the reason is under the title. %>
   <%= render "components/page_header", title: "Import",
-        description: "#{@import.file_name}, into #{@account.name}, #{spelled_time(@import.created_at)}" do %>
+        description: "#{@import.file_name}, #{spelled_time(@import.created_at)}" do %>
     <% if @undo_refusal.nil? %>
       <%= render "components/delete_button", path: import_path(@import), label: "Undo", confirm: undo_confirmation(@import, @import.added_count) %>
     <% end %>
   <% end %>
 </div>
+
+<%# Which Account and CSV format it used, for every Import, so a wrong guess from the header is seen at once, with Undo beside it. %>
+<p class="mt-2 font-medium">Into <%= @account.name %>, read with the <%= @import.csv_format.name %> CSV format.</p>
 
 <p class="mt-4 text-base-content/70">
   <% if @undo_refusal %>

@@ -8,7 +8,7 @@
 # - `envelope` is the id of one of the budget's envelopes; blank, or one that isn't the budget's, is all of them. An envelope leaves
 #   out Deposits, which belong to none, and a Reallocation is found by either of its envelopes.
 #
-# The five tables are one ordered list through a UNION ALL of `(source, id, date, created_at, amount)`, which `keys` pages like a
+# The five tables are one ordered list through a UNION ALL (built with Arel, never from strings) of `(source, id, date, created_at, amount)`, which `keys` pages like a
 # relation, so it goes through Paginated unchanged. The order is the date, when it was made and the id, newest first, and the table
 # last, so it's total. `records` then loads each table's rows with their envelopes, which come from the budget's envelopes, loaded once, so
 # the number of queries is fixed: the keys, one for each table on the page, the totals and the envelopes, however many records.
@@ -59,7 +59,7 @@ class Budget::RecordList
   # Where each record of the list is, in the order they're shown, to be paged: a key is the `source` table it's in and its `id`.
   # `records` loads what they name.
   def keys
-    Keys.new(union_sql)
+    Keys.new(union)
   end
 
   # The records the keys name, in the order of the keys, each with its envelope or envelopes loaded.
@@ -76,51 +76,59 @@ class Budget::RecordList
   def totals
     return if kind == "reallocation"
 
-    sql = union_sql
-    return Totals.new(money_in: BigDecimal(0), money_out: BigDecimal(0)) unless sql
+    union = self.union
+    return Totals.new(money_in: BigDecimal(0), money_out: BigDecimal(0)) unless union
 
-    money_in, money_out = connection.select_rows(<<~SQL.squish).first
-      SELECT COALESCE(SUM(amount) FILTER (WHERE source IN ('deposit', 'refund')), 0),
-             COALESCE(SUM(amount) FILTER (WHERE source = 'spend'), 0)
-      FROM (#{sql}) AS records
-    SQL
+    manager = Keys.records_from(union).project(
+      Arel.sql("COALESCE(SUM(amount) FILTER (WHERE source IN ('deposit', 'refund')), 0)"),
+      Arel.sql("COALESCE(SUM(amount) FILTER (WHERE source = 'spend'), 0)")
+    )
+    money_in, money_out = connection.select_rows(manager).first
     Totals.new(money_in: BigDecimal(money_in.to_s), money_out: BigDecimal(money_out.to_s))
   end
 
   # A key: the table a record is in, and which record it is.
   Key = Data.define(:source, :id)
 
-  # The keys of a union, with the little of a relation that Paginated asks of a scope: `limit`, `offset` and `to_a`, and `count`. They're
-  # in the order they're shown. It's built from SQL the list wrote from the budget's own relations, never from anything a person sent;
-  # the only numbers it adds are integers.
+  # The keys of a union, with the little of a relation that Paginated asks of a scope: `limit`, `offset` and `to_a`, and `count`. They're in the
+  # order they're shown. The union is an Arel node the list built from the budget's own relations, and the only numbers added are integers.
   class Keys
-    def initialize(sql, limit: nil, offset: nil)
-      @sql = sql
+    RECORDS = Arel::Table.new(:records)
+
+    # `union` aliased as `records`, to select from.
+    def self.records_from(union)
+      Arel::SelectManager.new.from(Arel::Nodes::TableAlias.new(Arel::Nodes::Grouping.new(union), RECORDS.name))
+    end
+
+    def initialize(union, limit: nil, offset: nil)
+      @union = union
       @limit = limit
       @offset = offset
     end
 
     def limit(count)
-      self.class.new(@sql, limit: Integer(count), offset: @offset)
+      self.class.new(@union, limit: Integer(count), offset: @offset)
     end
 
     def offset(count)
-      self.class.new(@sql, limit: @limit, offset: Integer(count))
+      self.class.new(@union, limit: @limit, offset: Integer(count))
     end
 
     def to_a
-      return [] unless @sql
+      return [] unless @union
 
-      rows = ApplicationRecord.connection.select_rows(<<~SQL.squish)
-        SELECT source, id FROM (#{@sql}) AS records
-        ORDER BY date DESC, created_at DESC, id DESC, source ASC
-        #{"LIMIT #{@limit}" if @limit} #{"OFFSET #{@offset}" if @offset}
-      SQL
-      rows.map { |source, id| Key.new(source: source, id: Integer(id)) }
+      manager = self.class.records_from(@union).project(RECORDS[:source], RECORDS[:id])
+        .order(RECORDS[:date].desc, RECORDS[:created_at].desc, RECORDS[:id].desc, RECORDS[:source].asc)
+      manager.take(@limit) if @limit
+      manager.skip(@offset) if @offset
+
+      ApplicationRecord.connection.select_rows(manager).map { |source, id| Key.new(source: source, id: Integer(id)) }
     end
 
     def count
-      @sql ? Integer(ApplicationRecord.connection.select_value("SELECT COUNT(*) FROM (#{@sql}) AS records")) : 0
+      return 0 unless @union
+
+      Integer(ApplicationRecord.connection.select_value(self.class.records_from(@union).project(Arel.star.count)))
     end
   end
 
@@ -129,9 +137,10 @@ class Budget::RecordList
       ApplicationRecord.connection
     end
 
-    # The SQL of every table the list reads, joined, or nil when none of them can hold a record the filters allow.
-    def union_sql
-      sources.map { |source| source_sql(source) }.join(" UNION ALL ").presence
+    # Every table the list reads, as one UNION ALL, or nil when none of them can hold a record the filters allow.
+    def union
+      arels = sources.map { |source| source_arel(source) }
+      arels.drop(1).reduce(arels.first&.ast) { |all, arel| Arel::Nodes::UnionAll.new(all, arel.ast) }
     end
 
     # The tables the filters leave: the Kind's, and not Deposits when there's an envelope, which they don't belong to.
@@ -139,14 +148,13 @@ class Budget::RecordList
       SOURCES.select { |source, source_kind| (kind.nil? || kind == source_kind) && !(envelope && source == "deposit") }.keys
     end
 
-    # The rows of one table in the range, as the columns every table of the union shares.
-    def source_sql(source)
+    # The rows of one table in the range, as the columns every table of the union shares. `source` is a literal.
+    def source_arel(source)
       records = filtered(source)
-      table = records.klass.quoted_table_name
+      table = records.klass.arel_table
+      source_column = Arel::Nodes::As.new(Arel::Nodes.build_quoted(source), Arel.sql("source"))
 
-      records.where(date: date_range.range)
-        .select(Arel.sql("#{records.connection.quote(source)} AS source"), *%w[ id date created_at amount ].map { |column| Arel.sql("#{table}.#{column}") })
-        .to_sql
+      records.where(date: date_range.range).select(source_column, table[:id], table[:date], table[:created_at], table[:amount]).arel
     end
 
     # One table's records of the budget, in the envelope when there is one.

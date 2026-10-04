@@ -69,6 +69,16 @@ class Budget < ApplicationRecord
     CURRENCIES.fetch(currency)[:unit]
   end
 
+  # Whether there's something to guess an Import with: at least one CSV format and one Account. The header's Import button asks on every page, so
+  # it's one query whatever the answer.
+  def importable?
+    return @importable if defined?(@importable)
+
+    @importable = self.class.connection.select_value(self.class.sanitize_sql_array([
+      "SELECT EXISTS (SELECT 1 FROM budget_csv_formats WHERE budget_id = :id) AND EXISTS (SELECT 1 FROM budget_accounts WHERE budget_id = :id)", { id: id }
+    ])) == true
+  end
+
   # Starts every month that has begun since the last one was started, up to and including the current month, in order, so
   # a month missed while nothing was running is started by the next run. Starting a month gives each envelope the Assigned
   # amount it had the month before, unless it already has one.

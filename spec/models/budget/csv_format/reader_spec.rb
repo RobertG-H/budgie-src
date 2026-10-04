@@ -403,4 +403,53 @@ RSpec.describe Budget::CsvFormat::Reader do
       expect(reading.zero_rows).to eq(1)
     end
   end
+
+  # A refusal that's about the file itself says so, which is what tells one that every CSV format would give from one that's only this
+  # format's, such as the wrong number of columns. It's how a file nothing reads is explained without listing every format's.
+  describe "which refusals are about the file itself" do
+    let(:format) { build(:budget_csv_format) }
+
+    def refusal_for(text, format = self.format)
+      read(format, text).refusal
+    end
+
+    it "are a file that isn't UTF-8, one that's over 2 MB, one with more than 5,000 rows, and one that isn't CSV" do
+      expect(refusal_for("2026-09-01,Caf\xE9,-5.00\n".b)).to be_about_the_file
+      expect(refusal_for("2026-09-01,#{"x" * 2.megabytes},-5.00\n")).to be_about_the_file
+      expect(refusal_for("2026-09-01,Coffee shop,-1.00\n" * 5001)).to be_about_the_file
+      expect(refusal_for("2026-09-01,\"Loblaws,-5.00\n")).to be_about_the_file
+    end
+
+    it "are a file with nothing in it, whatever the CSV format skips, including one of nothing but blank lines" do
+      [ "", "\n\n", ",,\n" ].each do |text|
+        expect(refusal_for(text, build(:budget_csv_format, rows_to_skip: 0))).to be_about_the_file
+        expect(refusal_for(text, build(:budget_csv_format, rows_to_skip: 5))).to be_about_the_file
+      end
+    end
+
+    it "aren't a file the format skips all of, which another format might read" do
+      refusal = refusal_for("Date,Description,Amount\n", build(:budget_csv_format, rows_to_skip: 1))
+
+      expect(refusal.message).to eq("There are no rows to read after the rows to skip.")
+      expect(refusal).not_to be_about_the_file
+    end
+
+    it "aren't a row this format can't read: the wrong number of columns, a date, an amount" do
+      expect(refusal_for("2026-09-01,Paycheck\n")).not_to be_about_the_file
+      expect(refusal_for("yesterday,Paycheck,10.00\n")).not_to be_about_the_file
+      expect(refusal_for("2026-09-01,Paycheck,lots\n")).not_to be_about_the_file
+    end
+
+    it "keep their message, and a line only when a row is to blame, as before" do
+      expect(refusal_for("2026-09-01,Caf\xE9,-5.00\n".b)).to have_attributes(line: nil, message: "The file isn't UTF-8 text. Save it again as CSV in UTF-8 and try again.")
+      expect(refusal_for("2026-09-01,Paycheck\n")).to have_attributes(line: 1, message: "Line 1: has 2 columns, and this CSV format expects 3.")
+    end
+
+    it "are the same read from a Source that was made once, as a guess reads one file with every format" do
+      source = Budget::CsvFormat::Source.new("2026-09-01,Paycheck,10.00\n")
+
+      expect(read(format, source).rows.size).to eq(1)
+      expect(read(build(:budget_csv_format, column_count: 4, description_columns: [ 2 ], amount_column: 3), source).refusal).not_to be_about_the_file
+    end
+  end
 end

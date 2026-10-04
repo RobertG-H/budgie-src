@@ -27,6 +27,182 @@ RSpec.describe "Imports", type: :request do
     css_select("select[name='import[csv_format_id]'] option").map { |option| option.text.strip }
   end
 
+  describe "GET /imports/new, the whole form" do
+    it "shows a form for a file, a CSV format and an Account, all three required, which is what the header's Import leads to" do
+      get new_import_path
+
+      expect(response).to have_http_status(:ok)
+      assert_select "title", text: "Import · Budgie"
+      assert_select "h1", text: "Import"
+      assert_select "form[action='#{imports_path}'][method=post][enctype='multipart/form-data']" do
+        assert_select "label", text: "File"
+        assert_select "input[type=file][name='import[file]'][required][accept='.csv,text/csv']"
+        assert_select "label", text: "CSV format"
+        assert_select "select[name='import[csv_format_id]'][required]"
+        assert_select "label", text: "Account"
+        assert_select "select[name='import[account_id]'][required]"
+        assert_select "input[type=submit][value=Import]"
+      end
+      assert_select "option[selected]", count: 0
+      assert_select "[data-import-file-target=again]", count: 0
+    end
+
+    it "offers the budget's CSV formats and Accounts alphabetically, after a prompt to choose each, and no one else's" do
+      create(:budget_csv_format, budget: budget, name: "amex")
+      create(:budget_account, budget: budget, name: "Visa")
+      others_format
+      others_account
+
+      get new_import_path
+
+      expect(choices).to eq([ "Choose a CSV format", "amex", "Sample bank" ])
+      expect(css_select("select[name='import[account_id]'] option").map { |option| option.text.strip }).to eq([ "Choose an account", "Chequing", "Visa" ])
+      expect(response.body).not_to include("Someone else")
+    end
+
+    it "says to build a CSV format first when there are none, instead of a form, with the existing words" do
+      Budget::CsvFormat.where(budget: budget).delete_all
+
+      get new_import_path
+
+      expect(response).to have_http_status(:ok)
+      assert_select "form[action='#{imports_path}']", count: 0
+      assert_select "main", text: /You need a CSV format to read a file with\./
+      assert_select "main a.btn[href='#{new_csv_format_path}']", text: "New CSV format"
+    end
+
+    it "says to make an Account when there are CSV formats and no Account" do
+      Budget::Account.where(budget: budget).delete_all
+
+      get new_import_path
+
+      expect(response).to have_http_status(:ok)
+      assert_select "form[action='#{imports_path}']", count: 0
+      assert_select "main", text: /You need an Account to import into\./
+      assert_select "main a.btn[href='#{new_account_path}']", text: "New account"
+    end
+
+    it "says the CSV format first when there is neither" do
+      Budget::Account.where(budget: budget).delete_all
+      Budget::CsvFormat.where(budget: budget).delete_all
+
+      get new_import_path
+
+      assert_select "main", text: /You need a CSV format to read a file with\./
+      assert_select "main", text: /You need an Account/, count: 0
+    end
+
+    it "is under Accounts in the header, and Cancel goes home" do
+      get new_import_path
+
+      assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
+      assert_select "a.btn[href='#{root_path}']", text: "Cancel"
+    end
+
+    it "requires sign-in" do
+      delete session_path
+
+      get new_import_path
+
+      expect(response).to redirect_to(sign_in_path)
+    end
+  end
+
+  describe "POST /imports, the whole form" do
+    def import(file: upload, csv_format_id: csv_format.id, account_id: account.id)
+      post imports_path, params: { import: { csv_format_id: csv_format_id, account_id: account_id, file: file }.compact }
+    end
+
+    it "reads the file into the Account that was chosen, with the CSV format that was, and goes to the summary" do
+      expect { import }.to change(account.imports, :count).by(1).and change(account.bank_transactions, :count).by(5)
+
+      created = account.imports.sole
+      expect(created).to have_attributes(csv_format: csv_format, file_name: "signed-sample.csv", zero_rows_skipped: 1)
+      expect(response).to redirect_to(import_path(created))
+    end
+
+    it "sets the Account's default CSV format, as any first Import does" do
+      import
+
+      expect(account.reload.default_csv_format).to eq(csv_format)
+    end
+
+    it "refuses an Account that isn't the budget's as one that can't be blank, and imports nothing" do
+      expect { import(account_id: others_account.id) }.not_to change(Budget::Import, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "Account can't be blank"
+      assert_select "select[name='import[account_id]'][aria-invalid=true]"
+      assert_select "p#import_account_id_error", text: "Account can't be blank"
+    end
+
+    it "refuses no Account, or one that isn't an id, the same way" do
+      [ nil, "", "abc", "0", "99999999999999999999" ].each do |value|
+        expect { import(account_id: value) }.not_to change(Budget::Import, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_select "[role=alert] li", text: "Account can't be blank"
+      end
+    end
+
+    it "refuses another budget's CSV format as one that can't be blank, as the Account's form does, and keeps the Account chosen" do
+      expect { import(csv_format_id: others_format.id) }.not_to change(Budget::Import, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "CSV format can't be blank"
+      assert_select "select[name='import[account_id]'] option[selected][value='#{account.id}']"
+      assert_select "form[action='#{imports_path}']"
+    end
+
+    it "refuses a file that can't be read, naming the first row, and keeps the CSV format and the Account chosen" do
+      expect { import(file: upload_text("Date,Description\n2026-09-01,Paycheck\n")) }.not_to change(Budget::Import, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "Line 2: has 2 columns, and this CSV format expects 3."
+      assert_select "select[name='import[csv_format_id]'] option[selected]", count: 1
+      assert_select "select[name='import[account_id]'] option[selected]", count: 1
+    end
+
+    it "refuses no file" do
+      post imports_path, params: { import: { csv_format_id: csv_format.id, account_id: account.id } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "Choose a file to import."
+    end
+
+    it "is a bad request without an import" do
+      post imports_path
+
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "requires sign-in" do
+      delete session_path
+
+      import
+
+      expect(response).to redirect_to(sign_in_path)
+    end
+  end
+
+  describe "the Account's own form and the whole form, side by side" do
+    it "keep the Account's form as it was: nested under the Account, with no Account to choose" do
+      get new_account_import_path(account)
+
+      assert_select "form[action='#{account_imports_path(account)}']"
+      assert_select "select[name='import[account_id]']", count: 0
+      assert_select "h1", text: "Import"
+      assert_select "p", text: "Into Chequing"
+    end
+
+    it "takes the Account from the page for the Account's own form, whatever the params say" do
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format.id, account_id: others_account.id, file: upload } }
+
+      expect(account.imports.count).to eq(1)
+      expect(others_account.imports.count).to eq(0)
+    end
+  end
+
   describe "GET /accounts/:account_id/imports/new" do
     it "shows a form for a file and a CSV format" do
       get new_account_import_path(account)
@@ -294,6 +470,22 @@ RSpec.describe "Imports", type: :request do
       expect(visible_text).to include("Money out -$152.20 3 bank transactions in the file")
       expect(visible_text).to include("Duplicates skipped 0")
       expect(visible_text).to include("Rows of 0 skipped 1")
+    end
+
+    it "says which Account and CSV format it used, for every Import, so a wrong guess from the header is seen at once" do
+      get import_path(import)
+
+      expect(visible_text).to include("Into Chequing, read with the Sample bank CSV format.")
+      assert_select "main p.font-medium", text: "Into Chequing, read with the Sample bank CSV format."
+    end
+
+    it "says it for an Import of the same file again too, which added nothing" do
+      import
+      again = account.imports.build(csv_format: csv_format, file_name: "again.csv").tap { |second| second.run(File.read(file_fixture("signed-sample.csv"))) }
+
+      get import_path(again)
+
+      expect(visible_text).to include("Nothing new was added.", "Into Chequing, read with the Sample bank CSV format.")
     end
 
     it "says how many bank transactions Filing rules filed and ignored, which is none when there are no rules" do

@@ -239,6 +239,34 @@ delete, so what Undo says is what it does), and the duplicates and rows of 0 ski
 transactions newest first, 50 a page through the `Paginated` concern and `components/pager`, with a fixed number of queries), and
 `/accounts/:account_id/imports/new`. Accounts are in the header's section links.
 
+#### Importing from the header
+
+"Import" is a primary `btn btn-primary btn-sm` in the header, beside Sign out, whenever the person has a budget (`layouts/_import_button`). It is a link to `GET /imports/new`, the **whole form**
+(`ImportsController`, the same controller as the Account's nested routes, which stay): File, CSV format and Account, all three required, where `import[account_id]` is found through `Current.budget.accounts`, so another
+budget's, or none, is "Account can't be blank" as another budget's CSV format already is. It works without JavaScript. When the budget has at least one CSV format and one Account the `import-picker` Stimulus controller
+is attached: the button opens the file chooser at once, and a chosen file is sent to `POST /imports/guess` (`ImportGuessesController#create`, the file only), which never creates anything unless the guess is
+complete. A budget with no CSV format, or no Account, gets the whole form's empty states instead ("You need a CSV format to read a file with." with "New CSV format", or "You need an Account to import into." with
+"New account"), and `POST /imports/guess` from one redirects there.
+`Budget::ImportGuesser.new(budget).guess(file)` returns a `Budget::ImportGuess` (so named, not "Guess", which is the filing Guess; a value with `csv_format`, `account`, `format_certain?`, `account_certain?`, `complete?`,
+`refusals` and `file_refusal`). It reads the file's text once, as a `Budget::CsvFormat::Source`, and runs each of the budget's CSV formats' `read` over it: only a format whose `Reading` has no refusal reads it cleanly,
+and a format whose column count differs refuses on the first row, so the cost is the formats that fit, once each, inside the reader's own 2 MB and 5,000-row limits, in one query for the formats, one for the Accounts
+and one more each to choose between several (a spec checks the count doesn't grow with the rows). **Format**: none reads it cleanly is no format; one, or several whose rows (and rows of 0) are identical, is *the* format
+and is certain (among identical ones, the one used by the most recent Import, then the newest format); several that read it differently are not certain, and the offer is the one the most recent Import used among them, then the
+newest. **Account**: the Accounts whose `default_csv_format` is that format, or for formats that read exactly the same rows any of them (they're one format to a person, and the Import is read with the Account's own);
+exactly one is certain, several are not (the offer is the one imported into most recently, then the first alphabetically), none is no Account. **Complete** is both certain, which is one step stricter than "the Account most
+recently imported into": duplicates are judged per Account, so an unconfirmed Import into the wrong Account can't be caught as one, so when two Accounts share a bank's format it asks (`docs/adr/0014-importing-from-the-header-is-unconfirmed-only-when-it-is-certain.md`).
+A `Budget::CsvFormat::Refusal` says whether it's `about_the_file?` (not UTF-8, over 2 MB, not CSV, more than 5,000 rows, or a file with nothing in it) or only this format's (the wrong number of columns, a date, an amount, or a file
+the format skips all of): `Source` and `Reader` set it.
+What happens: a complete guess runs `Budget::Import#run` (which reads the file again, one more read of at most 5,000 rows, to keep `run` unchanged), and redirects to the summary with the notice "Imported sept.csv into
+Chequing, read with the TD CSV format." (`Undo` is on the summary, ADR 0011, and the summary says "Into Chequing, read with the TD CSV format." for every Import, so a wrong guess is visible at once). A format but several Accounts, or
+no Account having it as its default, renders the whole form (`422`) with the format and the offered Account chosen and a note ("More than one of your Accounts has the TD CSV format as its default, so check the Account the file is for."
+or "None of your Accounts has the TD CSV format as its default, so choose the Account the file is for."); several formats reading it differently say "More than one of your CSV formats reads this file. Check the CSV format." and choose the most
+likely; none reading it renders the form with no format chosen, "No CSV format reads this file.", a `<details>` "Why" listing each format and its first refusal ("TD: Line 2: the date … isn't a date in the DD/MM/YYYY format."), and a "New CSV format"
+link, or, when the refusal is the file's for every format, that message once. A file with no format isn't carried to the CSV format builder, which reads a sample for the request and never keeps it, and a browser can't fill a file field for it: the message says
+to choose the same file in the builder. A duplicate file is still an Import (ADR 0011), "Nothing new was added.". **The file isn't kept**, so a form that comes back can't hold it: the `import-picker` controller keeps the chosen `File` in module
+state (`controllers/pending_file`) while Turbo renders, and the `import-file` controller puts it back in the form's file field (`DataTransfer`) when the form connects, only for a form that came back from a guess; when it can't, the field is
+empty and the form says "Choose the file again.".
+
 #### Filing and ignoring a bank transaction
 
 A bank transaction is **unfiled**, **filed** or **ignored**, derived and never stored: ignored if `ignored_at` (a nullable timestamp, the
@@ -500,6 +528,7 @@ After a UI change:
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
 - A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions, Undo, filing and ignoring, splits, Filing rules and Guesses exist so far, and the rest of its model is the `roadmap` issue #67.
+- An Import from the header runs unconfirmed only when the CSV format that reads the file and the Account it's for are each certain (`docs/adr/0014-importing-from-the-header-is-unconfirmed-only-when-it-is-certain.md`).
 - A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Filing rules (the `roadmap` issue #69) and Guesses (#70) are built.
 
 ## Agent skills

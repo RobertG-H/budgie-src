@@ -97,6 +97,9 @@ en:
           attributes:
             csv_format:
               required: "can't be blank"
+            # The whole form's Account, which is also what another budget's becomes when it's looked up in the budget's own.
+            account:
+              required: "can't be blank"
         # What's shown when an Account with bank transactions is deleted, and when a CSV format that an Import used is.
         budget/account:
           restrict_dependent_destroy:

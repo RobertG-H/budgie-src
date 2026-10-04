@@ -1,0 +1,13 @@
+<%# locals: () %>
+<%# "Import" in the header, for a person who has a budget: a primary button that leads to the whole Import form (/imports/new), which works without JavaScript. When the budget has at least one CSV format and one Account, the import-picker controller makes it open the file chooser at once and send the file to be guessed (POST /imports/guess), which imports it straight away when the CSV format and the Account are both certain, and otherwise shows the form with the best offer chosen. A person who has neither lands on the page that says what's missing. %>
+<% importable = Current.budget.importable? %>
+<%= tag.div class: "flex items-center", data: (importable ? { controller: "import-picker" } : nil) do %>
+  <%= link_to "Import", new_import_path, class: "btn btn-primary btn-sm", data: (importable ? { action: "import-picker#choose" } : nil) %>
+  <% if importable %>
+    <%# The form that sends the file, which is never seen: the chooser opens from the button, and choosing a file sends it. %>
+    <%= form_with url: import_guess_path, scope: :import, multipart: true, class: "hidden", data: { import_picker_target: "form" } do |form| %>
+      <%= form.file_field :file, accept: ".csv,text/csv", tabindex: -1, aria: { hidden: true },
+            data: { import_picker_target: "input", action: "change->import-picker#send" } %>
+    <% end %>
+  <% end %>
+<% end %>

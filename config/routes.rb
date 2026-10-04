@@ -41,7 +41,10 @@ Rails.application.routes.draw do
   resources :accounts do
     resources :imports, only: [ :new, :create ]
   end
-  resources :imports, only: [ :show, :destroy ]
+  # An Import from anywhere: the whole form (new, create), with the Account chosen on it, and the file alone (guess), which works out which CSV
+  # format reads it and which Account it's for, and imports it straight away only when both are certain (ADR 0014).
+  post "imports/guess" => "import_guesses#create", as: :import_guess
+  resources :imports, only: [ :new, :create, :show, :destroy ]
   # Filing a bank transaction, as the Deposits, Spends and Refunds it was (create), taking that back (destroy), and ignoring
   # it (and un-ignoring it). Every bank transaction, in any state, across the Accounts, is the index, which can be narrowed to the
   # unfiled ones, the filed ones or the ignored ones.

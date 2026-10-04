@@ -309,6 +309,13 @@ two identical coffees on one day both come in, while the same file again, or one
 occurrence are written when the row is made and never recomputed, because they record how it first looked. The description as a
 Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place.
 
+**Import from the header.** "Import" is in the header on every page, beside Sign out: one click and one file imports it when Budgie is certain which of the budget's CSV formats reads it and which
+Account it's for, and lands on the Import's summary, where Undo already is. It tries each CSV format over the file once, and a format is certain when it's the only one that reads it, or when every one that does reads the same
+rows; the Account is certain when exactly one has that format as its default CSV format. Anything less shows the whole form, with File, CSV format and Account, and the best offer chosen, with a note on what was guessed, and creates
+nothing, because duplicates are judged per Account and an unconfirmed Import into the wrong one can't be caught as one ([ADR 0014](adr/0014-importing-from-the-header-is-unconfirmed-only-when-it-is-certain.md)). A file that no format reads
+says why, format by format. The header's button is a plain link to that form, which works without JavaScript, and a small Stimulus controller makes it open the file chooser at once; since the file isn't kept, the browser puts the
+chosen file back in the form that comes back.
+
 **One request, one Import.** It runs in the request, holds the Account's row lock and inserts every row at once, so it makes the same
 number of queries for 10 rows as for 1,000, a double submit imports once, and there's no job to wait for. Its summary is a page of
 its own, and says what the whole file held, which is worked out when it's read since the file isn't kept: the dates, the money in and

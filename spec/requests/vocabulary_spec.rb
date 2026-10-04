@@ -107,6 +107,7 @@ RSpec.describe "The words on the pages", type: :request do
     "the Account edit form" => -> { edit_account_path(account) },
     "an Account's page" => -> { account_path(account) },
     "the Import form" => -> { new_account_import_path(account) },
+    "the whole Import form" => -> { new_import_path },
     "an Import's summary" => -> { import_path(import) },
     "the Bank transactions" => -> { bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
     "the Bank transactions, Unfiled" => -> { bank_transactions_path(filter: { state: "unfiled" }) },
@@ -160,6 +161,61 @@ RSpec.describe "The words on the pages", type: :request do
       expect("No bank transactions yet.").not_to match(retired_terms)
       expect("Every transaction was already here").to match(retired_terms)
       expect("A transaction").to match(retired_terms)
+    end
+
+    describe "importing from the header" do
+      def guess(text, name: "october.csv")
+        post import_guess_path, params: { import: { file: Rack::Test::UploadedFile.new(StringIO.new(text), "text/csv", original_filename: name) } }
+      end
+
+      it "says what was guessed, and what to check, in words, when the CSV format reads it differently or no Account has it as its default" do
+        guess("2026-10-01,Paycheck,2800.00\n")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("Import", "Choose a file, the CSV format that reads it and the Account it's for.", "Choose the file again.")
+        expect(visible_text).to include("More than one of your CSV formats reads this file. Check the CSV format.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+        expect(response.body).not_to match(/ready_to_assign|import_guess|csv_format_id\b.*Csv format/)
+      end
+
+      it "says why no CSV format reads a file, format by format, and points to the builder, in words" do
+        guess("nonsense\n")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("No CSV format reads this file.", "Why", "CIBC: Line 1: has 1 column, and this CSV format expects 3.")
+        expect(visible_text).to include("New CSV format", "In the CSV format builder, choose the same file as its sample.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says what's wrong with the file once, in the reader's words, when it's every format's" do
+        guess("2026-10-01,Caf\xE9,-5.00\n".b)
+
+        expect(visible_text).to include("The file isn't UTF-8 text. Save it again as CSV in UTF-8 and try again. Choose another file.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says on the summary which Account and CSV format an Import used, in words" do
+        get import_path(import)
+
+        expect(visible_text).to include("Into Chequing, read with the Plain CSV format.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says what an Import from the header did, in the notice, in words, when it's certain" do
+        # CIBC now reads exactly what Plain does, so they're one format, and Chequing is the Account that has Plain as its default.
+        csv_format.update!(description_columns: [ 2 ])
+        expect(account.reload.default_csv_format).to be_present
+
+        guess("2026-10-01,Paycheck,2800.00\n")
+
+        expect(response).to have_http_status(:found)
+        follow_redirect!
+        expect(response).to have_http_status(:ok)
+        expect(visible_text).to include("Imported october.csv into Chequing, read with the Plain CSV format.")
+        expect(visible_text).not_to match(retired_terms)
+      end
     end
 
     it "says Default CSV format, and what it's for, on the Account's form and page, in words" do

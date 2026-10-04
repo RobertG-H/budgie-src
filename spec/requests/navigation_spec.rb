@@ -93,10 +93,67 @@ RSpec.describe "Navigation", type: :request do
     end
   end
 
-  it "doesn't change the main navigation, which is only signing out" do
+  it "has Import beside Sign out in the main navigation, whenever the person has a budget, as the primary button" do
     sign_in_as budget.user
 
-    get root_path
+    [ root_path, accounts_path, records_path, csv_formats_path ].each do |path|
+      get path
+
+      assert_select "nav[aria-label=Main] a.btn.btn-primary.btn-sm[href='#{new_import_path}']", text: "Import", count: 1
+      assert_select "nav[aria-label=Main] a", count: 1
+      assert_select "nav[aria-label=Main] button", text: "Sign out"
+    end
+  end
+
+  describe "the Import button's file chooser" do
+    let!(:csv_format) { create(:budget_csv_format, budget: budget) }
+    let!(:account) { create(:budget_account, budget: budget) }
+
+    before { sign_in_as budget.user }
+
+    it "is attached, with a hidden form that sends the file to be guessed, when the budget has a CSV format and an Account" do
+      get root_path
+
+      assert_select "nav[aria-label=Main] [data-controller=import-picker]", count: 1
+      assert_select "nav[aria-label=Main] a.btn[data-action='import-picker#choose'][href='#{new_import_path}']", text: "Import"
+      assert_select "nav[aria-label=Main] form.hidden[action='#{import_guess_path}'][method=post][enctype='multipart/form-data'][data-import-picker-target=form]" do
+        assert_select "input[type=file][name='import[file]'][accept='.csv,text/csv'][data-import-picker-target=input][data-action='change->import-picker#send'][tabindex='-1']"
+      end
+    end
+
+    it "is only a link to the whole form without a CSV format, so the person lands on the page that says what's missing" do
+      Budget::CsvFormat.where(budget: budget).delete_all
+      Budget::Account.update_all(default_csv_format_id: nil)
+
+      get root_path
+
+      assert_select "nav[aria-label=Main] a.btn[href='#{new_import_path}']", text: "Import"
+      assert_select "[data-controller=import-picker]", count: 0
+      assert_select "form[action='#{import_guess_path}']", count: 0
+    end
+
+    it "is only a link without an Account too" do
+      Budget::Account.where(budget: budget).delete_all
+
+      get root_path
+
+      assert_select "nav[aria-label=Main] a.btn[href='#{new_import_path}']", text: "Import"
+      assert_select "[data-controller=import-picker]", count: 0
+    end
+
+    it "is a link that works without JavaScript: it's a plain link to a page with a form" do
+      get root_path
+
+      assert_select "nav[aria-label=Main] a[href='#{new_import_path}']", count: 1
+      get new_import_path
+      assert_select "form[action='#{imports_path}'] input[type=file]"
+    end
+  end
+
+  it "has no Import for a person who hasn't got a budget yet, only Sign out" do
+    sign_in_as create(:user)
+
+    get new_budget_path
 
     assert_select "nav[aria-label=Main] a", count: 0
     assert_select "nav[aria-label=Main] button", text: "Sign out"

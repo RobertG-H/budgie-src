@@ -24,7 +24,7 @@ RSpec.describe "Envelopes", type: :request do
       assert_select "a.btn.btn-primary[href='#{new_spend_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "New spend"
       assert_select "a.btn[href='#{new_refund_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "New refund"
       assert_select "a.btn[href='#{new_reallocation_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "Reallocate"
-      assert_select "a.btn-primary", count: 1
+      assert_select "main a.btn-primary", count: 1
       assert_select "a.btn[href='#{edit_envelope_path(groceries, month: "2026-09", from: "envelope")}']", text: "Edit"
       assert_select "form[action='#{envelope_path(groceries)}'][data-turbo-confirm='Delete the Groceries envelope?']" do
         assert_select "input[name='_method'][value=delete]"
