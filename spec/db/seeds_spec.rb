@@ -96,7 +96,8 @@ RSpec.describe "db/seeds.rb" do
 
       bills = Budget::Month.new(budget, Date.new(2026, 10, 1)).envelopes.find { |line| line.envelope.name == "Bills" }
 
-      expect(bills).to have_attributes(assigned: 0, available: -30, overspent?: true)
+      # Its Starting balance of -$30 and the $50 of Hydro that was filed from it.
+      expect(bills).to have_attributes(assigned: 0, available: -80, overspent?: true)
     end
 
     it "spends from the envelopes last month and this month, and nothing before last month" do
@@ -257,8 +258,18 @@ RSpec.describe "db/seeds.rb" do
           description: "Loblaws", date: Date.new(2026, 9, 2), amount: BigDecimal("82.45"), envelope: budget.envelopes.find_by!(name: "Groceries")
         )
         expect(bank_transactions["Coffee shop"]).to be_ignored
-        expect(budget.bank_transactions.unfiled.pluck(:description)).to contain_exactly("Paycheck", "Hydro", "Hydro rebate")
-        expect(bank_transactions.values.select(&:filed?).size).to eq(1)
+        expect(budget.bank_transactions.unfiled.pluck(:description)).to contain_exactly("Paycheck", "Hydro rebate")
+        expect(bank_transactions.values.select(&:filed?).size).to eq(2)
+      end
+
+      it "files Hydro as a split across two envelopes, which add up to it" do
+        hydro = budget.bank_transactions.find_by!(description: "Hydro")
+
+        expect(hydro).to be_filed
+        expect(hydro).to be_adds_up
+        expect(hydro.spend_links.map { |link| [ link.spend.envelope.name, link.spend.amount ] })
+          .to contain_exactly([ "Bills", BigDecimal("50") ], [ "Rent", BigDecimal("15.5") ])
+        expect(hydro.spend_links.map { |link| link.spend.date }.uniq).to eq([ Date.new(2026, 9, 3) ])
       end
 
       it "counts the filed Spend in Groceries' September like one typed in, and doesn't add up to a flag" do

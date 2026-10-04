@@ -112,7 +112,7 @@ Every form carries `from` (`home`, `month`, `deposits` or `envelope`) and `month
 
 A person imports the CSV their bank lets them download into an Account (see the `roadmap` issue #67 for the whole model and its
 sliced build tickets); each row becomes a bank transaction that they file as Deposits, Spends and Refunds, or ignore. The tables
-are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring.
+are namespaced like the rest, and are in the order of the build: CSV formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits.
 
 #### CSV formats and the reader
 
@@ -246,10 +246,18 @@ shows the records it was filed as ("Spend from Groceries", "Refund to Groceries"
 amounts when there are several) and Un-file, an ignored one says so and has Un-ignore. A filed one whose records no longer add up to its
 amount (`adds_up?`, so a typo fixed on a record, or its amount changed, trips it, and blocks nothing) shows a "Doesn't add up" badge in
 words and "Its records add up to $X, not $Y." Both lists preload every link and record, so their query counts are fixed. The filing
-form (`/bank_transactions/:id/filing/new`, `BankTransactionFilingsController`) is a `filing[records][N][...]` form, so it already holds
-several records: money out has no kind to choose (a hidden Spend) and money in is a Deposit or a Refund, an envelope's picker offers only
-envelopes in use, a Deposit has its month choice (`month-choice`), and the `filing-record` Stimulus controller shows an envelope for a
-Refund or Spend and the month for a Deposit. File posts it (`POST .../filing`), Ignore sends the same form to `POST .../ignore`, which only
+form (`/bank_transactions/:id/filing/new`, `BankTransactionFilingsController`) is a `filing[records][N][...]` form that holds one record or several, and
+a bank transaction can be split ("$60 from Groceries and $40 from Household", or a $3,000 paycheck as a $2,800 Deposit and a $200 Refund): money out is only Spends from
+any envelopes, money in any mix of Deposits and Refunds, and together they add up to the amount exactly or nothing is filed, with
+by how much it's over or under (`Filing`'s sum check). The `filing-split` Stimulus controller adds a record from the inert
+`<template>` (its fields numbered `NEW_RECORD`, replaced by the time, so a later record sorts after earlier ones, which the
+controller reads in order by number; it starts with what's left to file), removes one (never the last one), numbers the records
+("Record 1", hidden while there's only one) and keeps "Adds up to $60.00 of $100.00, with $40.00 left." up to date (or "...which is
+$10.00 over." in the error colour), in the same words `filing_totals` renders on the server, so a refused form comes back with the
+records as they were entered and the total as it was sent; there's no JavaScript library and no fallback for adding one without
+JavaScript. Each record has its own kind (money out has none to choose: a hidden Spend), envelope (only envelopes in use), description,
+date, a Deposit's month choice (`month-choice`) and notes, and the `filing-record` controller shows an envelope for a Refund or Spend
+and the month for a Deposit. A split never offers "Always file like this" (see #78). File posts it (`POST .../filing`), Ignore sends the same form to `POST .../ignore`, which only
 reads where it was opened from, Un-file is `DELETE .../filing` and Un-ignore `DELETE .../ignore`; the notices are "Bank transaction
 filed.", "Bank transaction ignored.", "Bank transaction unfiled." and "Bank transaction un-ignored.", and a refusal is an alert. `from`
 gains the pages `unfiled` and `account` in `ReturnsToOrigin` (which also takes no month for them, and goes back to the bank transaction's
@@ -299,7 +307,7 @@ After a UI change:
 - Each month starts with the previous month's Assigned amounts (`docs/adr/0006-each-month-starts-with-last-months-assigned.md`). Each month keeps its own Assigned, so changing a past month changes only that month's figure, and the balances after it follow.
 - A Reallocation moves money out of an envelope into another envelope or back to Ready to Assign, and is two tables by destination (`docs/adr/0007-a-reallocation-is-two-tables-one-per-destination.md`). Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 - An envelope can be archived only when its Available is 0 and nothing is dated after the current month for it. An archived envelope shows only in months where it has figures, and takes no new records or Assigned (`docs/adr/0008-an-archived-envelope-shows-only-where-it-has-figures.md`).
-- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions, Undo, and filing and ignoring exist so far, and the rest of its model is the `roadmap` issue #67.
+- A bank transaction has a signed amount and is filed as Deposits, Spends and Refunds that add up to it exactly, or ignored (`docs/adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md`). Duplicate rows are recognised by a content key and an occurrence count (`docs/adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md`), and only an Account's latest Import can be undone, for 24 hours (`docs/adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md`). The importer is built in the order of its tickets, and CSV formats, Accounts, Imports, bank transactions, Undo, filing and ignoring, and splits exist so far, and the rest of its model is the `roadmap` issue #67.
 - A Filing rule files a bank transaction as soon as an Import or sync creates it, with no confirmation, while a Guess only suggests (`docs/adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md`). A Guess comes from the Budget's own filing history and is never stored (`docs/adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md`). Neither is built yet: their models are the `roadmap` issues #69 (Filing rules) and #70 (Filing guesses).
 
 ## Agent skills

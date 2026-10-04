@@ -132,6 +132,180 @@ RSpec.describe "Filing bank transactions", type: :request do
     end
   end
 
+  describe "the form's records, which it can add to and remove from" do
+    it "starts with one record, with a button to add another and no way to remove the only one" do
+      get new_bank_transaction_filing_path(money_out)
+
+      assert_select "[data-controller~=filing-split] button[type=button][data-action='filing-split#add']", text: "Add another record"
+      assert_select "[data-filing-split-target=records] fieldset[data-filing-split-target=record]", count: 1
+      assert_select "[data-filing-split-target=records] fieldset button[type=button][data-action='filing-split#remove'][hidden]", text: "Remove"
+      assert_select "[data-filing-split-target=records] fieldset legend[hidden]", text: "Record 1"
+    end
+
+    it "has a template for a record to add, with its fields numbered by a placeholder the controller replaces, and sends nothing itself" do
+      get new_bank_transaction_filing_path(money_out)
+
+      assert_select "template[data-filing-split-target=template]" do
+        assert_select "fieldset[data-filing-split-target=record]"
+        assert_select "input[name='filing[records][NEW_RECORD][description]'][value='COSTCO #123']"
+        assert_select "select[name='filing[records][NEW_RECORD][envelope_id]']"
+        assert_select "input[type=number][name='filing[records][NEW_RECORD][amount]']:not([value])"
+        assert_select "input[type=hidden][name='filing[records][NEW_RECORD][kind]'][value=spend]"
+        assert_select "legend", text: "Record"
+      end
+      assert_select "form template", count: 1
+    end
+
+    it "has a template for money in that offers a Deposit or a Refund, starting as a Deposit" do
+      get new_bank_transaction_filing_path(money_in)
+
+      assert_select "template input[type=radio][name='filing[records][NEW_RECORD][kind]']", count: 2
+      assert_select "template input[type=radio][name='filing[records][NEW_RECORD][kind]'][value=deposit][checked]"
+      assert_select "template input[type=radio][name='filing[records][NEW_RECORD][month]']", count: 2
+    end
+
+    it "says what the records add up to, and what's left, which starts as all of it, and tells the controller the amount to add up to" do
+      get new_bank_transaction_filing_path(money_out)
+
+      assert_select "[data-controller~=filing-split][data-filing-split-amount-value='100.00'][data-filing-split-unit-value='$'][data-filing-split-max-value='50']"
+      assert_select "[data-filing-split-target=total][aria-live=polite]", text: "Adds up to $100.00 of $100.00."
+    end
+
+    it "uses the budget's currency unit" do
+      budget.update!(currency: "GBP")
+
+      get new_bank_transaction_filing_path(money_out)
+
+      assert_select "[data-controller~=filing-split][data-filing-split-unit-value='£']"
+      assert_select "[data-filing-split-target=total]", text: "Adds up to £100.00 of £100.00."
+    end
+  end
+
+  describe "POST /bank_transactions/:bank_transaction_id/filing, filing a split" do
+    def file(bank_transaction = money_out, records:, from: nil)
+      params = { filing: { records: records.each_with_index.to_h { |record, index| [ index.to_s, record ] } } }
+      params[:from] = from if from
+      post bank_transaction_filing_path(bank_transaction), params: params
+    end
+
+    it "files money out as a Spend from each of several envelopes, which add up to it, and goes back with one notice" do
+      expect { file records: [ record_params(amount: "60", description: "Costco, groceries"), record_params(envelope_id: household.id, amount: "40", description: "Costco, household") ], from: "unfiled" }
+        .to change(Budget::Spend, :count).by(2)
+
+      expect(groceries.spends.sole).to have_attributes(description: "Costco, groceries", amount: 60)
+      expect(household.spends.sole).to have_attributes(description: "Costco, household", amount: 40)
+      expect(money_out.reload).to be_filed
+      expect(money_out.spend_links.count).to eq(2)
+      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      follow_redirect!
+      assert_select "[role=status]", text: "Bank transaction filed."
+    end
+
+    it "files money in as a Deposit and a Refund" do
+      file money_in, records: [
+        { kind: "deposit", description: "Paycheck", date: "2026-09-30", month: "2026-09-01", amount: "2800" },
+        { kind: "refund", envelope_id: household.id, description: "Reimbursed travel", date: "2026-09-30", amount: "200" }
+      ]
+
+      expect(budget.deposits.sole.amount).to eq(2800)
+      expect(household.refunds.sole.amount).to eq(200)
+      expect(money_in.reload).to be_filed
+    end
+
+    it "reads the records in the order the form numbered them, whatever the numbers, which a form that adds records makes large" do
+      post bank_transaction_filing_path(money_out), params: { filing: { records: {
+        "1759600000123" => record_params(envelope_id: household.id, amount: "40", description: "Added second"),
+        "0" => record_params(amount: "60", description: "Started with")
+      } } }
+
+      expect(money_out.reload).to be_filed
+      expect(groceries.spends.sole.description).to eq("Started with")
+      expect(household.spends.sole.description).to eq("Added second")
+    end
+
+    it "is refused when they don't add up, saying by how much, and keeps every record as it was entered, in order" do
+      expect { file records: [ record_params(amount: "60", description: "Costco, groceries", notes: "First"), record_params(envelope_id: household.id, amount: "30", description: "Costco, household", notes: "Second") ] }
+        .not_to change(Budget::Spend, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "The records add up to $90.00, which is $10.00 less than the bank transaction's $100.00."
+      assert_select "[data-filing-split-target=records] fieldset[data-filing-split-target=record]", count: 2
+      assert_select "fieldset:nth-of-type(1) input[name='filing[records][0][description]'][value='Costco, groceries']"
+      assert_select "fieldset:nth-of-type(1) select[name='filing[records][0][envelope_id]'] option[selected][value='#{groceries.id}']"
+      assert_select "fieldset:nth-of-type(1) input[name='filing[records][0][amount]'][value='60']"
+      assert_select "fieldset:nth-of-type(1) textarea[name='filing[records][0][notes]']", text: "First"
+      assert_select "fieldset:nth-of-type(2) input[name='filing[records][1][description]'][value='Costco, household']"
+      assert_select "fieldset:nth-of-type(2) select[name='filing[records][1][envelope_id]'] option[selected][value='#{household.id}']"
+      assert_select "fieldset:nth-of-type(2) input[name='filing[records][1][amount]'][value='30']"
+      expect(money_out.reload).to be_unfiled
+    end
+
+    it "says what the records add up to as it was sent, and that more can be removed, when it comes back" do
+      file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "30") ]
+
+      assert_select "[data-filing-split-target=total]", text: "Adds up to $90.00 of $100.00, with $10.00 left."
+      assert_select "[data-filing-split-target=records] fieldset button[data-action='filing-split#remove'][hidden]", count: 0
+      assert_select "[data-filing-split-target=records] fieldset legend[hidden]", count: 0
+      expect(css_select("[data-filing-split-target=records] legend").map { |legend| legend.text.squish }).to eq([ "Record 1", "Record 2" ])
+    end
+
+    it "says by how much they're over, in words, when they add up to more" do
+      file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "50") ]
+
+      assert_select "[data-filing-split-target=total]", text: "Adds up to $110.00 of $100.00, which is $10.00 over."
+      assert_select "[role=alert] li", text: "The records add up to $110.00, which is $10.00 more than the bank transaction's $100.00."
+    end
+
+    it "files none when one record is wrong, and says which by its field, though the others are fine" do
+      expect { file records: [ record_params(amount: "60"), record_params(envelope_id: "", amount: "40", description: "") ] }.not_to change(Budget::Spend, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "Envelope can't be blank"
+      assert_select "[role=alert] li", text: "Description can't be blank"
+      assert_select "fieldset:nth-of-type(2) select[name='filing[records][1][envelope_id]'][aria-invalid=true]"
+      assert_select "fieldset:nth-of-type(1) [aria-invalid=true]", count: 0
+      expect(money_out.reload).to be_unfiled
+    end
+
+    it "refuses a Deposit among money out's records, and a Spend among money in's" do
+      file records: [ record_params(amount: "60"), record_params(kind: "deposit", amount: "40") ]
+      assert_select "[role=alert] li", text: "Kind must be Spend, since the money went out"
+
+      file money_in, records: [ { kind: "deposit", description: "Paycheck", date: "2026-09-30", amount: "2800" }, record_params(amount: "200") ]
+      assert_select "[role=alert] li", text: "Kind must be Deposit or Refund, since the money came in"
+      expect(Budget::Spend.count + Budget::Deposit.count).to eq(0)
+    end
+
+    it "refuses more than 50 records" do
+      file records: Array.new(51) { record_params(amount: "1") }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "[role=alert] li", text: "A bank transaction can be filed as at most 50 records."
+    end
+
+    it "un-files every record at once" do
+      file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "40") ]
+
+      expect { delete bank_transaction_filing_path(money_out), params: { from: "account" } }.to change(Budget::Spend, :count).by(-2).and change(Budget::SpendLink, :count).by(-2)
+
+      expect(money_out.reload).to be_unfiled
+    end
+
+    it "goes back to the page it was opened from, as one record does" do
+      file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "40") ], from: "account"
+
+      expect(response).to redirect_to(account_path(account))
+    end
+
+    it "counts both Spends in their own envelopes, like ones typed in" do
+      file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "40") ]
+
+      month = Budget::Month.new(budget, Date.new(2026, 9, 1))
+      expect(month.envelope_line(groceries.id).spent).to eq(60)
+      expect(month.envelope_line(household.id).spent).to eq(40)
+    end
+  end
+
   describe "POST /bank_transactions/:bank_transaction_id/filing" do
     def file(bank_transaction = money_out, records: [ record_params ], from: nil)
       params = { filing: { records: records.each_with_index.to_h { |record, index| [ index.to_s, record ] } } }

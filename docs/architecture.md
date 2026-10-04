@@ -239,7 +239,7 @@ month viewed. An archived envelope's page has Unarchive in place of Archive and 
 A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
 Refunds it was, or ignore it. The model is the `roadmap` issue
 [#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
-formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring.
+formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
 columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
@@ -303,6 +303,12 @@ deleted like one typed in. What says where it came from is a link table for each
 record can come from at most one bank transaction. Deleting a record deletes its link, which leaves the bank transaction unfiled when it
 was the last. Editing one so that the records no longer add up to the bank transaction doesn't block anything; the bank transaction
 shows a "Doesn't add up" flag, in words as well as colour, because a typo fixed on an imported record shouldn't be refused.
+
+**Splits.** A Costco charge of $100 can be filed as $60 from Groceries and $40 from Household, and a paycheck of $3,000 as a $2,800
+Deposit and a $200 Refund. The filing form can add records and remove them, and says what they add up to and what's left as it goes,
+and the server refuses a form that doesn't add up, saying by how much, and keeps every record as it was entered. Money out is only ever
+Spends, money in any mix of Deposits and Refunds, and one invalid record means none are created. Un-filing deletes every record, and
+wherever a bank transaction shows what it was filed as, its records are listed together.
 
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
 or none. The filing form calls it for one bank transaction, and Filing rules and a Guess will call the same operation, so it makes the

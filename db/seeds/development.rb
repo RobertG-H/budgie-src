@@ -119,8 +119,8 @@ if chequing.imports.none?
 end
 
 # Left unfiled, filed and ignored, so the Unfiled list and the Account's page have each to show. Loblaws is a Spend from Groceries,
-# of its whole amount, which counts in Groceries' September like any other Spend, and Coffee shop is ignored. Paycheck, Hydro and
-# Hydro rebate stay unfiled. Only an unfiled bank transaction is touched, so one that a developer has filed or ignored another way
+# of its whole amount, which counts in Groceries' September like any other Spend, and Coffee shop is ignored. Paycheck and Hydro
+# rebate stay unfiled. Only an unfiled bank transaction is touched, so one that a developer has filed or ignored another way
 # is left, though one they've un-filed or un-ignored is filed or ignored again by seeding.
 bank_transactions = chequing.bank_transactions.index_by(&:description)
 loblaws = bank_transactions["Loblaws"]
@@ -128,6 +128,15 @@ if loblaws&.unfiled?
   groceries_envelope = budget.envelopes.find_by!(name: "Groceries")
   entry = Budget::Filing::Entry.new(bank_transaction: loblaws, drafts: [ Budget::Filing::Draft.for(loblaws, envelope_id: groceries_envelope.id) ])
   Budget::Filing.new(budget).file([ entry ]) or raise "Loblaws wasn't filed: #{entry.errors.full_messages.to_sentence}"
+end
+# Hydro is a split: $50.00 from Bills and the other $15.50 from Rent, which add up to its $65.50, so a bank transaction filed as
+# several records has something to show. Like the rest it's only filed while it's unfiled.
+hydro = bank_transactions["Hydro"]
+if hydro&.unfiled?
+  bills, rent = budget.envelopes.where(name: %w[ Bills Rent ]).order(:name)
+  drafts = [ Budget::Filing::Draft.for(hydro, envelope_id: bills.id, amount: 50), Budget::Filing::Draft.for(hydro, envelope_id: rent.id, amount: 15.5) ]
+  entry = Budget::Filing::Entry.new(bank_transaction: hydro, drafts: drafts)
+  Budget::Filing.new(budget).file([ entry ]) or raise "Hydro wasn't filed: #{(entry.errors.full_messages + drafts.flat_map { |draft| draft.errors.full_messages }).to_sentence}"
 end
 coffee_shop = bank_transactions["Coffee shop"]
 coffee_shop.ignore if coffee_shop&.unfiled?

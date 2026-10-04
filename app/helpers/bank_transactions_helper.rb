@@ -19,4 +19,21 @@ module BankTransactionsHelper
   def money_direction(bank_transaction)
     bank_transaction.amount.negative? ? "Money out" : "Money in"
   end
+
+  # What a filing form's records add up to, as they've been entered, against the bank transaction's amount: whether it's all of it,
+  # some with the rest left, or too much, said in words. The filing-split Stimulus controller keeps it up to date as the records
+  # change, in the same words, so what's here is what it starts as, and what a refused form comes back with.
+  def filing_totals(entry, budget)
+    amount = money(entry.bank_transaction.amount.abs, budget: budget)
+    total = money(entry.total, budget: budget)
+    remaining = entry.remaining
+
+    if remaining.zero?
+      "Adds up to #{total} of #{amount}."
+    elsif remaining.positive?
+      "Adds up to #{total} of #{amount}, with #{money(remaining, budget: budget)} left."
+    else
+      "Adds up to #{total} of #{amount}, which is #{money(remaining.abs, budget: budget)} over."
+    end
+  end
 end

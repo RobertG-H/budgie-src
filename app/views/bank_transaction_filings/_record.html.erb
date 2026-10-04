@@ -1,9 +1,12 @@
-<%# locals: (form:, draft:, bank_transaction:, autofocus: false) %>
+<%# locals: (form:, draft:, bank_transaction:, number: nil, removable: false, autofocus: false) %>
 <%# One record a bank transaction is filed as. Money out is only ever a Spend, so it has no kind to choose. Money in is a Deposit or a Refund, and the filing-record Stimulus controller shows only the fields the chosen kind has: an envelope for a Refund, and the month for a Deposit, which the month-choice controller keeps in step with its date. Without JavaScript they all show, and what a kind doesn't have is left out. %>
 <% money_in = bank_transaction.amount.positive? %>
 <% envelope_error = draft.errors.full_messages_for(:envelope_id).to_sentence.presence %>
 
-<fieldset class="space-y-6" data-controller="filing-record month-choice">
+<%# With only one record there's nothing to tell it from, so it has no heading, and nothing to remove; the filing-split controller shows both once there's a second. %>
+<fieldset class="space-y-6" data-controller="filing-record month-choice" data-filing-split-target="record">
+  <legend class="text-lg font-semibold" data-filing-split-target="legend" <%= "hidden" unless removable %>>Record<%= " #{number}" if number %></legend>
+
   <% if money_in %>
     <%= render "components/field", form: form, attribute: :kind, control: :radios, label: "Kind" do |field| %>
       <% { "deposit" => "Deposit", "refund" => "Refund" }.each do |kind, name| %>
@@ -54,4 +57,6 @@
   <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
     <%= form.text_area :notes, rows: 3, **field %>
   <% end %>
+
+  <button type="button" class="btn btn-ghost btn-sm -ml-3 text-error" data-action="filing-split#remove" data-filing-split-target="remove" <%= "hidden" unless removable %>>Remove</button>
 </fieldset>

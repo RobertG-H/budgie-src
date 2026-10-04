@@ -269,6 +269,132 @@ RSpec.describe Budget::Filing do
     end
   end
 
+  describe "a bank transaction split into several records" do
+    it "is filed as $60 from Groceries and $40 from Household, when it's $100 of money out" do
+      costco = bank_transaction(-100)
+
+      filing = file(entry(costco, draft("spend", "60"), draft("spend", "40", envelope_id: household.id, description: "Costco, household")))
+
+      expect(filing.filed?).to be(true)
+      expect(groceries.spends.sole.amount).to eq(60)
+      expect(household.spends.sole).to have_attributes(amount: 40, description: "Costco, household")
+      expect(costco.reload).to be_filed
+      expect(costco.spend_links.count).to eq(2)
+      expect(costco).to be_adds_up
+    end
+
+    it "is filed as a $2,800 Deposit and a $200 Refund, when it's $3,000 of money in" do
+      paycheck = bank_transaction(3000)
+
+      file(entry(paycheck, draft("deposit", "2800", description: "Paycheck"), draft("refund", "200", envelope_id: household.id, description: "Reimbursed travel")))
+
+      expect(budget.deposits.sole.amount).to eq(2800)
+      expect(household.refunds.sole.amount).to eq(200)
+      expect(paycheck.reload.deposit_links.count).to eq(1)
+      expect(paycheck.refund_links.count).to eq(1)
+      expect(paycheck).to be_adds_up
+    end
+
+    it "is refused when $60 and $30 are filed against $100, creating nothing and saying by how much" do
+      costco = bank_transaction(-100)
+      entry = entry(costco, draft("spend", "60"), draft("spend", "30", envelope_id: household.id))
+
+      filing = file(entry)
+
+      expect(refused_with(filing, entry)).to eq([ false, [ "The records add up to $90.00, which is $10.00 less than the bank transaction's $100.00." ], [] ])
+      expect(Budget::Spend.count).to eq(0)
+      expect(costco.reload).to be_unfiled
+    end
+
+    it "is refused when the records add up to more, saying by how much" do
+      entry = entry(bank_transaction(-100), draft("spend", "60"), draft("spend", "50", envelope_id: household.id))
+
+      expect(file(entry).filed?).to be(false)
+      expect(entry.errors.full_messages).to eq([ "The records add up to $110.00, which is $10.00 more than the bank transaction's $100.00." ])
+    end
+
+    it "is refused when money out has a Deposit among its records, creating nothing" do
+      costco = bank_transaction(-100)
+      wrong = draft("deposit", "40")
+      entry = entry(costco, draft("spend", "60"), wrong)
+
+      expect(file(entry).filed?).to be(false)
+      expect(wrong.errors.full_messages).to eq([ "Kind must be Spend, since the money went out" ])
+      expect(Budget::Spend.count + Budget::Deposit.count).to eq(0)
+    end
+
+    it "is refused when money in has a Spend among its records" do
+      entry = entry(bank_transaction(3000), draft("deposit", "2800"), draft("spend", "200"))
+
+      expect(file(entry).filed?).to be(false)
+      expect(entry.drafts.last.errors.full_messages).to eq([ "Kind must be Deposit or Refund, since the money came in" ])
+    end
+
+    it "creates none of them when one record is invalid, though the others are fine and the total adds up" do
+      costco = bank_transaction(-100)
+      bad = draft("spend", "40", envelope_id: household.id, description: "")
+      entry = entry(costco, draft("spend", "60"), bad)
+
+      expect(file(entry).filed?).to be(false)
+
+      expect(bad.errors.full_messages).to eq([ "Description can't be blank" ])
+      expect(entry.drafts.first.errors).to be_empty
+      expect(Budget::Spend.count).to eq(0)
+      expect(Budget::SpendLink.count).to eq(0)
+      expect(costco.reload).to be_unfiled
+    end
+
+    it "creates none of them when one is in an archived envelope, or another budget's" do
+      household.update_column(:archived_at, Time.current)
+      others = create(:budget_envelope, name: "Someone else's")
+
+      archived = entry(bank_transaction(-100), draft("spend", "60"), draft("spend", "40", envelope_id: household.id))
+      foreign = entry(bank_transaction(-100), draft("spend", "60"), draft("spend", "40", envelope_id: others.id))
+
+      expect(file(archived).filed?).to be(false)
+      expect(file(foreign).filed?).to be(false)
+      expect(archived.drafts.last.errors.full_messages).to eq([ "Envelope is archived" ])
+      expect(foreign.drafts.last.errors.full_messages).to eq([ "Envelope can't be blank" ])
+      expect(Budget::Spend.count).to eq(0)
+    end
+
+    it "is filed in one transaction, so a failure while inserting leaves nothing" do
+      costco = bank_transaction(-100)
+      allow(Budget::SpendLink).to receive(:insert_all!).and_raise(ActiveRecord::StatementInvalid, "the database went away")
+
+      expect { file(entry(costco, draft("spend", "60"), draft("spend", "40", envelope_id: household.id))) }.to raise_error(ActiveRecord::StatementInvalid)
+
+      expect(Budget::Spend.count).to eq(0)
+      expect(costco.reload).to be_unfiled
+    end
+
+    it "keeps the records' order, so a record's link is to the record asked for" do
+      costco = bank_transaction(-100)
+
+      file(entry(costco, draft("spend", "10", description: "First"), draft("spend", "20", description: "Second", envelope_id: household.id), draft("spend", "70", description: "Third")))
+
+      expect(costco.reload.spend_links.map { |link| [ link.spend.description, link.spend.amount ] }).to contain_exactly([ "First", 10 ], [ "Second", 20 ], [ "Third", 70 ])
+      expect(household.spends.sole.description).to eq("Second")
+    end
+
+    it "makes the same number of queries for a split as for one record of the same kinds, however many records" do
+      one = [ entry(bank_transaction(-100), draft("spend", "100")) ]
+      split = [ entry(bank_transaction(-100), *Array.new(20) { draft("spend", "5") }) ]
+
+      few = count_queries { Budget::Filing.new(budget).file(one) }
+      many = count_queries { Budget::Filing.new(budget).file(split) }
+
+      expect(many).to eq(few)
+    end
+
+    it "is judged by what the records add up to as a whole, the way an Entry says as it's entered" do
+      entry = entry(bank_transaction(-100), draft("spend", "60"), draft("spend", "abc"), draft("spend", "30.50"))
+
+      expect(entry.total).to eq(BigDecimal("90.5"))
+      expect(entry.remaining).to eq(BigDecimal("9.5"))
+    end
+  end
+
   describe "several bank transactions at once" do
     it "files them all, each as its own records" do
       out = bank_transaction(-100)
