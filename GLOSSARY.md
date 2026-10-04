@@ -63,3 +63,19 @@ _Avoid_: Wallet
 **Bank transaction**:
 The bank's record of money moving in or out of an account, before Budgie has filed it as one or more Deposits, Spends or Refunds, or ignored it.
 _Avoid_: Transaction, statement line, import row
+
+**CSV format**:
+How one bank's CSV download is laid out: which columns hold the date, the description and the amount, and which way the sign runs. The user builds it from a sample file and saves it under a name, so later files from that bank read the same way.
+_Avoid_: Mapping, template, preset
+
+**Import**:
+One CSV file read into one Account, which creates its bank transactions. Only the Account's latest Import can be undone, and only for 24 hours.
+_Avoid_: Batch, upload
+
+**Filing**:
+Turning a bank transaction into the Deposits, Spends or Refunds it was, which must add up to its amount. Un-filing deletes those records and leaves the bank transaction unfiled.
+_Avoid_: Categorising, matching, assigning
+
+**Ignored bank transaction**:
+A bank transaction Budgie won't file, such as a card payment between the user's own accounts. It can be un-ignored.
+_Avoid_: Hidden, skipped
