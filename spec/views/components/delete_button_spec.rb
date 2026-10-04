@@ -33,6 +33,13 @@ RSpec.describe "components/_delete_button", type: :view do
     assert_select "form input[type=hidden]:not([name=_method]):not([name=authenticity_token])", count: 0
   end
 
+  it "says what it's told to instead of Delete, such as Undo" do
+    render_button label: "Undo"
+
+    assert_select "button", text: "Undo"
+    assert_select "button", text: "Delete", count: 0
+  end
+
   it "is a quiet button, with the error colour for its text" do
     render_button
 

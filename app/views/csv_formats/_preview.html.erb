@@ -1,0 +1,55 @@
+<%# locals: (preview:) %>
+<%# How the sample reads with the choices so far: its first rows as they'd be imported, or why they can't be. Money in and money out are told apart in words as well as colour, and a date is spelled out, so a wrong sign or a swapped DD/MM is seen here and not after an Import. Replaced whenever the preview answers. %>
+<% budget = Current.budget %>
+<div id="csv-format-preview" class="space-y-4" aria-live="polite">
+  <h2 class="text-xl font-semibold">Preview</h2>
+
+  <% case preview.status %>
+  <% when :none %>
+    <p class="text-base-content/70">Choose a sample file to see how its rows read.</p>
+  <% when :unreadable %>
+    <p class="text-base-content/70">The sample can't be read, so there's nothing to preview.</p>
+  <% when :incomplete %>
+    <p class="text-base-content/70">Finish choosing, and the sample's rows will show here as they'll be read.</p>
+    <ul class="list-disc pl-5 text-base-content/70">
+      <% preview.problems.each do |problem| %>
+        <li><%= problem %></li>
+      <% end %>
+    </ul>
+  <% when :refused %>
+    <div class="alert alert-error" role="alert">
+      <span>This file would be refused. <%= preview.refusal.message %></span>
+    </div>
+  <% when :ready %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <caption class="sr-only">How the first rows of the sample read</caption>
+        <thead>
+          <tr>
+            <th scope="col">Line</th>
+            <th scope="col">Date</th>
+            <th scope="col">Description</th>
+            <th scope="col" class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% preview.rows.each do |row| %>
+            <tr>
+              <th scope="row" class="tabular-nums"><%= row.line %></th>
+              <td class="whitespace-nowrap"><%= spelled_date(row.date) %></td>
+              <td><%= row.description %></td>
+              <td class="text-right tabular-nums">
+                <%= render "components/money", amount: row.amount, budget: budget %>
+                <%= render "components/label_badge", text: money_direction(row.amount) %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-base-content/70">
+      <%= preview.total > preview.rows.size ? "The first #{preview.rows.size} of #{preview.total} rows." : "#{pluralize(preview.total, "row")}." %>
+      <% if preview.zero_rows.positive? %><%= pluralize(preview.zero_rows, "row") %> of 0 would be skipped.<% end %>
+    </p>
+  <% end %>
+</div>

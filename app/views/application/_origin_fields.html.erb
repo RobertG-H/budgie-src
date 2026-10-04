@@ -1,4 +1,4 @@
-<%# locals: (month:) %>
-<%# What a form carries so that saving, deleting or cancelling can go back to the page it was opened from: the page's name, and the month it showed. See ReturnsToOrigin. %>
+<%# locals: (month: nil) %>
+<%# What a form carries so that saving, deleting or cancelling can go back to the page it was opened from: the page's name, and the month it showed, if it showed one. See ReturnsToOrigin. %>
 <%= hidden_field_tag :from, origin, id: nil if origin %>
-<%= hidden_field_tag :month, month.to_param, id: nil %>
+<%= hidden_field_tag :month, month.to_param, id: nil if month %>

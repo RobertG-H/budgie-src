@@ -30,11 +30,20 @@
 en:
   hello: "Hello world"
 
+  activemodel:
+    attributes:
+      # What the filing form calls the month a Deposit counts toward, as the Deposit's own form does.
+      budget/filing/draft:
+        month: Ready to Assign in
+        envelope_id: Envelope
+
   activerecord:
     models:
       # What a Reallocation is called to a person, such as on the form's button.
       budget/envelope_reallocation: Reallocation
       budget/ready_to_assign_reallocation: Reallocation
+      # Rails would call it "Csv format", on the form's button.
+      budget/csv_format: CSV format
     attributes:
       # What the form calls the month a Deposit counts toward.
       budget/deposit:
@@ -49,6 +58,13 @@ en:
       # Its envelope is the form's From.
       budget/ready_to_assign_reallocation:
         envelope: From
+      # The sample file is where a format's column count comes from, and what the form asks for.
+      budget/csv_format:
+        column_count: Sample file
+        money_in_value: Direction for money in
+      # An Import's CSV format is what the form calls it.
+      budget/import:
+        csv_format: CSV format
     errors:
       models:
         # A Spend or a Refund with no envelope is told so the way every other missing field is, not with Rails' "must exist".
@@ -71,6 +87,18 @@ en:
           attributes:
             envelope:
               required: "can't be blank"
+        # An Import with no CSV format, which is also what another budget's becomes when it's looked up in the budget's own.
+        budget/import:
+          attributes:
+            csv_format:
+              required: "can't be blank"
+        # What's shown when an Account with bank transactions is deleted, and when a CSV format that an Import used is.
+        budget/account:
+          restrict_dependent_destroy:
+            has_many: "This account can't be deleted because it has bank transactions."
+        budget/csv_format:
+          restrict_dependent_destroy:
+            has_many: "This CSV format can't be deleted because an Import used it."
         # What's shown when an envelope with records is deleted. The reason is the same whatever the records are.
         budget/envelope:
           restrict_dependent_destroy:

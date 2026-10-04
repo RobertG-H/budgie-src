@@ -1,0 +1,62 @@
+<%# locals: (form:, draft:, bank_transaction:, number: nil, removable: false, autofocus: false) %>
+<%# One record a bank transaction is filed as. Money out is only ever a Spend, so it has no kind to choose. Money in is a Deposit or a Refund, and the filing-record Stimulus controller shows only the fields the chosen kind has: an envelope for a Refund, and the month for a Deposit, which the month-choice controller keeps in step with its date. Without JavaScript they all show, and what a kind doesn't have is left out. %>
+<% money_in = bank_transaction.amount.positive? %>
+<% envelope_error = draft.errors.full_messages_for(:envelope_id).to_sentence.presence %>
+
+<%# With only one record there's nothing to tell it from, so it has no heading, and nothing to remove; the filing-split controller shows both once there's a second. %>
+<fieldset class="space-y-6" data-controller="filing-record month-choice" data-filing-split-target="record">
+  <legend class="text-lg font-semibold" data-filing-split-target="legend" <%= "hidden" unless removable %>>Record<%= " #{number}" if number %></legend>
+
+  <% if money_in %>
+    <%= render "components/field", form: form, attribute: :kind, control: :radios, label: "Kind" do |field| %>
+      <% { "deposit" => "Deposit", "refund" => "Refund" }.each do |kind, name| %>
+        <label class="flex items-center gap-3">
+          <%= form.radio_button :kind, kind, required: true, data: { filing_record_target: "kind", action: "change->filing-record#toggle" }, **field %>
+          <span><%= name %></span>
+        </label>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= form.hidden_field :kind, value: "spend", data: { filing_record_target: "kind" } %>
+  <% end %>
+
+  <div data-filing-record-target="group" data-kinds="refund spend">
+    <%= render "components/field", form: form, attribute: :envelope_id, label: "Envelope", control: :select, error: envelope_error do |field| %>
+      <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope" }, autofocus: (autofocus && draft.envelope_id.blank?), **field %>
+    <% end %>
+  </div>
+
+  <%= render "components/field", form: form, attribute: :description, hint: "Starts as the bank's description. Say what the money was." do |field| %>
+    <%= form.text_field :description, required: true, autofocus: (autofocus && draft.envelope_id.present?), **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :date do |field| %>
+    <%= form.date_field :date, required: true, data: { month_choice_target: "date", action: "input->month-choice#update" }, **field %>
+  <% end %>
+
+  <% if money_in %>
+    <% months = Budget::Deposit.months_for(draft.date || bank_transaction.date) %>
+    <div data-filing-record-target="group" data-kinds="deposit">
+      <%= render "components/field", form: form, attribute: :month, control: :radios,
+            hint: "Choose the month after to save this Deposit for next month." do |field| %>
+        <% months.each do |month| %>
+          <label class="flex items-center gap-3">
+            <%= form.radio_button :month, month.iso8601, checked: month == (draft.month || months.first), data: { month_choice_target: "radio" }, **field %>
+            <span data-month-choice-target="name"><%= month.to_fs(:month_and_year) %></span>
+          </label>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :amount, hint: "Of the bank transaction's amount, as a positive figure." do |field| %>
+    <%# What a bank transaction starts as is shown to the cent, and what was typed is as it was typed. %>
+    <%= form.number_field :amount, step: 0.01, required: true, value: (format("%.2f", draft.amount) if draft.amount.is_a?(BigDecimal)) || draft.amount, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
+    <%= form.text_area :notes, rows: 3, **field %>
+  <% end %>
+
+  <button type="button" class="btn btn-ghost" data-action="filing-split#removeRecord" data-filing-split-target="remove" <%= "hidden" unless removable %>>Remove</button>
+</fieldset>

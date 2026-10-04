@@ -7,6 +7,8 @@
           params: { from: origin, month: @month.to_param }.compact %>
   <% end %>
 
+  <%= render "bank_transaction_note", record: @refund %>
+
   <%= render "envelope_record_form", record: @refund, hint: "Such as IKEA return",
         cancel_path: return_path(@month, envelope: origin_envelope) %>
 </div>

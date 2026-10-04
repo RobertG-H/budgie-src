@@ -234,6 +234,91 @@ nothing to say. Every envelope's figures are still worked out in the same groupe
 change. Below the table, an "Archived envelopes" section lists every archived envelope, each linking to its page for the
 month viewed. An archived envelope's page has Unarchive in place of Archive and no New spend, New refund or Reallocate.
 
+### Importing
+
+A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
+Refunds it was, or ignore it. The model is the `roadmap` issue
+[#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
+formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits.
+
+**CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
+columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
+column, separate money in and money out columns, or one unsigned column with another that says which way it went. There are no
+presets, so a person builds each one from a sample of their own file, which is shown as a numbered grid with a live preview of
+how its first rows would be read. Money in is always positive and money out negative once a file is read, whatever the bank's
+convention ([ADR 0009](adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md)), and the preview
+spells out the date and says "Money in" or "Money out" in words, so a wrong sign or a swapped day and month is noticed before
+anything is imported.
+
+**One reader.** `Budget::CsvFormat#read` reads a file with a format into rows of a date, a description and a signed amount, or
+refuses it, naming the first bad row by its line and giving the reason, and nothing is read from a file with anything wrong with
+it. The preview and every Import use that one reader, so a file can't preview one way and import another. It keeps to the
+core's money rule (at most 2 decimal places, never rounded), and to limits that keep a request small: UTF-8, 2 MB and 5,000
+rows. A row of 0 is skipped and counted, not refused.
+
+**The sample isn't kept.** The builder sends the sample file with the form each time a choice changes, and the server answers
+with the grid and the preview, so the sample only exists for a request, and there's no reader written in JavaScript to keep
+in step with the real one. Saving a format never imports the sample: the person chooses the file again to import it.
+
+**Accounts, Imports and bank transactions.** An Account is a real bank or card account, with only a name: Budgie doesn't track what's
+in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). A person imports a CSV file into one with a CSV format,
+and each row becomes a bank transaction, which is the bank's record of money moving in or out, with a signed amount. Bank
+transactions are read-only, and are found through their Account, as a Spend is through its envelope. The file isn't kept, only its
+name, and the Import commits straight away: a file that can't be read creates nothing, and says which row and why.
+
+**Overlapping files** are the normal case, so a row is recognised by what it is, not by an ID the bank doesn't give it
+([ADR 0010](adr/0010-duplicates-are-recognised-by-content-and-an-occurrence-count.md)). Each row has a content key, a digest of its
+Account, date, signed amount and description (trimmed, whitespace collapsed, case folded), and an occurrence number for each time
+the same key is in the Account. For each key an Import adds as many rows as the file has beyond those the Account already has, so
+two identical coffees on one day both come in, while the same file again, or one that overlaps, adds only what's new. The key and
+occurrence are written when the row is made and never recomputed, because they record how it first looked. The description as a
+Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place.
+
+**One request, one Import.** It runs in the request, holds the Account's row lock and inserts every row at once, so it makes the same
+number of queries for 10 rows as for 1,000, a double submit imports once, and there's no job to wait for. Its summary is a page of
+its own, and says what the whole file held, which is worked out when it's read since the file isn't kept: the dates, the money in and
+money out, and the first row as it was read, so a wrong sign or a swapped day and month, which both read without error, is noticed
+straight away, even when most of the file was already there. It also says how many bank transactions were added. An Account's page lists its bank
+transactions a page at a time, since one Import can bring in 5,000.
+
+**Undo.** An Import commits as soon as its file has been checked, with no preview, so Undo is its safety net
+([ADR 0011](adr/0011-undo-reaches-only-the-latest-import-for-24-hours.md)). It deletes an Import's bank transactions and then the
+Import, after a confirmation that lists what it will delete, but only for the Account's latest Import and only for 24 hours, because
+a later Import's skipped duplicates point at rows from earlier ones, and so that one click can't wipe out weeks of work. Once the
+latest is undone, the one before it can be, if it's still in time. It holds the Account's lock, as an Import does, so one can't land
+while another is being undone, and an Import that added nothing, such as the same file twice, still counts as the latest, so it
+protects the rows its file skipped. It's offered on the Import's summary and beside the latest Import on the Account's page, and when
+it can't be, the page says why.
+
+**Filing and ignoring.** A bank transaction is unfiled, filed or ignored, and which is never stored: it's ignored if it has an ignore
+time, filed if it has a link to a record, and otherwise unfiled. Filing turns it into the Deposits, Spends and Refunds it was, which
+must add up to its amount exactly ([ADR 0009](adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md)):
+money in is a Deposit or a Refund and money out is a Spend, and never a Reallocation, which moves money inside the budget. The records
+are made together with their links in one database transaction, so there's no partly filed state, and a record that's wrong creates
+nothing. Ignoring is for what Budgie won't file, such as a card payment between a person's own accounts, and both can be taken back:
+un-filing deletes the records, and un-ignoring makes the bank transaction unfiled again.
+
+**Links, not columns.** A record that came from a bank transaction is an ordinary Deposit, Spend or Refund
+([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)): it shows in the month view and on its envelope's page, and is edited and
+deleted like one typed in. What says where it came from is a link table for each kind, so the core tables have no import columns and a
+record can come from at most one bank transaction. Deleting a record deletes its link, which leaves the bank transaction unfiled when it
+was the last. Editing one so that the records no longer add up to the bank transaction doesn't block anything; the bank transaction
+shows a "Doesn't add up" flag, in words as well as colour, because a typo fixed on an imported record shouldn't be refused.
+
+**Splits.** A Costco charge of $100 can be filed as $60 from Groceries and $40 from Household, and a paycheck of $3,000 as a $2,800
+Deposit and a $200 Refund. The filing form can add records and remove them, and says what they add up to and what's left as it goes,
+and the server refuses a form that doesn't add up, saying by how much, and keeps every record as it was entered. Money out is only ever
+Spends, money in any mix of Deposits and Refunds, and one invalid record means none are created. Un-filing deletes every record, and
+wherever a bank transaction shows what it was filed as, its records are listed together.
+
+**One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
+or none. The filing form calls it for one bank transaction, and Filing rules and a Guess will call the same operation, so it makes the
+same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
+transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Unfiled list shows
+every bank transaction across the Accounts that's still to do, and an Account's page shows each one's state.
+
+The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled and CSV formats so far.
+
 ### Frontend
 
 One daisyUI theme, `budgie`, defined by two vendored plugin files pinned to a release rather than fetched

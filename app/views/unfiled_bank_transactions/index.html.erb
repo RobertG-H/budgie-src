@@ -1,0 +1,25 @@
+<% content_for :title, "Unfiled · Budgie" %>
+<% budget = Current.budget %>
+
+<%= render "components/page_header", title: "Unfiled",
+      description: "Bank transactions, from every account, that haven't been filed or ignored yet. Choose one to file it." %>
+
+<div class="mt-8">
+  <% if @bank_transactions.any? %>
+    <%= render "components/record_list" do %>
+      <% @bank_transactions.each do |bank_transaction| %>
+        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, from: "unfiled", show_account: true, show_state: false %>
+      <% end %>
+    <% end %>
+
+    <div class="mt-4">
+      <%= render "components/pager", page: page, more: more_pages?, path: ->(number) { unfiled_bank_transactions_path(page: (number unless number == 1)) } %>
+    </div>
+  <% elsif page > 1 %>
+    <%= render "components/empty_state", message: "There are no more unfiled bank transactions." do %>
+      <%= link_to "Back to the first page", unfiled_bank_transactions_path, class: "btn" %>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "Every bank transaction has been filed or ignored." %>
+  <% end %>
+</div>

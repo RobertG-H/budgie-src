@@ -34,6 +34,14 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change(Budget::ReadyToAssignReallocation, :count)
   end
 
+  it "creates no CSV formats outside development" do
+    expect { run_seeds }.not_to change(Budget::CsvFormat, :count)
+  end
+
+  it "creates no Accounts, Imports or bank transactions outside development" do
+    expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -88,7 +96,8 @@ RSpec.describe "db/seeds.rb" do
 
       bills = Budget::Month.new(budget, Date.new(2026, 10, 1)).envelopes.find { |line| line.envelope.name == "Bills" }
 
-      expect(bills).to have_attributes(assigned: 0, available: -30, overspent?: true)
+      # Its Starting balance of -$30 and the $50 of Hydro that was filed from it.
+      expect(bills).to have_attributes(assigned: 0, available: -80, overspent?: true)
     end
 
     it "spends from the envelopes last month and this month, and nothing before last month" do
@@ -141,8 +150,8 @@ RSpec.describe "db/seeds.rb" do
 
       groceries = ->(month) { Budget::Month.new(budget, month).envelopes.find { |line| line.envelope.name == "Groceries" } }
 
-      expect(groceries.call(Date.new(2026, 9, 1))).to have_attributes(refunded: 0, available: BigDecimal("430.65"))
-      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), reallocated: -20, available: BigDecimal("976.85"))
+      expect(groceries.call(Date.new(2026, 9, 1))).to have_attributes(refunded: 0, available: BigDecimal("348.20"))
+      expect(groceries.call(Date.new(2026, 10, 1))).to have_attributes(refunded: BigDecimal("18.75"), reallocated: -20, available: BigDecimal("894.40"))
     end
 
     it "reallocates $20 from Groceries to Dining out this month, once, and no other month" do
@@ -164,7 +173,7 @@ RSpec.describe "db/seeds.rb" do
       line = ->(name, month) { Budget::Month.new(budget, month).envelopes.find { |envelope_line| envelope_line.envelope.name == name } }
 
       expect(line.call("Dining out", Date.new(2026, 10, 1))).to have_attributes(reallocated: 20, available: BigDecimal("-4.00"), overspent?: true)
-      expect(line.call("Groceries", Date.new(2026, 10, 1))).to have_attributes(reallocated: -20, available: BigDecimal("976.85"))
+      expect(line.call("Groceries", Date.new(2026, 10, 1))).to have_attributes(reallocated: -20, available: BigDecimal("894.40"))
       expect(line.call("Dining out", Date.new(2026, 9, 1))).to have_attributes(reallocated: 0, available: BigDecimal("234.50"))
     end
 
@@ -197,6 +206,85 @@ RSpec.describe "db/seeds.rb" do
 
       expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).ready_to_assign.amount).to eq(160)
       expect(Budget::Month.new(budget, Date.new(2026, 10, 1)).ready_to_assign.amount).to eq(110)
+    end
+
+    describe "the CSV format" do
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      it "reads the signed sample file, so a developer can import it, with its header skipped" do
+        csv_format = budget.csv_formats.sole
+
+        reading = csv_format.read(Rails.root.join("spec/fixtures/files/signed-sample.csv").open)
+
+        expect(csv_format.name).to eq("Sample bank")
+        expect(reading.refusal).to be_nil
+        expect(reading.rows.map(&:description)).to eq([ "Paycheck", "Loblaws", "Hydro", "Coffee shop", "Hydro rebate" ])
+        expect(reading.rows.map(&:amount)).to eq([ 2800, BigDecimal("-82.45"), BigDecimal("-65.50"), BigDecimal("-4.25"), BigDecimal("12.25") ])
+        expect(reading.zero_rows).to eq(1)
+      end
+
+      it "is left as the developer has changed it" do
+        budget.csv_formats.sole.update!(date_format: "DD/MM/YYYY")
+
+        run_seeds
+
+        expect(budget.csv_formats.sole.date_format).to eq("DD/MM/YYYY")
+      end
+    end
+
+    describe "the Account" do
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      it "is Chequing, with one Import of the sample file, read with the seeded CSV format" do
+        account = budget.accounts.sole
+
+        expect(account.name).to eq("Chequing")
+        expect(account.imports.sole).to have_attributes(file_name: "signed-sample.csv", csv_format: budget.csv_formats.sole, duplicates_skipped: 0, zero_rows_skipped: 1)
+      end
+
+      it "has the sample's five bank transactions, money in and money out, all of them as the file had them" do
+        expect(budget.accounts.sole.bank_transactions.order(:id).pluck(:date, :description, :amount)).to eq([
+          [ Date.new(2026, 9, 1), "Paycheck", 2800 ], [ Date.new(2026, 9, 2), "Loblaws", BigDecimal("-82.45") ],
+          [ Date.new(2026, 9, 3), "Hydro", BigDecimal("-65.50") ], [ Date.new(2026, 9, 5), "Coffee shop", BigDecimal("-4.25") ],
+          [ Date.new(2026, 9, 9), "Hydro rebate", BigDecimal("12.25") ]
+        ])
+      end
+
+      it "files Loblaws as a Spend from Groceries, ignores Coffee shop, and leaves the other three unfiled, in the Unfiled list" do
+        bank_transactions = budget.accounts.sole.bank_transactions.index_by(&:description)
+
+        expect(bank_transactions["Loblaws"]).to be_filed
+        expect(bank_transactions["Loblaws"].spend_links.sole.spend).to have_attributes(
+          description: "Loblaws", date: Date.new(2026, 9, 2), amount: BigDecimal("82.45"), envelope: budget.envelopes.find_by!(name: "Groceries")
+        )
+        expect(bank_transactions["Coffee shop"]).to be_ignored
+        expect(budget.bank_transactions.unfiled.pluck(:description)).to contain_exactly("Paycheck", "Hydro rebate")
+        expect(bank_transactions.values.select(&:filed?).size).to eq(2)
+      end
+
+      it "files Hydro as a split across two envelopes, which add up to it" do
+        hydro = budget.bank_transactions.find_by!(description: "Hydro")
+
+        expect(hydro).to be_filed
+        expect(hydro).to be_adds_up
+        expect(hydro.spend_links.map { |link| [ link.spend.envelope.name, link.spend.amount ] })
+          .to contain_exactly([ "Bills", BigDecimal("50") ], [ "Rent", BigDecimal("15.5") ])
+        expect(hydro.spend_links.map { |link| link.spend.date }.uniq).to eq([ Date.new(2026, 9, 3) ])
+      end
+
+      it "counts the filed Spend in Groceries' September like one typed in, and doesn't add up to a flag" do
+        spend = budget.bank_transactions.find_by!(description: "Loblaws").spend_links.sole.spend
+
+        expect(Budget::Month.new(budget, Date.new(2026, 9, 1)).envelope_line(spend.envelope_id).spent).to eq(BigDecimal("182.40") + BigDecimal("240.15") + BigDecimal("96.80") + BigDecimal("82.45"))
+        expect(budget.bank_transactions.find_by!(description: "Loblaws")).to be_adds_up
+      end
+
+      it "changes nothing when it's run again, and leaves a bank transaction the developer has changed" do
+        budget.accounts.sole.bank_transactions.first.update!(description: "Changed")
+
+        expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
+        expect(budget.accounts.sole.bank_transactions.first.description).to eq("Changed")
+      end
     end
 
     describe "the archived envelope" do
@@ -235,8 +323,8 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
 
       expect { run_seeds }.not_to change {
-        [ User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
-          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count ]
+        [ Budget::SpendLink.count, Budget::Spend.count, Budget::BankTransaction.where.not(ignored_at: nil).count, User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
+          Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count, Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ]
       }
     end
 

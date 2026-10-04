@@ -1,0 +1,16 @@
+<%# locals: (csv_format:, sample:) %>
+<%# The sample's first rows, as a numbered grid to choose columns from, and the sample's column count, which is what the format takes from it and so travels with the form. Replaced whenever the preview answers (see CsvFormatPreviewsController). Without a sample there's nothing to show, so it says to choose one, which for a format that's saved already is again. %>
+<div id="csv-format-grid" class="space-y-4">
+  <%= hidden_field_tag "csv_format[column_count]", csv_format.column_count, id: nil %>
+
+  <% if sample.nil? %>
+    <p class="text-base-content/70">
+      <%= csv_format.persisted? ? "Choose a sample file again to see its first rows here, and how they read." : "Choose a sample file to see its first rows here, and how they read." %>
+    </p>
+  <% elsif sample.refusal %>
+    <div class="alert alert-error" role="alert"><span><%= sample.refusal.message %></span></div>
+  <% else %>
+    <h2 class="text-xl font-semibold">Sample</h2>
+    <%= render "components/sample_grid", sample: sample %>
+  <% end %>
+</div>

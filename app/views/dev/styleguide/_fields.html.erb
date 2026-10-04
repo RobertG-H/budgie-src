@@ -27,6 +27,11 @@
       <%= form.text_area :notes, rows: 3, **field %>
     <% end %>
 
+    <%= render "components/field", form: form, attribute: :sample_file, control: :file, label: "Sample file",
+          hint: "A file chosen from the device. It's sent with the form, and read, but never kept." do |field| %>
+      <%= form.file_field :sample_file, **field %>
+    <% end %>
+
     <%= render "components/field", form: form, attribute: :sample_checkbox, control: :checkbox,
           label: "Sample checkbox", hint: "A checkbox has its label beside it." do |field| %>
       <%= form.check_box :sample_checkbox, **field %>

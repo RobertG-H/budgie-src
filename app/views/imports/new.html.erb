@@ -1,0 +1,15 @@
+<% content_for :title, "Import into #{@account.name} · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "Import", description: "Into #{@account.name}" %>
+
+  <% if Current.budget.csv_formats.any? %>
+    <%= render "imports/form", account: @account, import: @import, cancel_path: account_path(@account) %>
+  <% else %>
+    <div class="mt-8">
+      <%= render "components/empty_state", message: "You need a CSV format to read a file with." do %>
+        <%= link_to "New CSV format", new_csv_format_path, class: "btn btn-primary" %>
+      <% end %>
+    </div>
+  <% end %>
+</div>

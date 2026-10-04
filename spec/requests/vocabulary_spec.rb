@@ -4,7 +4,7 @@ require "rails_helper"
 # GLOSSARY.md says to avoid.
 RSpec.describe "The words on the pages", type: :request do
   let(:retired_terms) do
-    /\b(categor(y|ies)|income|inflow|outflow|budgeted|spending|expense|purchase|payment|transfer|move|reimbursement|repayment|wallet|transaction|payee|payer)\b/i
+    /\b(categor(y|ies)|income|inflow|outflow|budgeted|spending|expense|purchase|payment|transfer|move|reimbursement|repayment|wallet|(?<!bank\s)transaction|payee|payer)\b/i
   end
   let(:budget) { create(:budget) }
   let!(:bills) { create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30) }
@@ -37,6 +37,16 @@ RSpec.describe "The words on the pages", type: :request do
   # Money moved out of Bills back into Ready to Assign, in the month the pages below are for.
   let!(:to_ready_to_assign) do
     create(:budget_ready_to_assign_reallocation, envelope: bills, description: "Unspent gas money", date: Date.new(2026, 10, 25), amount: 3.5, notes: "Back to the pool")
+  end
+
+  # How one of the budget's banks lays out its CSV download.
+  let!(:csv_format) { create(:budget_csv_format, budget: budget, name: "CIBC", description_columns: [ 2, 1 ]) }
+
+  # Where bank transactions come from, with an Import of three rows, one of them of 0.
+  let!(:account) { create(:budget_account, budget: budget, name: "Chequing") }
+  let!(:import) do
+    plain = create(:budget_csv_format, budget: budget, name: "Plain")
+    account.imports.build(csv_format: plain, file_name: "sept.csv").tap { |i| i.run("2026-10-01,Paycheck,2800.00\n2026-10-02,Loblaws,-82.45\n2026-10-03,Interest,0.00\n") }
   end
 
   before { sign_in_as budget.user }
@@ -76,12 +86,288 @@ RSpec.describe "The words on the pages", type: :request do
     "the edit form of a Reallocation to Ready to Assign" => -> { edit_ready_to_assign_reallocation_path(to_ready_to_assign, month: "2026-10", from: "deposits") },
     "the envelope form" => -> { new_envelope_path(month: "2026-10", from: "month") },
     "the envelope edit form" => -> { edit_envelope_path(bills, month: "2026-10", from: "envelope") },
-    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
+    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) },
+    "the CSV formats" => -> { csv_formats_path },
+    "the CSV format form" => -> { new_csv_format_path },
+    "the CSV format edit form" => -> { edit_csv_format_path(csv_format) },
+    "the Accounts" => -> { accounts_path },
+    "the Account form" => -> { new_account_path },
+    "the Account edit form" => -> { edit_account_path(account) },
+    "an Account's page" => -> { account_path(account) },
+    "the Import form" => -> { new_account_import_path(account) },
+    "an Import's summary" => -> { import_path(import) },
+    "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "unfiled") },
+    "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
       get instance_exec(&path)
 
       expect(response).to have_http_status(:ok)
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  describe "Accounts and Imports" do
+    it "tells a bare transaction from a Bank transaction, which is a term" do
+      expect("Bank transaction").not_to match(retired_terms)
+      expect("No bank transactions yet.").not_to match(retired_terms)
+      expect("Every transaction was already here").to match(retired_terms)
+      expect("A transaction").to match(retired_terms)
+    end
+
+    it "says Bank transactions, and Import, on an Account's page, in words" do
+      get account_path(account)
+
+      expect(visible_text).to include("Chequing", "Import", "Latest Import: sept.csv", "Oct 1, 2026", "Paycheck", "$2,800.00", "Loblaws", "-$82.45")
+      expect(visible_text).not_to include("Interest")
+    end
+
+    it "says what an Import did in words a person uses, with no column names" do
+      get import_path(import)
+
+      expect(visible_text).to include("Added 2 bank transactions", "Money in $2,800.00 1 bank transaction in the file", "Money out -$82.45 1 bank transaction in the file",
+        "Duplicates skipped 0", "Rows of 0 skipped 1", "First row", "Oct 1, 2026 Paycheck Money in $2,800.00")
+      expect(response.body).not_to match(/budget_|zero_rows|duplicates_skipped|content_key|occurrence/)
+    end
+
+    describe "filing" do
+      let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+      let(:loblaws_row) { account.bank_transactions.find_by!(description: "Loblaws") }
+      let(:paycheck_row) { account.bank_transactions.find_by!(description: "Paycheck") }
+
+      def file_params(**attributes)
+        { filing: { records: { "0" => { kind: "spend", envelope_id: groceries.id, description: "Loblaws", date: "2026-10-02", amount: "82.45" }.merge(attributes) } } }
+      end
+
+      it "says Unfiled, Filed and Ignored, and Un-file and Un-ignore, with the flag in words, on an Account's page" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        paycheck_row.ignore
+        extra = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
+        loblaws_row.spend_links.sole.spend.update!(amount: 80)
+
+        get account_path(account)
+
+        expect(visible_text).to include("Unfiled", "Filed", "Ignored", "Un-file", "Un-ignore", "Spend from Groceries", "Doesn't add up", "Its records add up to $80.00, not $82.45.")
+        expect(extra).to be_unfiled
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says what a filed record came from, on its edit page, and the confirmation for un-filing, in the same words" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        spend = loblaws_row.spend_links.sole.spend
+
+        get edit_spend_path(spend, month: "2026-10")
+
+        expect(visible_text).to include("Filed from a bank transaction in Chequing, Oct 2, 2026, Loblaws. Deleting it un-files that bank transaction.")
+        expect(visible_text).not_to match(retired_terms)
+
+        get account_path(account)
+
+        confirmation = css_select("main form[data-turbo-confirm]").map { |form| form["data-turbo-confirm"] }.find { |text| text.start_with?("Un-file") }
+        expect(confirmation).to eq("Un-file this bank transaction? This deletes the records it was filed as.")
+        expect(confirmation).not_to match(retired_terms)
+      end
+
+      it "uses the same words for what went wrong when a bank transaction is refused" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params(envelope_id: "", amount: "60", description: "")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("Envelope can't be blank", "Description can't be blank")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_filing_path(loblaws_row), params: file_params(amount: "60")
+
+        expect(visible_text).to include("The records add up to $60.00, which is $22.45 less than the bank transaction's $82.45.")
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_filing_path(loblaws_row), params: file_params(kind: "deposit")
+
+        expect(visible_text).to include("Kind must be Spend, since the money went out")
+
+        post bank_transaction_filing_path(paycheck_row), params: file_params(kind: "spend", amount: "2800")
+
+        expect(visible_text).to include("Kind must be Deposit or Refund, since the money came in")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "uses the same words for what was done, and what can't be" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction filed.")
+
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+        follow_redirect!
+        expect(visible_text).to include("This bank transaction is already filed.")
+
+        post bank_transaction_ignore_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("This bank transaction is filed. Un-file it before ignoring it.")
+
+        delete bank_transaction_filing_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction unfiled.")
+
+        post bank_transaction_ignore_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction ignored.")
+
+        get new_bank_transaction_filing_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("This bank transaction is ignored. Un-ignore it first.")
+
+        delete bank_transaction_ignore_path(loblaws_row)
+        follow_redirect!
+        expect(visible_text).to include("Bank transaction un-ignored.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "counts the records an Undo deletes in the confirmation, by kind, in the same words" do
+        post bank_transaction_filing_path(loblaws_row), params: file_params
+
+        get import_path(import)
+
+        confirmation = css_select("main form[data-turbo-confirm]").map { |form| form["data-turbo-confirm"] }.sole
+        expect(confirmation).to eq("Undo the Import of sept.csv? This deletes its 2 bank transactions and the 1 Spend filed from them.")
+        expect(confirmation).not_to match(retired_terms)
+      end
+    end
+
+    describe "Undo" do
+      def confirmation
+        css_select("main form[data-turbo-confirm]").map { |form| form["data-turbo-confirm"] }.sole
+      end
+
+      it "says Undo on the summary and on the Account's page, with a confirmation that lists what it deletes in the same words" do
+        [ import_path(import), account_path(account) ].each do |path|
+          get path
+
+          assert_select "main button", text: "Undo"
+          expect(confirmation).to eq("Undo the Import of sept.csv? This deletes its 2 bank transactions.")
+          expect(confirmation).not_to match(retired_terms)
+        end
+
+        get import_path(import)
+
+        expect(visible_text).to include("You can undo this Import until")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "uses the same words when it's refused, because the 24 hours are up or a newer Import is there" do
+        travel_to(25.hours.from_now) do
+          delete import_path(import)
+          follow_redirect!
+
+          expect(visible_text).to include("This Import ran more than 24 hours ago, so it can't be undone.")
+          expect(visible_text).not_to match(retired_terms)
+        end
+
+        newer = nil
+        travel_to(1.hour.from_now) { newer = account.imports.build(csv_format: import.csv_format, file_name: "newer.csv").tap { |i| i.run("2026-10-04,Gym,-30.00\n") } }
+        delete import_path(import)
+        follow_redirect!
+
+        expect(visible_text).to include("This Import can't be undone while a newer Import is in this account. Undo that one first.")
+        expect(visible_text).not_to match(retired_terms)
+        expect(newer).to be_persisted
+      end
+
+      it "says Import undone when it works" do
+        delete import_path(import)
+        follow_redirect!
+
+        expect(visible_text).to include("Import undone.")
+      end
+    end
+
+    it "uses the same words for what went wrong when a file is refused" do
+      post account_imports_path(account), params: { import: { csv_format_id: "", file: Rack::Test::UploadedFile.new(StringIO.new("2026-13-45,Paycheck,2800.00\n"), "text/csv", original_filename: "bad.csv") } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("CSV format can't be blank")
+
+      csv_format_id = Budget::CsvFormat.find_by!(name: "Plain").id
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format_id, file: Rack::Test::UploadedFile.new(StringIO.new("2026-13-45,Paycheck,2800.00\n"), "text/csv", original_filename: "bad.csv") } }
+
+      expect(visible_text).to include("Line 1: the date \"2026-13-45\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+
+      post account_imports_path(account), params: { import: { csv_format_id: csv_format_id } }
+
+      expect(visible_text).to include("Choose a file to import.")
+    end
+
+    it "uses the same words for what went wrong when an Account is refused" do
+      post accounts_path, params: { account: { name: "" } }
+
+      expect(visible_text).to include("Name can't be blank")
+      expect(visible_text).not_to match(/\w+_\w+/)
+    end
+
+    it "uses the same words when an Account with bank transactions can't be deleted, and when a CSV format an Import used can't be" do
+      delete account_path(account)
+      follow_redirect!
+
+      expect(visible_text).to include("This account can't be deleted because it has bank transactions.")
+      expect(visible_text).not_to match(retired_terms)
+
+      delete csv_format_path(import.csv_format)
+      follow_redirect!
+
+      expect(visible_text).to include("This CSV format can't be deleted because an Import used it.")
+      expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  describe "CSV formats" do
+    # A sample sent with the form, which a preview reads without Turbo, so the whole page comes back to be read.
+    def preview(text, **choices)
+      sample = Rack::Test::UploadedFile.new(StringIO.new(text), "text/csv", original_filename: "sample.csv")
+      format = { rows_to_skip: "1", date_column: "1", date_format: "YYYY-MM-DD", description_columns: "2", amount_style: "signed", amount_column: "3" }
+      post csv_format_preview_path, params: { csv_format: format.merge(choices).merge(sample: sample) }
+    end
+
+    it "says what a CSV format reads in the words a person uses, with no column names" do
+      get csv_formats_path
+
+      expect(response.body).not_to match(/budget_/)
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).to include("CIBC", "Date in column 1 as YYYY-MM-DD. Description in columns 2 and 1. Amount in column 3, with money out as a negative amount.")
+    end
+
+    it "uses the same words for what went wrong when a CSV format is refused" do
+      post csv_formats_path, params: { csv_format: { name: "", rows_to_skip: "-1", date_column: "", date_format: "", description_columns: "", amount_style: "direction", direction_column: "" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(visible_text).to include("Name can't be blank", "Rows to skip must be greater than or equal to 0", "Sample file must be chosen, so the columns can be read from it",
+        "Date column can't be blank", "Date format must be chosen", "Description columns can't be blank", "Direction column can't be blank", "Direction for money in can't be blank")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "uses the same words in the preview of how a sample reads" do
+      preview "Date,Description,Amount\n2026-10-01,Paycheck,2800.00\n2026-10-02,Loblaws,-82.45\n2026-10-03,Interest,0.00\n"
+
+      expect(response).to have_http_status(:ok)
+      expect(visible_text).to include("Sample", "Preview", "Skipped", "Oct 1, 2026", "Paycheck", "Money in", "Money out", "2 rows. 1 row of 0 would be skipped.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "uses the same words for the row a file would be refused for, and what's still to choose" do
+      preview "Date,Description,Amount\n13/45/2026,Paycheck,2800.00\n"
+
+      expect(visible_text).to include("This file would be refused. Line 2: the date \"13/45/2026\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).not_to match(retired_terms)
+
+      preview "Date,Description,Amount\n2026-10-01,Paycheck,2800.00\n", date_format: "", amount_column: ""
+
+      expect(visible_text).to include("Finish choosing", "Date format must be chosen", "Amount column can't be blank")
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
     end

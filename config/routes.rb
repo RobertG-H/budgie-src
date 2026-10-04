@@ -30,6 +30,23 @@ Rails.application.routes.draw do
     # Putting an envelope away (create) and taking it back (destroy). It's one archive per envelope.
     resource :archive, only: [ :create, :destroy ], controller: "envelope_archives"
   end
+  # How each bank lays out its CSV download, built from a sample file. The preview is sent the whole form, sample included, and
+  # answers with how the sample reads, so the sample never has to be kept.
+  resources :csv_formats, except: :show
+  # The real accounts that bank transactions come from, and the CSV files read into them. An Import has no page of its own
+  # until it's made, and then it's its summary, which is also where it's undone (destroy).
+  resources :accounts do
+    resources :imports, only: [ :new, :create ]
+  end
+  resources :imports, only: [ :show, :destroy ]
+  # Filing a bank transaction, as the Deposits, Spends and Refunds it was (create), taking that back (destroy), and ignoring
+  # it (and un-ignoring it). Every bank transaction that isn't filed or ignored, across the Accounts, is the Unfiled list.
+  resources :bank_transactions, only: [] do
+    resource :filing, only: [ :new, :create, :destroy ], controller: "bank_transaction_filings"
+    resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"
+  end
+  get "unfiled" => "unfiled_bank_transactions#index", as: :unfiled_bank_transactions
+  post "csv_formats/preview" => "csv_format_previews#create", as: :csv_format_preview
   resources :spends, except: [ :index, :show ]
   resources :refunds, except: [ :index, :show ]
   # One Reallocate form makes either kind of Reallocation, and its To decides which. Editing and deleting are per kind,

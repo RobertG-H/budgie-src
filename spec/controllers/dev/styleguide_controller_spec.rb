@@ -20,7 +20,7 @@ RSpec.describe Dev::StyleguideController, type: :controller do
       it "has a section for each part of the design" do
         with_development_routes { get :show }
 
-        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
+        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Link rows", "Sample grid", "Pager", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
           assert_select "section > h2", text: heading
         end
       end
@@ -41,6 +41,42 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#record-rows ul.list li a.list-row", minimum: 3
         assert_select "#record-rows span.block[class~='text-base-content/70']", minimum: 1
         assert_select "#record-rows span.text-right.tabular-nums", text: "$3,000.00"
+      end
+
+      it "shows record rows that aren't links, with their year, for what's only read" do
+        with_development_routes { get :show }
+
+        assert_select "#record-rows ul.list li div.list-row", minimum: 2
+        assert_select "#record-rows span", text: "Sep 12, 2025"
+      end
+
+      it "shows the pager in the middle of a list, and at its ends" do
+        with_development_routes { get :show }
+
+        assert_select "#pager nav[aria-label=Pages]", count: 3
+        assert_select "#pager a[rel=prev]", count: 2
+        assert_select "#pager a[rel=next]", count: 2
+      end
+
+      it "shows link rows, each a link with its name and a muted line under it" do
+        with_development_routes { get :show }
+
+        assert_select "#link-rows ul.list > li", minimum: 2
+        assert_select "#link-rows ul.list li a.list-row span.font-semibold", minimum: 2
+        assert_select "#link-rows span.block[class~='text-base-content/70']", minimum: 1
+      end
+
+      it "shows a sample grid with numbered columns, and a skipped row" do
+        with_development_routes { get :show }
+
+        assert_select "#sample-grid table thead th[scope=col]", text: "3"
+        assert_select "#sample-grid tbody .badge", text: "Skipped"
+      end
+
+      it "shows a file field" do
+        with_development_routes { get :show }
+
+        assert_select "#fields input[type=file].file-input"
       end
 
       it "shows a stat card that links to the records behind its number" do
@@ -96,10 +132,17 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#fields fieldset p[id$=_hint]"
       end
 
-      it "shows the delete button, which asks first" do
+      it "shows the delete button, which asks first, and with another label, such as Undo" do
         with_development_routes { get :show }
 
         assert_select "#buttons form[data-turbo-confirm] button.btn-ghost.text-error", text: "Delete"
+        assert_select "#buttons form[data-turbo-confirm] button.btn-ghost.text-error", text: "Undo"
+      end
+
+      it "shows the label badge, in a row that isn't a link" do
+        with_development_routes { get :show }
+
+        assert_select "#record-rows li div.list-row .badge", text: "Ignored"
       end
 
       it "shows money columns, with a negative Available that says Overspent" do

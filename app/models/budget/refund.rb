@@ -3,8 +3,11 @@
 # to its Refunded. A Refund isn't linked to any particular Spend. The rest, from its validations to its list order,
 # is in DatedEnvelopeRecord.
 class Budget::Refund < ApplicationRecord
+  include FiledFromBankTransaction
   include DatedEnvelopeRecord
 
   belongs_to :envelope
+  # The bank transaction it was filed from, if one was.
+  filed_from_bank_transaction "Budget::RefundLink"
   refuse_archived_envelopes :envelope
 end

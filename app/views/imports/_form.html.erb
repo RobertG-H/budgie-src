@@ -1,0 +1,17 @@
+<%# locals: (account:, import:, cancel_path:) %>
+<%# The file is read when the form is sent, and isn't kept. The CSV format starts as the one the Account's last Import used. %>
+<%= form_with model: [ account, import ], multipart: true, class: "mt-8 space-y-6" do |form| %>
+  <%= render "form_errors", record: import %>
+
+  <%= render "components/field", form: form, attribute: :file, control: :file, label: "File",
+        hint: "A CSV file from your bank. It's read, and isn't kept." do |field| %>
+    <%= form.file_field :file, accept: ".csv,text/csv", required: true, autofocus: true, **field %>
+  <% end %>
+
+  <%= render "components/field", form: form, attribute: :csv_format_id, control: :select, label: "CSV format",
+        hint: "How your bank lays out its file." do |field| %>
+    <%= form.select :csv_format_id, Current.budget.csv_formats.alphabetical.pluck(:name, :id), { prompt: "Choose a CSV format" }, required: true, **field %>
+  <% end %>
+
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: "Import" %>
+<% end %>

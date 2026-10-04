@@ -7,10 +7,14 @@ namespace :user do
     count = ->(n, noun) { "#{n} #{noun.pluralize(n)}" }
 
     budget = if user.budget
-      "their budget with #{count.(user.budget.envelopes.count, "envelope")}, " \
-        "#{count.(user.budget.deposits.count, "deposit")}, #{count.(user.budget.assignments.count, "assignment")}, " \
-        "#{count.(user.budget.spends.count, "spend")}, #{count.(user.budget.refunds.count, "refund")} and " \
-        "#{count.(user.budget.envelope_reallocations.count + user.budget.ready_to_assign_reallocations.count, "reallocation")}"
+      counts = [
+        [ user.budget.envelopes.count, "envelope" ], [ user.budget.deposits.count, "deposit" ], [ user.budget.assignments.count, "assignment" ],
+        [ user.budget.spends.count, "spend" ], [ user.budget.refunds.count, "refund" ],
+        [ user.budget.envelope_reallocations.count + user.budget.ready_to_assign_reallocations.count, "reallocation" ],
+        [ user.budget.csv_formats.count, "CSV format" ], [ user.budget.accounts.count, "account" ], [ user.budget.imports.count, "import" ],
+        [ user.budget.bank_transactions.count, "bank transaction" ]
+      ]
+      "their budget with #{counts.map { |n, noun| count.(n, noun) }.to_sentence(last_word_connector: " and ")}"
     else
       "no budget"
     end

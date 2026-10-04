@@ -1,5 +1,9 @@
 class Budget::Deposit < ApplicationRecord
+  include FiledFromBankTransaction
+
   belongs_to :budget
+  # The bank transaction it was filed from, if one was.
+  filed_from_bank_transaction "Budget::DepositLink"
 
   normalizes :description, with: ->(description) { description.squish }
   normalizes :month, with: ->(month) { month.beginning_of_month }

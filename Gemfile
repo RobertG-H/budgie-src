@@ -19,6 +19,9 @@ gem "tailwindcss-rails"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
 
+# Reads the CSV files a bank lets people download, for the importer. It stopped being a default gem in Ruby 3.4.
+gem "csv"
+
 # Sign in through external identity providers; there are no passwords [https://github.com/omniauth/omniauth]
 gem "omniauth"
 gem "omniauth-google-oauth2"
