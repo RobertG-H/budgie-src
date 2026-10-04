@@ -11,6 +11,10 @@ A user's whole plan: its envelopes, the money coming in, and where that money ha
 A named part of the budget, such as Groceries or Rent, that keeps its balance from month to month.
 _Avoid_: Category
 
+**Archived envelope**:
+An envelope put away once it is finished with, which needs an Available of 0 and nothing dated after this month. It leaves the pickers and the months where it has nothing to show, keeps its history, and can be unarchived.
+_Avoid_: Hidden, closed
+
 **Starting balance**:
 The amount already in an envelope before Budgie tracked it. It can be negative.
 
