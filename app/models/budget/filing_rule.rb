@@ -159,9 +159,10 @@ class Budget::FilingRule < ApplicationRecord
     def conditions_are_not_another_rules
       return if text.blank? || budget.nil?
 
-      other = budget.filing_rules.where.not(id: id).includes(:envelope).find_by(text: text, account_id: account_id, amount: amount)
+      other = budget.filing_rules.where.not(id: id).includes(:envelope, :account).find_by(text: text, account_id: account_id, amount: amount)
       return unless other
 
-      errors.add(:base, "Another Filing rule already has the same text, Account and amount. It #{other.effect}.")
+      # One for an Account says which, as the filing form's "Updates the Filing rule for 'loblaws' in Chequing" does.
+      errors.add(:base, "Another Filing rule#{" for '#{other.text}' in #{other.account.name}" if other.account} already has the same text, Account and amount. It #{other.effect}.")
     end
 end

@@ -531,4 +531,100 @@ RSpec.describe Budget::BankTransaction, type: :model do
         .to raise_error(ActiveRecord::StatementInvalid, /PG::RestrictViolation/)
     end
   end
+
+  describe "#next_unfiled" do
+    let(:budget) { create(:budget) }
+    let(:account) { create(:budget_account, budget: budget) }
+    let(:scope) { budget.bank_transactions }
+
+    def row(date, **attributes)
+      create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, date), **attributes)
+    end
+
+    it "is the first unfiled bank transaction older than this one, in the order the list has: newest first, by date and then id" do
+      newest = row(20)
+      current = row(15)
+      older = row(10)
+      oldest = row(5)
+
+      expect(newest.next_unfiled(scope: scope)).to eq(current)
+      expect(current.next_unfiled(scope: scope)).to eq(older)
+      expect(older.next_unfiled(scope: scope)).to eq(oldest)
+    end
+
+    it "goes by id for bank transactions of the same date, the later id being the newer" do
+      first = row(15)
+      second = row(15)
+      third = row(15)
+
+      expect(third.next_unfiled(scope: scope)).to eq(second)
+      expect(second.next_unfiled(scope: scope)).to eq(first)
+    end
+
+    it "wraps to the newest unfiled one left when there's none older, so working from the middle of the list finishes it" do
+      newest = row(20)
+      current = row(15)
+      oldest = row(5)
+
+      expect(oldest.next_unfiled(scope: scope)).to eq(newest)
+      expect(current.next_unfiled(scope: scope)).to eq(oldest)
+    end
+
+    it "wraps to the newest one when the only one that's left is newer" do
+      newer = row(20)
+      current = row(15)
+
+      expect(current.next_unfiled(scope: scope)).to eq(newer)
+    end
+
+    it "is nothing when no other bank transaction is unfiled, and never the one it's asked about" do
+      current = row(15)
+      create(:budget_bank_transaction, :filed, account: account, date: Date.new(2026, 9, 10))
+
+      expect(current.next_unfiled(scope: scope)).to be_nil
+    end
+
+    it "never offers one that's filed or ignored, whichever side of this one it's on" do
+      row(20, amount: -5).tap { |newer| create(:budget_spend_link, bank_transaction: newer) }
+      current = row(15)
+      create(:budget_bank_transaction, :ignored, account: account, date: Date.new(2026, 9, 10))
+      older_filed = create(:budget_bank_transaction, :filed, account: account, date: Date.new(2026, 9, 5))
+      unfiled = row(1)
+
+      expect(older_filed).to be_filed
+      expect(current.next_unfiled(scope: scope)).to eq(unfiled)
+    end
+
+    it "is judged when it's asked, so one that has just been filed is never offered" do
+      current = row(15)
+      just_filed = row(10)
+      older = row(5)
+      create(:budget_spend_link, bank_transaction: just_filed)
+
+      expect(current.next_unfiled(scope: scope)).to eq(older)
+    end
+
+    it "stays in the scope it's given: one Account's, and the budget's own, never another budget's" do
+      other_account = create(:budget_account, budget: budget)
+      current = row(15)
+      in_other_account = create(:budget_bank_transaction, account: other_account, date: Date.new(2026, 9, 10))
+      someone_elses = create(:budget_bank_transaction, date: Date.new(2026, 9, 12))
+
+      expect(current.next_unfiled(scope: scope)).to eq(in_other_account)
+      expect(current.next_unfiled(scope: account.bank_transactions)).to be_nil
+      expect(current.next_unfiled(scope: scope)).not_to eq(someone_elses)
+    end
+
+    it "is found with one query, wrap included" do
+      current = row(15)
+      5.times { |n| row(n + 1) }
+      older = row(1)
+
+      queries = count_queries { current.next_unfiled(scope: scope) }
+      old_queries = count_queries { older.next_unfiled(scope: scope) }
+
+      expect(queries).to eq(1)
+      expect(old_queries).to eq(1)
+    end
+  end
 end

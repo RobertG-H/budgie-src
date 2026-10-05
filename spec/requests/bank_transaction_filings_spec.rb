@@ -31,6 +31,8 @@ RSpec.describe "Filing bank transactions", type: :request do
 
   describe "GET /bank_transactions/:bank_transaction_id/filing/new" do
     it "shows the bank transaction, and a form to file it as one record, with a File button, an Ignore button and Cancel" do
+      money_in.ignore # the only other unfiled one, so there's no next to go on to (see "File and next")
+
       get new_bank_transaction_filing_path(money_out, from: "account")
 
       expect(response).to have_http_status(:ok)
@@ -270,7 +272,7 @@ RSpec.describe "Filing bank transactions", type: :request do
       assert_select "[data-filing-split-target=total]", text: "Adds up to $90.00 of $100.00, with $10.00 left."
       assert_select "[data-filing-split-target=records] fieldset button[data-action='filing-split#removeRecord'][hidden]", count: 0
       assert_select "[data-filing-split-target=records] fieldset legend[hidden]", count: 0
-      expect(css_select("[data-filing-split-target=records] legend").map { |legend| legend.text.squish }).to eq([ "Record 1", "Record 2" ])
+      expect(css_select("[data-filing-split-target=records] legend[data-filing-split-target=legend]").map { |legend| legend.text.squish }).to eq([ "Record 1", "Record 2" ])
     end
 
     it "says by how much they're over, in words, when they add up to more" do

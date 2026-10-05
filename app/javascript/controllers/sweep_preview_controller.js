@@ -4,17 +4,31 @@ import { Controller } from "@hotwired/stimulus"
 // updates a rule that's there, and how many unfiled bank transactions it would file or ignore, which a person looks at before ticking the box
 // that does it. It's the form's own fields for the rule, the ones whose names start with `scope`, sent to `url` after a pause, and the frame
 // that answers is the one that holds the box, so the server decides what the numbers are and there's no matching written in JavaScript.
-// The box is sent along, so that it stays as it was ticked. Without JavaScript the numbers are the ones the form started with.
+// The box is sent along, so that it stays as it was ticked. Without JavaScript the numbers are the ones the form started with. A sentence that
+// says the rule's text, as the filing form's does under "Always file like this", marks it as an `echo`, which is kept as the text is edited,
+// normalised nearly as a rule keeps it (trimmed, its spaces collapsed and in lower case), which is only to show: the server decides what the text is. A sentence that also says which Account the rule is for has a
+// `variant` for each choice (`data-variant` is `pinned` or `any`), and the one the Account radio buttons choose is the one that's shown.
 export default class extends Controller {
-  static targets = [ "frame" ]
+  static targets = [ "frame", "echo", "variant" ]
   static values = { url: String, scope: String, delay: { type: Number, default: 300 } }
 
   // The frame's own box doesn't change what the numbers are.
   update(event) {
     if (event.target.closest("turbo-frame")) return
 
+    if (event.target.name === `${this.scopeValue}[text]`) this.echo(event.target.value)
+    if (event.target.name === `${this.scopeValue}[account_id]`) this.choose(event.target.value === "" ? "any" : "pinned")
     clearTimeout(this.timer)
     this.timer = setTimeout(() => this.refresh(), this.delayValue)
+  }
+
+  choose(variant) {
+    this.variantTargets.forEach((target) => { target.hidden = target.dataset.variant !== variant })
+  }
+
+  echo(text) {
+    const normalized = text.trim().replace(/\s+/g, " ").toLowerCase()
+    this.echoTargets.forEach((target) => { target.textContent = normalized })
   }
 
   refresh() {

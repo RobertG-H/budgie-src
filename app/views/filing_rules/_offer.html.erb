@@ -1,22 +1,37 @@
-<%# locals: (offer:) %>
-<%# "Always file like this", on the filing form: a Filing rule made from what's done to this bank transaction, whether that's filing it or ignoring it, which files or ignores the bank transactions that come in with the same text in their description, the same way. The text starts as the bank's whole description, normalised, and can be trimmed right there. It has no Account or amount, which is for the Filing rules page, and it's never offered for a split, which the filing-split controller turns off by disabling this fieldset. A description too short to make a rule from says so instead. %>
+<%# "Always file like this", on the filing form: a Filing rule made from what's done to this bank transaction, whether that's filing it or ignoring it, which files or ignores the bank transactions that come in with the same text in their description, the same way. It's the box and one muted sentence of what it would do, and the rest is under "Edit rule", closed to start with: the text, which starts as the bank's whole description, normalised, and can be trimmed right there, and what saving it would do to the bank transactions that are already there. It opens itself when the rule has an error, when the text was changed from the bank's, and when it would update a rule that's there, so nothing that needs attention is hidden. It's for the bank transaction's own Account to start with, and "Any account" is the other choice, never another Account, since the rule has to fit the bank transaction it's made from. It has no amount condition, which is for the Filing rules page, and it's never offered for a split, which the filing-split controller turns off by disabling this fieldset. A description too short to make a rule from says so instead. %>
 <% if offer.available? %>
   <%= render "components/panel", tag: :fieldset, class: "space-y-4",
         data: { filing_split_target: "rule", controller: "sweep-preview", sweep_preview_url_value: bank_transaction_rule_preview_path(offer.bank_transaction),
                 sweep_preview_scope_value: "filing[rule]" } do %>
     <legend class="px-2 font-medium">Filing rule</legend>
     <%= fields_for "filing[rule]", offer do |rule_form| %>
-      <%= render "components/field", form: rule_form, attribute: :make, control: :checkbox, label: "Always file like this",
-            hint: "Bank transactions with this text in their description are filed, or ignored, the way you do this one, as they come in." do |field| %>
+      <%= render "components/field", form: rule_form, attribute: :make, control: :checkbox, label: "Always file like this", hint: filing_rule_sentence(offer) do |field| %>
         <%= rule_form.check_box :make, **field %>
       <% end %>
 
-      <%= render "components/field", form: rule_form, attribute: :text, label: "Text to look for",
-            hint: "Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
-        <%= rule_form.text_field :text, data: { action: "input->sweep-preview#update" }, **field %>
-      <% end %>
+      <details <%= "open" if offer.needs_attention? %>>
+        <summary class="cursor-pointer font-medium">Edit rule</summary>
+        <div class="space-y-4 pt-4">
+          <%= render "components/field", form: rule_form, attribute: :text, label: "Text to look for",
+                hint: "Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
+            <%= rule_form.text_field :text, data: { action: "input->sweep-preview#update" }, **field %>
+          <% end %>
 
-      <%= render "filing_rules/offer_preview", offer: offer %>
+          <%# Two choices and not a select of every Account: a rule for another Account wouldn't fit this bank transaction. The sweep-preview controller asks for the count again, and changes the sentence above, when it's chosen. %>
+          <%= render "components/field", form: rule_form, attribute: :account_id, control: :radios, label: "Account" do |field| %>
+            <label class="flex items-center gap-3">
+              <%= rule_form.radio_button :account_id, offer.bank_transaction.account_id, data: { action: "input->sweep-preview#update" }, **field %>
+              <span>Only in <%= offer.account_name %></span>
+            </label>
+            <label class="flex items-center gap-3">
+              <%= rule_form.radio_button :account_id, "", data: { action: "input->sweep-preview#update" }, **field %>
+              <span>Any account</span>
+            </label>
+          <% end %>
+
+          <%= render "filing_rules/offer_preview", offer: offer %>
+        </div>
+      </details>
     <% end %>
   <% end %>
 <% else %>

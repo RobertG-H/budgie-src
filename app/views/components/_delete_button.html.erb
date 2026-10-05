@@ -1,4 +1,4 @@
-<%# locals: (path:, confirm:, params: {}, label: "Delete") %>
-<%# A button that deletes the record at `path` once the question in `confirm` has been answered yes. `params` go along with it, such as the page the record was opened from. `label` is what it says, which is Delete unless it takes something back, such as Undo. It's a form of its own, so it can't sit inside another form: put it in a page's header actions. %>
+<%# locals: (path:, confirm:, params: {}, label: "Delete", size: nil) %>
+<%# A button that deletes the record at `path` once the question in `confirm` has been answered yes. `params` go along with it, such as the page the record was opened from. `label` is what it says, which is Delete unless it takes something back, such as Undo. `size` is `:sm` for the small button that sits in a row of a table, and the full-size one otherwise. It's a form of its own, so it can't sit inside another form: put it in a page's header actions or a cell of a table. %>
 <%= button_to label, path, method: :delete, params: params, form: { data: { turbo_confirm: confirm } },
-      class: "btn btn-ghost text-error" %>
+      class: [ "btn btn-ghost text-error", ("btn-sm" if size == :sm) ] %>

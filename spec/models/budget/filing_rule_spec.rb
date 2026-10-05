@@ -126,6 +126,16 @@ RSpec.describe Budget::FilingRule do
       expect(duplicate.errors.full_messages).to eq([ "Another Filing rule already has the same text, Account and amount. It files them as Spend from Groceries." ])
     end
 
+    it "say which Account when the other rule is for one, as the filing form's update line does" do
+      account = create(:budget_account, budget: budget, name: "Chequing")
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws", account: account)
+
+      duplicate = rule(outcome: "ignore", account: account)
+
+      expect(duplicate).not_to be_valid
+      expect(duplicate.errors.full_messages).to eq([ "Another Filing rule for 'loblaws' in Chequing already has the same text, Account and amount. It files them as Spend from Groceries." ])
+    end
+
     it "differ by Account or by amount, and another budget's rules don't count" do
       account = create(:budget_account, budget: budget)
       create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")

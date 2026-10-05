@@ -1,7 +1,11 @@
-<%# locals: (form:, cancel_path:, submit: nil) %>
-<%# What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. The button says "Create Spend" or "Update Spend" unless `submit` says something else, such as "Import". The block, if there is one, is more buttons, between the main action and Cancel. %>
+<%# locals: (form:, cancel_path:, submit: nil, autofocus: false, submit_name: nil) %>
+<%# What ends a form: its submit button, the main action, and a Cancel link back to the page it was opened from. The button says "Create Spend" or "Update Spend" unless `submit` says something else, such as "Import". The block, if there is one, is more buttons, between the main action and Cancel. `autofocus` starts focus on the main action, for a form whose fields don't need it first. `submit_name` makes it a button that sends that name with a 1, for a form whose main action is one of several that the server tells apart, such as "File and next". %>
 <div class="flex flex-wrap items-center gap-4">
-  <%= form.submit submit, class: "btn btn-primary" %>
+  <% if submit_name %>
+    <%= button_tag submit, type: "submit", name: submit_name, value: 1, class: "btn btn-primary", autofocus: (true if autofocus) %>
+  <% else %>
+    <%= form.submit submit, class: "btn btn-primary", autofocus: (true if autofocus) %>
+  <% end %>
   <%= yield %>
   <%= link_to "Cancel", cancel_path, class: "btn btn-ghost" %>
 </div>

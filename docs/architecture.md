@@ -358,6 +358,19 @@ and the server refuses a form that doesn't add up, saying by how much, and keeps
 Spends, money in any mix of Deposits and Refunds, and one invalid record means none are created. Un-filing deletes every record, and
 wherever a bank transaction shows what it was filed as, its records are listed together.
 
+**The common case first.** For one record the filing form shows the choice and little else: the envelope (and the kind, for money in), "Always file like this" with one
+sentence of what it would do, and File. What's rarely changed is under a closed `<details>`: "Edit details" holds the description, date, amount, a Deposit's month and notes, with a line saying
+what's in it so that closing it isn't a mystery, and "Edit rule" holds the rule's text. Nothing that needs attention is left in a closed section, so they open themselves for a split (every
+record's amount is needed), for an error in them, for a field changed from the bank's own on a form that comes back refused, for a rule text that was changed or that would update a rule that's
+there, and a browser's invalid field opens the section that holds it, since it can't focus a field in a closed one and File would silently do nothing. A Guess changes only the kind and the
+envelope, so it never opens them. Focus starts on the envelope when it's still to choose, and otherwise on File.
+
+**File and next.** A pile of unfiled bank transactions is worked through without going back to the list after each one. When the filing form was opened from the Bank transactions page (in its Account, if it was
+filtered to one) or from an Account's page, **File and next** and **Ignore and next** do what File and Ignore do and then open the next unfiled bank transaction's form: the next one older in the list's order, and when there's none older, the
+newest one left, so working from the middle of the list still finishes it. The next form carries the same way back and starts on its own Guess, and the notice ("Bank transaction filed.") shows above it. When none is left, it goes back to the list
+with "Bank transaction filed. No more unfiled bank transactions." Which one is next is judged after the filing, and after a rule from the form has swept, so what was just filed is never offered; a refusal stays on the same form. It's one query, run only
+when the buttons are drawn or "and next" is pressed. A form that wasn't opened from a list has no next, and its buttons are File, Ignore and Cancel as before.
+
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
 or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
@@ -384,8 +397,7 @@ or un-ignored; the filed records are ordinary ([ADR 0002](adr/0002-budget-record
 never changes what it already filed.
 
 **Always file like this.** Filing or ignoring a bank transaction by hand offers to make a rule from what was done, ticked by default: the text starts as the
-bank's whole description, and can be trimmed right there, before the wrong rule is made, and it has no Account or amount condition. A rule with identical conditions
-is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
+bank's whole description, and can be trimmed right there, before the wrong rule is made. It's for the bank transaction's own Account to start with, since a rule for "loblaws" in one Account usually shouldn't act on another's, and a person can choose any account instead; it's never for another Account, which wouldn't fit the bank transaction it's made from, and it has no amount condition. The sentence under the box says which Account it's for, and the count of other unfiled bank transactions it would file follows the choice. A rule with identical conditions (the same text and Account) is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
 filing as one record and when ignoring, and never for a split, since a split has no one outcome to repeat.
 
 **Sweeping what's already there.** A rule made after an Import has nothing to act on, so saving one can also file the unfiled bank transactions it already fits. Rules still never
@@ -395,8 +407,8 @@ sweeps the bank transactions where the new rule is the most specific one that fi
 the ones that went the same way, so an Ignore rule that fits money in and out doesn't act on the other way's. The rule, the filing and the sweep are one database transaction. A bank transaction that a rule fits but a more specific rule files isn't counted, and the form says so, since "no other
 bank transactions fit" would be untrue.
 
-**Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each says how
-many bank transactions it filed or ignored, counting only those that still are. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact
+**Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each section is a table of what its rules match and do: the text,
+what it does (Spend, Refund, Deposit or Ignore), its Account and amount (or "Any"), and how many bank transactions it filed or ignored, counting only those that still are. A rule can be edited or deleted from its row, and deleting asks first, names the rule and says that what it filed stays as it is; the page keeps its place after a delete. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact
 amount if it needs them, and edited or deleted. Because a filed record is ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), changing or deleting a rule only
 affects what comes in from then on; fixing what it already did means un-filing and filing again. A rule for an archived envelope is flagged inactive, in words, and does nothing until the envelope is
 unarchived. Two rules with the same conditions aren't allowed, and the page says what the other one does.

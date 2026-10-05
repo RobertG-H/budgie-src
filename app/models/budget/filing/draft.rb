@@ -27,6 +27,15 @@ class Budget::Filing::Draft
           amount: bank_transaction.amount.abs, notes: "" }.merge(attributes))
   end
 
+  # Whether anything the filing form keeps under "Edit details" differs from how the bank transaction starts: its description, date or amount isn't
+  # the bank's own, a Deposit's month isn't its date's, or there are notes. A form that comes back refused with one of them changed has to show it.
+  def edited_from?(bank_transaction)
+    starting = self.class.for(bank_transaction)
+
+    notes.present? || description != starting.description || date != starting.date ||
+      BigDecimal(amount.to_s, exception: false) != starting.amount || (month.present? && month != bank_transaction.date.beginning_of_month)
+  end
+
   # The record it asks for, not saved. An envelope that isn't one of the `envelopes`, which are the budget's own and by id, is no
   # envelope, which the record refuses: another budget's, or one that doesn't exist, can't be filed into.
   def build_record(budget, envelopes)

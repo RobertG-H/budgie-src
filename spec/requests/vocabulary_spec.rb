@@ -278,7 +278,7 @@ RSpec.describe "The words on the pages", type: :request do
 
       it "says Filing rule, and what a rule did, in words: on the filing form with the box and its message, on the summary and on an Account's page" do
         budget_groceries = groceries
-        create(:budget_filing_rule, budget: budget, envelope: budget_groceries, text: "loblaws")
+        create(:budget_filing_rule, budget: budget, envelope: budget_groceries, text: "loblaws", account: account)
         create(:budget_filing_rule, :ignore, budget: budget, text: "hydro")
         hydro = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
         Budget::FilingRule::Applier.new(budget).apply([ hydro.reload ])
@@ -286,7 +286,7 @@ RSpec.describe "The words on the pages", type: :request do
 
         get new_bank_transaction_filing_path(loblaws_row, from: "account")
 
-        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files them as Spend from Groceries now.",
+        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws' in Chequing, which files them as Spend from Groceries now.",
           "1 other unfiled bank transaction fits.", "File or ignore them the same way now", "Only the ones that went the same way as this one.")
 
         get bank_transaction_rule_preview_path(loblaws_row), params: { filing: { rule: { text: "loblaws", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
@@ -311,6 +311,30 @@ RSpec.describe "The words on the pages", type: :request do
         expect(visible_text).to include("Filed by Filing rules", "Ignored by Filing rules")
         expect(visible_text).not_to match(/\w+_\w+/)
         expect(response.body).not_to match(/filed_by_rules|ignored_by_rules/)
+      end
+
+      it "says File and next, Ignore and next, Edit details and Edit rule, and what happens when none is left, in words" do
+        # Paycheck and Loblaws are the two unfiled bank transactions of the Import above.
+        get new_bank_transaction_filing_path(paycheck_row, from: "bank_transactions", filter: { state: "unfiled" })
+
+        expect(visible_text).to include("File and next", "Ignore and next", "Edit details", "Paycheck · Oct 1, 2026 · $2,800.00", "Edit rule", "Always file like this", "Only in Chequing", "Any account",
+          "Chequing bank transactions with 'paycheck' in their description are filed the same way as they come in.",
+          "Bank transactions in any account with 'paycheck' in their description are filed the same way as they come in.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_ignore_path(paycheck_row), params: { next: "1", from: "bank_transactions", filter: { state: "unfiled" } }
+        follow_redirect!
+
+        expect(Nokogiri::HTML(response.body).text.squish).to include("Bank transaction ignored.")
+        expect(visible_text).not_to include("and next")
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_ignore_path(loblaws_row), params: { next: "1", from: "bank_transactions", filter: { state: "unfiled" } }
+        follow_redirect!
+
+        expect(Nokogiri::HTML(response.body).text.squish).to include("Bank transaction ignored. No more unfiled bank transactions.")
+        expect(Nokogiri::HTML(response.body).text.squish).not_to match(retired_terms)
       end
 
       it "says Guess, and which bank transaction it was like, on the filing form, in words" do

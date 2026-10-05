@@ -47,4 +47,31 @@ module BankTransactionsHelper
       "Adds up to #{total} of #{amount}, which is #{money(remaining.abs, budget: budget)} over."
     end
   end
+
+  # Whether a record still has an envelope to choose, which is where the filing form's focus starts: a Spend or a Refund with none. Otherwise it
+  # starts on File, since a Deposit has no envelope and a Guess has chosen one. Never a field inside "Edit details".
+  def filing_envelope_to_choose?(draft)
+    draft.kind != "deposit" && draft.envelope_id.blank?
+  end
+
+  # The fields of a record the filing form keeps under "Edit details", which a record's error on any of opens it.
+  FILING_DETAIL_FIELDS = %i[ description date amount month notes ].freeze
+
+  # Whether a record's "Edit details" is open: nothing that needs a person's attention is ever left in a closed section. It is for a split,
+  # which needs every record's amount; for a record with an error in it; and for one that comes back with something in it changed from the
+  # bank's own. A Guess only changes the kind and the envelope, which aren't in it, so it never opens it.
+  def filing_details_open?(entry, draft)
+    entry.drafts.size > 1 || draft.errors.attribute_names.intersect?(FILING_DETAIL_FIELDS) || draft.edited_from?(entry.bank_transaction)
+  end
+
+  # What "Edit details" holds, in a line under its name so that closing it isn't a mystery: "LOBLAWS #1234 · Oct 3, 2026 · $82.45", with
+  # ", counts toward November" for a Deposit that's saved for the month after its date. What isn't there yet, or isn't a figure, is left out.
+  # The filing-details controller keeps it in step with the fields in the same words.
+  def filing_details_summary(draft, budget)
+    amount = BigDecimal(draft.amount.to_s, exception: false)
+    parts = [ draft.description.to_s.squish.presence, (spelled_date(draft.date) if draft.date), (money(amount, budget: budget) if amount) ].compact.join(" · ")
+    return parts unless draft.kind == "deposit" && draft.date && draft.month && draft.month != draft.date.beginning_of_month
+
+    "#{parts}, counts toward #{draft.month.strftime(draft.month.year == draft.date.year ? "%B" : "%B %Y")}"
+  end
 end

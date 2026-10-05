@@ -25,7 +25,12 @@ RSpec.describe "Filing rules", type: :request do
   end
 
   describe "GET /filing_rules" do
-    it "lists every rule grouped by what it sets: one section per envelope alphabetically, then Deposit, then Ignore" do
+    # What a table says, a row at a time, as the text of its cells: Text, Does, Account, Amount, Filed count and the actions.
+    def tables
+      css_select("main section").map { |section| section.css("tbody tr").map { |row| row.css("th, td").map { |cell| cell.text.squish } } }
+    end
+
+    it "lists every rule grouped by what it sets, a table for each: one section per envelope alphabetically, then Deposit, then Ignore" do
       create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
       create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco", account: chequing)
       create(:budget_filing_rule, :refund, budget: budget, envelope: groceries, text: "loblaws return")
@@ -39,14 +44,13 @@ RSpec.describe "Filing rules", type: :request do
       assert_select "title", text: "Filing rules · Budgie"
       assert_select "h1", text: "Filing rules"
       expect(css_select("main h2").map { |heading| heading.text.squish }).to eq([ "Eating out", "Groceries", "Deposit", "Ignore" ])
-      sections = css_select("main section").map { |section| section.css("li").map { |row| row.text.squish } }
-      expect(sections).to eq([
-        [ "pizza nova Spend from Eating out. Any account. Exactly -$25.00. No bank transactions filed or ignored yet." ],
-        [ "costco Spend from Groceries. In Chequing. Any amount. No bank transactions filed or ignored yet.",
-          "loblaws Spend from Groceries. Any account. Any amount. No bank transactions filed or ignored yet.",
-          "loblaws return Refund to Groceries. Any account. Any amount. No bank transactions filed or ignored yet." ],
-        [ "acme payroll Deposit. Any account. Any amount. No bank transactions filed or ignored yet." ],
-        [ "payment thank you Ignore. Any account. Any amount. No bank transactions filed or ignored yet." ]
+      expect(tables).to eq([
+        [ [ "pizza nova", "Spend", "Any account", "-$25.00", "0", "Edit Delete" ] ],
+        [ [ "costco", "Spend", "Chequing", "Any amount", "0", "Edit Delete" ],
+          [ "loblaws", "Spend", "Any account", "Any amount", "0", "Edit Delete" ],
+          [ "loblaws return", "Refund", "Any account", "Any amount", "0", "Edit Delete" ] ],
+        [ [ "acme payroll", "Deposit", "Any account", "Any amount", "0", "Edit Delete" ] ],
+        [ [ "payment thank you", "Ignore", "Any account", "Any amount", "0", "Edit Delete" ] ]
       ])
     end
 
@@ -58,15 +62,95 @@ RSpec.describe "Filing rules", type: :request do
       expect(css_select("main h2").map { |heading| heading.text.squish }).to eq([ "Groceries" ])
     end
 
-    it "links each rule to where it's edited" do
+    it "has a table for each section, with the columns in their order, a caption that names it, and an Actions column that has no visible heading" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+      create(:budget_filing_rule, :ignore, budget: budget, text: "payment thank you")
+
+      get filing_rules_path
+
+      assert_select "main section", count: 2
+      assert_select "main section table.table.table-sm", count: 2
+      expect(css_select("main section table caption.sr-only").map(&:text)).to eq([ "Groceries", "Ignore" ])
+      headings = css_select("main section:first-of-type thead th")
+      expect(headings.map { |heading| heading.text.squish }).to eq([ "Text", "Does", "Account", "Amount", "Filed count", "Actions" ])
+      expect(headings.last.at("span.sr-only").text).to eq("Actions")
+      expect(headings.map { |heading| heading["scope"] }.uniq).to eq([ "col" ])
+    end
+
+    it "scrolls each table sideways in its own wrapper, and never the page, and keeps the Text, which links to the edit page, as the first column" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+
+      get filing_rules_path
+
+      assert_select "main section > div.overflow-x-auto.rounded-box.border.border-base-300 > table.table"
+      assert_select "main section thead th:first-child", text: "Text"
+    end
+
+    it "says the figures in the cells: the amount signed and red when it's money out, right-aligned with the filed count, and muted when there's none" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws", amount: -82.45, account: chequing)
+      create(:budget_filing_rule, :refund, budget: budget, envelope: groceries, text: "loblaws return")
+
+      get filing_rules_path
+
+      priced, plain = css_select("main tbody tr")
+      expect(priced.css("td")[2].text.squish).to eq("-$82.45")
+      expect(priced.css("td")[2]["class"]).to include("text-right", "tabular-nums")
+      expect(priced.css("td")[2].at("span.text-error").text).to eq("-$82.45")
+      expect(priced.css("td")[3]["class"]).to include("text-right", "tabular-nums")
+      expect(plain.css("td")[1].at("span")["class"]).to include("text-base-content/70")
+      expect(plain.css("td")[2].at("span")["class"]).to include("text-base-content/70")
+      expect(plain.css("td")[2].text.squish).to eq("Any amount")
+    end
+
+    it "has the Text as the only link but the Edit button, which both go to where it's edited" do
       rule = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
 
       get filing_rules_path
 
-      assert_select "li a.list-row[href='#{edit_filing_rule_path(rule)}']", text: /loblaws/
+      assert_select "main tbody tr th a.link[href='#{edit_filing_rule_path(rule)}']", text: "loblaws"
+      assert_select "main tbody tr td a.btn.btn-ghost.btn-sm[href='#{edit_filing_rule_path(rule)}']", text: "Edit"
+      expect(css_select("main tbody a").size).to eq(2)
+      assert_select "main li", count: 0
     end
 
-    it "says how many bank transactions each rule filed or ignored, counting only the ones that still are" do
+    it "has a Delete button in the row that asks first, naming the rule, and then deletes it" do
+      rule = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+
+      get filing_rules_path
+
+      assert_select "main tbody tr td form[action='#{filing_rule_path(rule)}'][method=post][data-turbo-confirm]" do
+        assert_select "input[name='_method'][value=delete]"
+        assert_select "button.btn.btn-ghost.btn-sm.text-error", text: "Delete"
+      end
+      expect(css_select("main tbody form button, main tbody a").size).to eq(3)
+    end
+
+    it "asks 'Delete the Filing rule for 'loblaws'?' and says what stays, with the row's own count: none, one, or several" do
+      none = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco")
+      one = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+      many = create(:budget_filing_rule, :ignore, budget: budget, text: "payment thank you")
+      account = create(:budget_account, budget: budget)
+      create(:budget_bank_transaction, :filed, account: account).update_columns(filing_rule_id: one.id)
+      3.times { create(:budget_bank_transaction, :ignored, account: account).update_columns(filing_rule_id: many.id) }
+
+      get filing_rules_path
+
+      question = ->(rule) { css_select("form[action='#{filing_rule_path(rule)}']").first["data-turbo-confirm"] }
+      expect(question.(none)).to eq("Delete the Filing rule for 'costco'?")
+      expect(question.(one)).to eq("Delete the Filing rule for 'loblaws'? The bank transaction it filed or ignored stays as it is.")
+      expect(question.(many)).to eq("Delete the Filing rule for 'payment thank you'? The 3 bank transactions it filed or ignored stay as they are.")
+    end
+
+    it "escapes the text in the question and in the row, since it's whatever someone typed" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "<b>bold</b> 'quote'")
+
+      get filing_rules_path
+
+      assert_select "main b", count: 0
+      expect(css_select("main form[data-turbo-confirm]").first["data-turbo-confirm"]).to eq("Delete the Filing rule for '<b>bold</b> 'quote''?")
+    end
+
+    it "says how many bank transactions each rule filed or ignored in the Filed count, counting only the ones that still are" do
       loblaws = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
       payment = create(:budget_filing_rule, :ignore, budget: budget, text: "payment thank you")
       account = create(:budget_account, budget: budget)
@@ -76,21 +160,47 @@ RSpec.describe "Filing rules", type: :request do
 
       get filing_rules_path
 
-      expect(visible_text).to include("loblaws Spend from Groceries. Any account. Any amount. 2 bank transactions filed or ignored.")
-      expect(visible_text).to include("payment thank you Ignore. Any account. Any amount. 1 bank transaction filed or ignored.")
+      expect(tables).to eq([
+        [ [ "loblaws", "Spend", "Any account", "Any amount", "2", "Edit Delete" ] ],
+        [ [ "payment thank you", "Ignore", "Any account", "Any amount", "1", "Edit Delete" ] ]
+      ])
+      expect(visible_text).to include("Filed count is how many bank transactions a rule filed or ignored that still are.")
     end
 
-    it "marks a rule on an archived envelope inactive, in words, and not only by colour" do
+    it "marks a rule on an archived envelope Inactive in words, once under the section's heading, and with a badge in each of its rows" do
       envelope = create(:budget_envelope, budget: budget, name: "Old gym")
       create(:budget_filing_rule, budget: budget, envelope: envelope, text: "gym membership")
+      create(:budget_filing_rule, :refund, budget: budget, envelope: envelope, text: "gym refund")
       envelope.archive!
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
 
       get filing_rules_path
 
-      row = css_select("main li").find { |li| li.text.include?("gym membership") }
-      expect(row.text.squish).to eq("gym membership Inactive Spend from Old gym. Any account. Any amount. No bank transactions filed or ignored yet. Inactive while its envelope is archived.")
-      assert_select "main h2", text: /Old gym/
-      expect(css_select("main h2").first.text.squish).to eq("Old gym Archived")
+      expect(css_select("main h2").map { |heading| heading.text.squish }).to eq([ "Groceries", "Old gym Archived" ])
+      old_gym = css_select("main section").last
+      expect(old_gym.text.scan("Inactive while its envelope is archived.").size).to eq(1)
+      expect(old_gym.at("h2").next_element.text.squish).to eq("Inactive while its envelope is archived.")
+      expect(old_gym.css("tbody tr").map { |row| row.at("th").text.squish }).to eq([ "gym membership Inactive", "gym refund Inactive" ])
+      expect(old_gym.css("tbody tr th .badge").map(&:text)).to eq([ "Inactive", "Inactive" ])
+      expect(css_select("main section").first.text).not_to include("Inactive")
+    end
+
+    it "no longer says the long sentence of what a rule does in each row" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+
+      get filing_rules_path
+
+      expect(visible_text).not_to include("filed or ignored yet")
+      expect(visible_text).not_to include("Spend from Groceries")
+    end
+
+    it "refreshes the page in place when it's sent back to itself, keeping the scroll, so a delete leaves a person where they were" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+
+      get filing_rules_path
+
+      assert_select "meta[name='turbo-refresh-method'][content=morph]"
+      assert_select "meta[name='turbo-refresh-scroll'][content=preserve]"
     end
 
     it "says there are none, with a way to make one" do
@@ -276,6 +386,14 @@ RSpec.describe "Filing rules", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       assert_select "[role=alert]", text: /Another Filing rule already has the same text, Account and amount. It files them as Spend from Groceries./
       expect(existing.reload.envelope).to eq(groceries)
+    end
+
+    it "says which Account the other rule is for when it's for one" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws", account: chequing)
+
+      expect { post filing_rules_path, params: rule_params(envelope_id: dining.id, account_id: chequing.id) }.not_to change(Budget::FilingRule, :count)
+
+      assert_select "[role=alert]", text: /Another Filing rule for 'loblaws' in Chequing already has the same text, Account and amount. It files them as Spend from Groceries./
     end
 
     it "says so, and not with an error page, when a rule with the same text was saved a moment ago, which only the unique index sees" do
@@ -515,6 +633,7 @@ RSpec.describe "Filing rules", type: :request do
 
       expect { delete filing_rule_path(rule) }.to change(Budget::FilingRule, :count).by(-1)
 
+      expect(response).to have_http_status(:see_other)
       expect(response).to redirect_to(filing_rules_path)
       follow_redirect!
       assert_select "[role=status]", text: "Filing rule deleted."

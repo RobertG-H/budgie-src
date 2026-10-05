@@ -5,13 +5,14 @@ class BankTransactionIgnoresController < ApplicationController
   include FilingFormParams
 
   # Ignores it, and makes an Ignore rule from it if "Always file like this" was ticked, in the same database transaction. Ignore is a
-  # button on the filing form, which sends the whole form, so a rule that's refused comes back as the form, as it was.
+  # button on the filing form, which sends the whole form, so a rule that's refused comes back as the form, as it was. "Ignore and next" goes on
+  # to the next unfiled bank transaction's form when it's done, as "File and next" does.
   def create
     drafts = submitted_drafts
     @offer = filing_rule_offer(records: drafts.size)
 
     if @offer.make? ? @offer.ignore : @bank_transaction.ignore
-      redirect_to origin_path, notice: notice_with_sweep("Bank transaction ignored.", @offer)
+      redirect_after_filing notice_with_sweep("Bank transaction ignored.", @offer)
     else
       @entry = Budget::Filing::Entry.new(bank_transaction: @bank_transaction, drafts: drafts)
       render "bank_transaction_filings/new", status: :unprocessable_content
