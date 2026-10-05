@@ -48,6 +48,16 @@ class Budget::BankTransaction < ApplicationRecord
   # Neither ignored nor filed as anything. Left joins, so a bank transaction with several links is still found once.
   scope :unfiled, -> { where(ignored_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
 
+  # Filed as at least one record, and not ignored, whichever kind of record: found by what its links are, so one with several is
+  # still found once. With `unfiled` and `ignored`, every bank transaction is in exactly one of the three, and nothing is both
+  # ignored and filed, which the model refuses.
+  scope :filed, -> {
+    where(ignored_at: nil).where(id: Budget::DepositLink.select(:bank_transaction_id))
+      .or(where(ignored_at: nil).where(id: Budget::SpendLink.select(:bank_transaction_id)))
+      .or(where(ignored_at: nil).where(id: Budget::RefundLink.select(:bank_transaction_id)))
+  }
+  scope :ignored, -> { where.not(ignored_at: nil) }
+
   # Ignored, or filed as at least one record: what isn't unfiled. Left joins, so one with several links is still counted once, with `distinct`.
   scope :filed_or_ignored, -> {
     left_joins(:deposit_links, :spend_links, :refund_links)

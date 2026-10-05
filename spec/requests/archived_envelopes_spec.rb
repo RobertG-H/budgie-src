@@ -312,7 +312,7 @@ RSpec.describe "Archived envelopes", type: :request do
     it "leaves Ready to Assign counting its Assigned in the months it had it" do
       get month_path("2026-09")
 
-      assert_select ".stat-desc", text: /Assigned\s*\$50\.00/
+      assert_select "#ready-to-assign dl > div", text: /Assigned\s*\$50\.00/
     end
   end
 

@@ -19,6 +19,44 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to validate_presence_of(:currency) }
   it { is_expected.to validate_inclusion_of(:currency).in_array(Budget::CURRENCIES.keys).with_message("isn't supported") }
 
+  describe "#importable?" do
+    let(:budget) { create(:budget) }
+
+    it "is true only with at least one CSV format and one Account, since there's nothing to guess an Import with otherwise" do
+      expect(Budget.find(budget.id)).not_to be_importable
+
+      create(:budget_csv_format, budget: budget)
+      expect(Budget.find(budget.id)).not_to be_importable
+
+      create(:budget_account, budget: budget)
+      expect(Budget.find(budget.id)).to be_importable
+    end
+
+    it "is false with an Account and no CSV format" do
+      create(:budget_account, budget: budget)
+
+      expect(Budget.find(budget.id)).not_to be_importable
+    end
+
+    it "counts only the budget's own CSV formats and Accounts" do
+      create(:budget_csv_format)
+      create(:budget_account)
+
+      expect(Budget.find(budget.id)).not_to be_importable
+    end
+
+    it "is one query, whatever the answer, and asked once" do
+      create(:budget_csv_format, budget: budget)
+      fresh = Budget.find(budget.id)
+
+      expect(count_queries { fresh.importable? }).to eq(1)
+      expect(count_queries { fresh.importable? }).to eq(0)
+
+      create(:budget_account, budget: budget)
+      expect(count_queries { Budget.find(budget.id).importable? }).to eq(2) # the budget, then the one question
+    end
+  end
+
   it "supports only three-letter uppercase codes" do
     expect(Budget::CURRENCIES.keys).to all(match(/\A[A-Z]{3}\z/))
   end
@@ -322,6 +360,9 @@ RSpec.describe Budget, type: :model do
       create_list(:budget_bank_transaction, 3, account: busy, import: import)
       create(:budget_import, account: busy, csv_format: budget.csv_formats.last)
       create(:budget_import, account: quiet, csv_format: budget.csv_formats.first, zero_rows_skipped: 2)
+      # Accounts' default CSV formats, which keep a CSV format from being deleted before the Accounts are.
+      busy.update!(default_csv_format: budget.csv_formats.last)
+      quiet.update!(default_csv_format: budget.csv_formats.first)
       # A bank transaction filed as a Spend and another as a Deposit, whose records keep them from being deleted first.
       filed_out, filed_in = import.bank_transactions.first(2)
       filed_out.update_column(:amount, -10)
@@ -353,6 +394,15 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::SpendLink, :count).by(-1)
         .and change(Budget::DepositLink, :count).by(-1)
         .and change(Budget::FilingRule, :count).by(-3)
+    end
+
+    it "deletes its Accounts before its CSV formats, since an Account's default CSV format keeps its format from being deleted" do
+      expect(budget.accounts.where.not(default_csv_format_id: nil).count).to eq(2)
+
+      expect { budget.destroy! }.not_to raise_error
+
+      expect(Budget::Account.where(budget_id: budget.id)).to be_empty
+      expect(Budget::CsvFormat.where(budget_id: budget.id)).to be_empty
     end
 
     it "leaves another budget's records alone" do

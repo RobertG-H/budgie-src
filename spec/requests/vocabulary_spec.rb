@@ -71,7 +71,8 @@ RSpec.describe "The words on the pages", type: :request do
     "the month view" => -> { month_path("2026-10") },
     "a month's Deposits" => -> { month_deposits_path("2026-10") },
     "the envelope page" => -> { month_envelope_path("2026-10", bills) },
-    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) }
+    "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) },
+    "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) }
   }.each do |page, path|
     it "has no table or column names in #{page}" do
       get instance_exec(&path)
@@ -106,12 +107,23 @@ RSpec.describe "The words on the pages", type: :request do
     "the Account edit form" => -> { edit_account_path(account) },
     "an Account's page" => -> { account_path(account) },
     "the Import form" => -> { new_account_import_path(account) },
+    "the whole Import form" => -> { new_import_path },
     "an Import's summary" => -> { import_path(import) },
-    "the Unfiled list" => -> { unfiled_bank_transactions_path },
+    "the Bank transactions" => -> { bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Bank transactions, Unfiled" => -> { bank_transactions_path(filter: { state: "unfiled" }) },
+    "the Bank transactions, Filed" => -> { bank_transactions_path(filter: { state: "filed", date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Bank transactions, Ignored" => -> { bank_transactions_path(filter: { state: "ignored", date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Bank transactions, with nothing that matches" => -> { bank_transactions_path(filter: { state: "ignored", date_from: "2000-01-01", date_to: "2000-01-31" }) },
+    "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Records, filtered to Reallocations" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", kind: "reallocation" }) },
+    "the Records, of an envelope" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", envelope: bills.id.to_s }) },
+    "the Records, with a range that can't be used" => -> { records_path(filter: { date_from: "2026-10-31", date_to: "2026-10-01" }) },
+    "the Records, with nothing in the range" => -> { records_path(filter: { date_from: "2020-01-01", date_to: "2020-01-31" }) },
+    "the Records, past the last page" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }, page: 9) },
     "the Filing rules" => -> { filing_rules_path },
     "the Filing rule form" => -> { new_filing_rule_path },
     "the Filing rule edit form" => -> { edit_filing_rule_path(budget.filing_rules.find_by!(text: "loblaws")) },
-    "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "unfiled") },
+    "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "bank_transactions", filter: { state: "unfiled" }) },
     "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
@@ -123,12 +135,107 @@ RSpec.describe "The words on the pages", type: :request do
     end
   end
 
+  describe "Records" do
+    it "says Records, the kinds of record and the money in and out, in words" do
+      get records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" })
+
+      expect(visible_text).to include("Records", "Money in", "Money out", "Kind", "Envelope", "From", "To")
+      expect(visible_text).to include("Spend from Bills", "Refund to Bills", "Deposit", "Reallocation from Bills to Fuel", "Reallocation from Bills to Ready to Assign")
+      expect(visible_text).to include("Reallocations only change which envelope money is in, so they aren't counted.")
+      expect(visible_text).to include("This month", "Last month", "Last 3 months")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "never spells Ready to Assign with underscores in a path, a param or an id" do
+      get records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" })
+
+      expect(response.body).not_to match(/ready_to_assign/)
+      expect(response.body).to include("/reallocations/to-ready-to-assign/")
+    end
+  end
+
   describe "Accounts and Imports" do
     it "tells a bare transaction from a Bank transaction, which is a term" do
       expect("Bank transaction").not_to match(retired_terms)
       expect("No bank transactions yet.").not_to match(retired_terms)
       expect("Every transaction was already here").to match(retired_terms)
       expect("A transaction").to match(retired_terms)
+    end
+
+    describe "importing from the header" do
+      def guess(text, name: "october.csv")
+        post import_guess_path, params: { import: { file: Rack::Test::UploadedFile.new(StringIO.new(text), "text/csv", original_filename: name) } }
+      end
+
+      it "says what was guessed, and what to check, in words, when the CSV format reads it differently or no Account has it as its default" do
+        guess("2026-10-01,Paycheck,2800.00\n")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("Import", "Choose a file, the CSV format that reads it and the Account it's for.", "Choose the file again.")
+        expect(visible_text).to include("More than one of your CSV formats reads this file. Check the CSV format.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+        expect(response.body).not_to match(/ready_to_assign|import_guess|csv_format_id\b.*Csv format/)
+      end
+
+      it "says why no CSV format reads a file, format by format, and points to the builder, in words" do
+        guess("nonsense\n")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_text).to include("No CSV format reads this file.", "Why", "CIBC: Line 1: has 1 column, and this CSV format expects 3.")
+        expect(visible_text).to include("New CSV format", "In the CSV format builder, choose the same file as its sample.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says what's wrong with the file once, in the reader's words, when it's every format's" do
+        guess("2026-10-01,Caf\xE9,-5.00\n".b)
+
+        expect(visible_text).to include("The file isn't UTF-8 text. Save it again as CSV in UTF-8 and try again. Choose another file.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says on the summary which Account and CSV format an Import used, in words" do
+        get import_path(import)
+
+        expect(visible_text).to include("Into Chequing, read with the Plain CSV format.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+
+      it "says what an Import from the header did, in the notice, in words, when it's certain" do
+        # CIBC now reads exactly what Plain does, so they're one format, and Chequing is the Account that has Plain as its default.
+        csv_format.update!(description_columns: [ 2 ])
+        expect(account.reload.default_csv_format).to be_present
+
+        guess("2026-10-01,Paycheck,2800.00\n")
+
+        expect(response).to have_http_status(:found)
+        follow_redirect!
+        expect(response).to have_http_status(:ok)
+        expect(visible_text).to include("Imported october.csv into Chequing, read with the Plain CSV format.")
+        expect(visible_text).not_to match(retired_terms)
+      end
+    end
+
+    it "says Default CSV format, and what it's for, on the Account's form and page, in words" do
+      account.update!(default_csv_format: csv_format)
+
+      get edit_account_path(account)
+
+      expect(visible_text).to include("Default CSV format", "None", "Used to recognise which Account a file is for when you Import from the header.")
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+
+      get account_path(account)
+
+      expect(visible_text).to include("Default CSV format: CIBC")
+      expect(visible_text).not_to match(retired_terms)
+
+      patch account_path(account), params: { account: { name: "Chequing", default_csv_format_id: create(:budget_csv_format).id } }
+
+      expect(visible_text).to include("Default CSV format isn't one of this budget's")
+      expect(visible_text).not_to match(retired_terms)
     end
 
     it "says Bank transactions, and Import, on an Account's page, in words" do
@@ -211,14 +318,14 @@ RSpec.describe "The words on the pages", type: :request do
         later_paycheck = create(:budget_bank_transaction, account: account, description: "Paycheck", date: Date.new(2026, 10, 15), amount: 2800)
         similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
 
-        get new_bank_transaction_filing_path(similar.reload, from: "unfiled")
+        get new_bank_transaction_filing_path(similar.reload, from: "bank_transactions", filter: { state: "unfiled" })
 
         expect(visible_text).to include("Guess: like Loblaws → Groceries")
         expect(visible_text).not_to match(/\w+_\w+/)
         expect(visible_text).not_to match(retired_terms)
         expect(response.body).not_to match(/guess_|_guess|draft_attributes/)
 
-        get new_bank_transaction_filing_path(later_paycheck.reload, from: "unfiled")
+        get new_bank_transaction_filing_path(later_paycheck.reload, from: "bank_transactions", filter: { state: "unfiled" })
 
         expect(visible_text).not_to include("Guess")
       end
@@ -227,7 +334,7 @@ RSpec.describe "The words on the pages", type: :request do
         post bank_transaction_filing_path(loblaws_row), params: file_params
         similar = create(:budget_bank_transaction, account: account, description: "Loblaws", date: Date.new(2026, 10, 6), amount: -20)
 
-        get unfiled_bank_transactions_path
+        get bank_transactions_path(filter: { state: "unfiled" })
 
         expect(visible_text).to include("File 1 as guessed", "Guess: like Loblaws → Groceries")
         expect(visible_text).not_to match(/\w+_\w+/)
@@ -508,9 +615,51 @@ RSpec.describe "The words on the pages", type: :request do
 
     expect(visible_text).to include("Ready to Assign -$2,001.50")
     expect(visible_text).to include("More was assigned than deposited.")
-    expect(visible_text).to include("Carried over -$5.00 · Deposited $3,000.00 · Assigned $5,000.00 · Reallocated $3.50")
+    expect(visible_text).to include("Carried over -$5.00 Deposited $3,000.00 Assigned $5,000.00 Reallocated $3.50")
     expect(visible_text).not_to match(/\w+_\w+/)
     expect(visible_text).not_to match(retired_terms)
+  end
+
+  describe "the Ready to Assign card's four states" do
+    def card_text
+      Nokogiri::HTML(response.body).at("#ready-to-assign").text.squish
+    end
+
+    it "says money is left to assign" do
+      get month_path("2026-10")
+
+      expect(card_text).to include("Ready to Assign $2,958.50 left to assign")
+      expect(card_text).to include("See Deposits")
+      expect(card_text).not_to match(/\w+_\w+/)
+      expect(card_text).not_to match(retired_terms)
+    end
+
+    it "says everything is assigned" do
+      assignments.first.update!(amount: "2998.50")
+
+      get month_path("2026-10")
+
+      expect(card_text).to include("Ready to Assign $0.00 All assigned")
+      expect(card_text).not_to match(/\w+_\w+/)
+      expect(card_text).not_to match(retired_terms)
+    end
+
+    it "says more was assigned than deposited" do
+      assignments.first.update!(amount: 5000)
+
+      get month_path("2026-10")
+
+      expect(card_text).to include("Ready to Assign -$2,001.50 More was assigned than deposited.")
+      expect(card_text).not_to match(retired_terms)
+    end
+
+    it "says there is nothing to assign yet, and offers a New deposit" do
+      get month_path("2026-08")
+
+      expect(card_text).to include("Ready to Assign $0.00 Nothing to assign yet. New deposit")
+      expect(card_text).not_to match(/\w+_\w+/)
+      expect(card_text).not_to match(retired_terms)
+    end
   end
 
   it "uses the same words when an envelope with records can't be deleted" do

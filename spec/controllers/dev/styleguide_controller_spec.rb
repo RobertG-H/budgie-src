@@ -20,18 +20,54 @@ RSpec.describe Dev::StyleguideController, type: :controller do
       it "has a section for each part of the design" do
         with_development_routes { get :show }
 
-        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Record rows", "Link rows", "Sample grid", "Pager", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
+        [ "Colours", "Buttons", "Form fields", "Tables", "Cards", "Month links", "Date range filter", "Record rows", "Link rows", "Sample grid", "Pager", "Alerts and flash", "Empty state", "Modal" ].each do |heading|
           assert_select "section > h2", text: heading
         end
       end
 
-      it "shows month links for the current month and for another, which can go back to this month" do
+      it "shows month links for the current month, another, the earliest and with the picker" do
         with_development_routes { get :show }
 
-        assert_select "#month-links nav[aria-label=Months]", count: 2
-        assert_select "#month-links a[rel=prev]", count: 2
-        assert_select "#month-links a[rel=next]", count: 2
-        assert_select "#month-links a", text: "This month", count: 1
+        assert_select "#month-links nav[aria-label=Months]", count: 4
+        assert_select "#month-links a[rel=prev]", count: 3
+        assert_select "#month-links a[rel=next]", count: 4
+        assert_select "#month-links nav a", text: "This month", count: 3
+      end
+
+      it "shows Previous disabled, and not a link, for the earliest month" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links nav .join > button[disabled][aria-disabled=true]", count: 1
+      end
+
+      it "shows the month picker open, in place, with its stepper, its months and This month, beside the live one" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links h3", text: "The picker, open"
+        assert_select "#month-links div.rounded-box h2", text: "Choose a month"
+        assert_select "#month-links div.rounded-box input[type=number][min='1'][max='275760']"
+        assert_select "#month-links div.rounded-box a[data-month-picker-target=month]", count: 12
+        assert_select "#month-links div.rounded-box a.btn-primary[aria-current=page]", count: 1
+        assert_select "#month-links div.rounded-box a[data-month-picker-target=thisMonth]", text: "This month"
+      end
+
+      it "shows the month picker, with its twelve months, which is live" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links [data-controller='modal month-picker']", count: 1
+        assert_select "#month-links dialog.modal [data-month-picker-target=month]", count: 12
+        assert_select "#month-links dialog.modal a[data-month-picker-target=thisMonth]", text: "This month"
+      end
+
+      it "shows the date range filter with a preset marked, and one for a range that can't be used, with its alert" do
+        with_development_routes { get :show }
+
+        assert_select "#date-range-filter form[method=get] input[type=date]", count: 8
+        assert_select "#date-range-filter a[aria-current=true]", text: "This month"
+        assert_select "#date-range-filter input[type=submit][value=Apply]", count: 4
+        assert_select "#date-range-filter [role=alert]", text: /Choose a From and a To date/
+        assert_select "#date-range-filter input[type=date][disabled]", count: 2
+        assert_select "#date-range-filter p", text: "Unfiled bank transactions are listed whatever their date."
       end
 
       it "shows record rows with and without notes, each a link" do
@@ -79,17 +115,24 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#fields input[type=file].file-input"
       end
 
-      it "shows a stat card that links to the records behind its number" do
+      it "shows the Ready to Assign card in each of its states, without a database" do
         with_development_routes { get :show }
 
-        assert_select "#cards a.stats[href] .stat-title", text: "Ready to Assign"
+        assert_select "#cards section.border-warning.bg-warning\\/10 .badge.badge-warning", text: "left to assign"
+        assert_select "#cards section:not(.border-warning) .badge.badge-ghost", text: "left to assign"
+        assert_select "#cards .badge.badge-success", text: "All assigned"
+        assert_select "#cards section.border-error .stat-value .text-error", text: "-$150.00"
+        assert_select "#cards section.border-error .text-error", text: "More was assigned than deposited."
+        assert_select "#cards section span", text: "Nothing to assign yet."
+        assert_select "#cards section dl dt", text: "Reallocated", count: 1
       end
 
-      it "shows a stat card that says in words what's wrong with its number" do
+      it "shows the Ready to Assign card as a card with a plain link, not one big link" do
         with_development_routes { get :show }
 
-        assert_select "#cards .stat-value .text-error", text: "-$150.00"
-        assert_select "#cards .stat-desc.text-error", text: "More was assigned than deposited."
+        assert_select "#cards section a", text: "See Deposits", minimum: 1
+        assert_select "#cards a.stats", count: 0
+        assert_select "#cards a .stat-value", count: 0
       end
 
       it "shows a field whose label is hidden from sight but not from assistive technology" do

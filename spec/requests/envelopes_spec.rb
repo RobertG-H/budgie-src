@@ -24,7 +24,7 @@ RSpec.describe "Envelopes", type: :request do
       assert_select "a.btn.btn-primary[href='#{new_spend_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "New spend"
       assert_select "a.btn[href='#{new_refund_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "New refund"
       assert_select "a.btn[href='#{new_reallocation_path(month: "2026-09", from: "envelope", envelope: groceries.id)}']", text: "Reallocate"
-      assert_select "a.btn-primary", count: 1
+      assert_select "main a.btn-primary", count: 1
       assert_select "a.btn[href='#{edit_envelope_path(groceries, month: "2026-09", from: "envelope")}']", text: "Edit"
       assert_select "form[action='#{envelope_path(groceries)}'][data-turbo-confirm='Delete the Groceries envelope?']" do
         assert_select "input[name='_method'][value=delete]"
@@ -433,8 +433,8 @@ RSpec.describe "Envelopes", type: :request do
 
       get month_envelope_path("2026-09", groceries)
 
-      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-08", groceries)}']", text: "August 2026"
-      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-10", groceries)}']", text: "October 2026"
+      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-08", groceries)}']", text: /August 2026/
+      assert_select "nav[aria-label=Months] a[href='#{month_envelope_path("2026-10", groceries)}']", text: /October 2026/
       assert_select "a[href='#{month_path("2026-09")}']", text: "Back to September 2026"
 
       get month_envelope_path("2027-03", groceries)

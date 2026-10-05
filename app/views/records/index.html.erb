@@ -1,0 +1,67 @@
+<% content_for :title, "Records · Budgie" %>
+<% budget = Current.budget %>
+<% range = @list.date_range %>
+<% other_filters = @list.to_params.except(:date_from, :date_to) %>
+
+<%= render "components/page_header", title: "Records",
+      description: "Every Deposit, Spend, Refund and Reallocation, for the dates you choose. Open one to change or delete it." %>
+
+<%# The filters are one GET form, so a link to a page of the list, or back from a record, is the same address. Nothing is sent until Apply is. %>
+<%= form_with url: records_path, method: :get, scope: :filter, class: "mt-6 space-y-4" do |form| %>
+  <div class="grid grid-cols-2 gap-4">
+    <%= render "components/field", form: form, attribute: :kind, label: "Kind", control: :select do |field| %>
+      <%= form.select :kind, record_kind_options, { selected: @list.kind.to_s }, **field %>
+    <% end %>
+    <%= render "components/field", form: form, attribute: :envelope, label: "Envelope", control: :select,
+          hint: "Deposits aren't in an envelope, so choosing one leaves them out." do |field| %>
+      <%= form.select :envelope, record_envelope_options(@list.envelopes), { selected: @list.envelope&.id.to_s }, **field %>
+    <% end %>
+  </div>
+
+  <%= render "components/date_range_filter", form: form, filter: range,
+        path: ->(dates) { records_path(filter: other_filters.merge(dates)) } %>
+<% end %>
+
+<%# What came in and what went out over the whole range, not only this page. Reallocations aren't in either, and the line says why. There's nothing to say for Reallocations alone. %>
+<% if @totals %>
+  <%= render "components/panel", class: "mt-6" do %>
+    <dl class="flex flex-wrap gap-x-8 gap-y-2">
+      <div>
+        <dt class="text-xs text-base-content/70">Money in</dt>
+        <dd class="text-xl font-semibold tabular-nums"><%= render "components/money", amount: @totals.money_in, budget: budget %></dd>
+      </div>
+      <div>
+        <dt class="text-xs text-base-content/70">Money out</dt>
+        <dd class="text-xl font-semibold tabular-nums"><%= render "components/money", amount: @totals.money_out, budget: budget %></dd>
+      </div>
+    </dl>
+    <p class="mt-3 text-sm text-base-content/70">Reallocations only change which envelope money is in, so they aren't counted.</p>
+  <% end %>
+<% end %>
+
+<div class="mt-8">
+  <% if @records.any? %>
+    <%= render "components/record_list" do %>
+      <% @records.each do |record| %>
+        <%= render "components/record_row", href: record_edit_path(record, @list, page: page), date: record.date,
+              description: record.description, counterpart: record_counterpart(record), notes: record.notes,
+              amount: record_amount(record), budget: budget, with_year: true %>
+      <% end %>
+    <% end %>
+
+    <div class="mt-4">
+      <%= render "components/pager", page: page, more: more_pages?,
+            path: ->(number) { records_path(filter: @list.to_params, page: (number unless number == 1)) } %>
+    </div>
+  <% elsif page > 1 %>
+    <%= render "components/empty_state", message: "There are no more records." do %>
+      <%= link_to "Back to the first page", records_path(filter: @list.to_params), class: "btn" %>
+    <% end %>
+  <% else %>
+    <%= render "components/empty_state", message: "No records from #{spelled_date(range.from)} to #{spelled_date(range.to)}." do %>
+      <% unless range.default? %>
+        <%= link_to "Show this month", records_path(filter: other_filters), class: "btn" %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

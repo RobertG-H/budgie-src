@@ -2,8 +2,15 @@
 # by the form's `from` param, which can only be one of PAGES, never a URL, so it can't be made to redirect
 # somewhere else. Which month the page shows depends on the form: an envelope's is the month it was opened from,
 # a Deposit's is the month it counts toward, and a Spend's, a Refund's or a Reallocation's is the month of its date. See application/_origin_fields.
-# A bank transaction's forms are opened from the Unfiled list or from its Account's page, which don't have a month, and without
+# A bank transaction's forms are opened from the Bank transactions page or from its Account's page, which don't have a month, and without
 # one they go back to its Account.
+#
+# The Records page (`records`) lists records from every month and kind, and the Bank transactions page (`bank_transactions`) every bank
+# transaction in any state, so a form opened from one of their rows carries the page's filter (the date range, Kind and envelope; or the
+# state, Account and date range) and the page of the list it was on, and goes back to the same filtered page. The filter is never passed
+# through: it's rebuilt by that page's own parser (Budget::RecordList.parse, Budget::BankTransactionList.parse), which keeps only what it
+# understands, so the path that comes out is one it made and not anything that was sent. A bank transaction's forms are also opened from its
+# Account's page (`account`), which has no filters.
 #
 # The home page is the month view of the current month at /, as well as at /months/YYYY-MM, and they're two pages to
 # Turbo, which only refreshes a page in place when it's sent back to the address it's on. So `home` is a page of its
@@ -11,15 +18,37 @@
 module ReturnsToOrigin
   extend ActiveSupport::Concern
 
-  PAGES = %w[ home month deposits envelope unfiled account ].freeze
+  PAGES = %w[ home month deposits envelope account records bank_transactions ].freeze
 
   included do
-    helper_method :origin, :return_path
+    helper_method :origin, :return_path, :origin_filter, :origin_page, :origin_params
   end
 
   private
     def origin
       params[:from].presence_in(PAGES)
+    end
+
+    # The filter of the Records page or the Bank transactions page, as that page reads it, as the params that spell it, when the form was
+    # opened from one of them.
+    def origin_filter
+      case origin
+      when "records" then Budget::RecordList.parse(Current.budget, params[:filter]).to_params
+      when "bank_transactions" then Budget::BankTransactionList.parse(Current.budget, params[:filter]).to_params
+      end
+    end
+
+    # The page of the list the form was opened from, for the pages that have one: a number past the first, and nothing for the first.
+    def origin_page
+      return unless origin.in?(%w[ records bank_transactions ])
+
+      page = Paginated.page_number(params[:page])
+      page unless page == 1
+    end
+
+    # What a button of its own, such as Delete, sends so that it can go back to the page the record was opened from.
+    def origin_params(month)
+      { from: origin, month: month.to_param, filter: origin_filter, page: origin_page }.compact
     end
 
     # The path of the page the form was opened from, showing `month`. The envelope's page needs the `envelope`;
@@ -32,7 +61,8 @@ module ReturnsToOrigin
       when "home" then month.current? ? root_path : month_path(month)
       when "deposits" then month_deposits_path(month)
       when "envelope" then envelope ? month_envelope_path(month, envelope) : month_path(month)
-      when "unfiled" then unfiled_bank_transactions_path
+      when "records" then records_path(filter: origin_filter, page: origin_page)
+      when "bank_transactions" then bank_transactions_path(filter: origin_filter, page: origin_page)
       when "account" then account ? account_path(account) : accounts_path
       else account ? account_path(account) : month_path(month)
       end

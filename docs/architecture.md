@@ -117,9 +117,19 @@ envelopes' records first so the envelopes can follow.
 
 The home page is the month view: `/` is the current month and `/months/YYYY-MM` is any other. Everything
 hangs off a month — `/months/YYYY-MM/deposits` lists the Deposits behind Ready to Assign, and
-`/months/YYYY-MM/envelopes/:id` is an envelope's page for that month. The time zone is Eastern Time (US &
+`/months/YYYY-MM/envelopes/:id` is an envelope's page for that month. Months aren't bounded in either direction up to
+a date field's own limit (a year has four to six digits, up to 275760), except that there's no month before January of
+year 1, since PostgreSQL has no year 0, where Previous is disabled. Moving between them is one control, Previous, the
+month's name and Next, and on the month view the name opens a picker (a native dialog with a year stepper and a grid of
+the year's twelve months) so a far month is one step: it's progressively enhanced, so without JavaScript Previous, Next
+and This month still work. The time zone is Eastern Time (US &
 Canada) for everyone. Records store dates, not times, so it only decides what "today" is: which month `/`
 opens on, and what a date field starts as.
+
+The month view's Ready to Assign card says in words which of four states it's in, from `Budget::Month::ReadyToAssign` (so the view does no
+arithmetic): money left to assign, everything assigned, more assigned than deposited, or nothing yet. Only the current month's "left to assign" gets the
+warning styling; in any other month it's a quiet badge, a new budget's empty card never shouts, and over-assigned is error-styled in every month, since it's a
+fact about the plan. The figures it adds up from are labelled, and the way to the month's Deposits is a plain "See Deposits" link, not the whole card.
 
 Every balance is worked out in one place, `Budget::Month` (`app/models/budget/month.rb`), which views and
 controllers only ask. It works on one calendar month of a budget and runs a fixed number of grouped `SUM`
@@ -217,12 +227,26 @@ to Assign in the month of its date, and in every month after, since the money is
 after" choice as a Deposit has. Ready to Assign is then the Deposits less everything assigned plus everything reallocated to
 it, and the envelope's Available takes it off, so Ready to Assign plus every envelope's Available is the same with and
 without it; its Reallocated is net of it, as of the ones between envelopes. It adds one more grouped query by envelope, and
-the budget's own figure is added up from those rows as Assigned is. The Ready to Assign card's description adds
-"Reallocated $X" after Assigned when it isn't zero, and a month's Deposits page, which the card links to, has a
+the budget's own figure is added up from those rows as Assigned is. The Ready to Assign card's figures add "Reallocated"
+after Assigned when it isn't zero, and a month's Deposits page, which the card's "See Deposits" link goes to, has a
 Reallocations section below its Deposits when the month has some, listing them from every envelope ("From Dining out"), so
 everything behind the card's figures is on that page. An envelope's page lists them with the others, as "To Ready to Assign".
 Lowering a month's Assigned and reallocating to Ready to Assign can give the same balances; that overlap is accepted,
 and the two stay separate figures: Assigned is the plan for the month, Reallocated is money moved.
+
+### The Records view
+
+`/records` lists every Deposit, Spend, Refund and Reallocation in one list, across envelopes, newest first, 50 a page, for a
+range of dates, so a record can be found without going to its month and its envelope; a row opens the record's edit page, and
+saving, deleting or cancelling there comes back to the same filtered page. The filters are one nested `filter` param so they never
+collide with `from`: the date range (`DateRangeFilter`, which defaults to the current month and turns an unusable range into an
+alert and the current month, never an empty page, and is the part the Bank transactions page shares), the Kind (a Reallocation is
+both tables) and an envelope (which leaves out Deposits, and finds a Reallocation by either of its envelopes). `Budget::RecordList`
+reads the filter and keeps only what it understands, unions the five tables into one ordered list of keys and loads each table's
+rows with their envelopes from the budget's own, so the number of queries doesn't grow with the records. Money in (Deposits and
+Refunds) and Money out (Spends) are for the whole range, not the page, and Reallocations aren't counted since they only change which
+envelope money is in. The page names `records` as a place a form can come back to (`from=records`), and rebuilds its filter through
+the same parser on the way back, so what comes back is never a URL.
 
 ### Archiving envelopes
 
@@ -274,7 +298,10 @@ with the grid and the preview, so the sample only exists for a request, and ther
 in step with the real one. Saving a format never imports the sample: the person chooses the file again to import it.
 
 **Accounts, Imports and bank transactions.** An Account is a real bank or card account, with only a name: Budgie doesn't track what's
-in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). A person imports a CSV file into one with a CSV format,
+in it ([ADR 0001](adr/0001-budgie-does-not-track-account-balances.md)). It can also remember which CSV format its bank's
+files use, its default CSV format, which is optional and is set by hand on the Account's form or by the first Import into it (an Import never
+changes one that's there). It's what lets an Import from the header tell which Account a file is for, and the Account's own Import form starts on
+it before its first Import. A CSV format that's some Accounts' default can still be deleted, which clears it from them. A person imports a CSV file into one with a CSV format,
 and each row becomes a bank transaction, which is the bank's record of money moving in or out, with a signed amount. Bank
 transactions are read-only, and are found through their Account, as a Spend is through its envelope. The file isn't kept, only its
 name, and the Import commits straight away: a file that can't be read creates nothing, and says which row and why.
@@ -286,6 +313,13 @@ the same key is in the Account. For each key an Import adds as many rows as the 
 two identical coffees on one day both come in, while the same file again, or one that overlaps, adds only what's new. The key and
 occurrence are written when the row is made and never recomputed, because they record how it first looked. The description as a
 Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place.
+
+**Import from the header.** "Import" is in the header on every page, beside Sign out: one click and one file imports it when Budgie is certain which of the budget's CSV formats reads it and which
+Account it's for, and lands on the Import's summary, where Undo already is. It tries each CSV format over the file once, and a format is certain when it's the only one that reads it, or when every one that does reads the same
+rows; the Account is certain when exactly one has that format as its default CSV format. Anything less shows the whole form, with File, CSV format and Account, and the best offer chosen, with a note on what was guessed, and creates
+nothing, because duplicates are judged per Account and an unconfirmed Import into the wrong one can't be caught as one ([ADR 0014](adr/0014-importing-from-the-header-is-unconfirmed-only-when-it-is-certain.md)). A file that no format reads
+says why, format by format. The header's button is a plain link to that form, which works without JavaScript, and a small Stimulus controller makes it open the file chooser at once; since the file isn't kept, the browser puts the
+chosen file back in the form that comes back.
 
 **One request, one Import.** It runs in the request, holds the Account's row lock and inserts every row at once, so it makes the same
 number of queries for 10 rows as for 1,000, a double submit imports once, and there's no job to wait for. Its summary is a page of
@@ -327,8 +361,8 @@ wherever a bank transaction shows what it was filed as, its records are listed t
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
 or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
-transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Unfiled list shows
-every bank transaction across the Accounts that's still to do, and an Account's page shows each one's state.
+transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Bank transactions page shows
+every bank transaction across the Accounts, in any state, filtered by state, Account and dates (every unfiled one whatever its date), and an Account's page shows each of its own, with its state.
 
 **Filing rules.** A Filing rule is a standing instruction, such as "anything from Loblaws goes to Groceries": when an Import creates a
 bank transaction that a rule fits, Budgie files it the way the rule says, or ignores it, straight away and with no confirmation, through the same
@@ -381,13 +415,13 @@ or filed into an archived envelope, since it never proposes one. When several ou
 of queries however much the Budget has filed, because the history is counted in the database in one query and compared in Ruby, which needs no extension. Where the Guess comes from is
 behind one seam, so an LLM call or a bank-sync provider's category can be added later as another source, each with its own decision.
 
-**Filing a page of Guesses.** After an Import there can be a page of Guesses that are right, so the Unfiled list shows each row's Guess and, when the page has any, offers "File N as guessed". It
+**Filing a page of Guesses.** After an Import there can be a page of Guesses that are right, so the Bank transactions page shows each unfiled row's Guess and, when it's in its Unfiled state and the page has any, offers "File N as guessed". It
 opens a review of those rows first, each ticked and with what it was like and what it would be filed as, so any can be left out, and filing is a second click. What's filed is what was reviewed,
 never a newer Guess that wasn't seen, and it goes through the same operation a person's filing does, so it files all or none, and what filing by hand would refuse, such as an envelope archived since
 the review, it refuses, saying which bank transaction and why. It makes no Filing rule, because a Guess isn't one, and what it files is ordinary: Undo and un-filing treat it like anything else. A Guess is
 never filed without that click, at any likeness.
 
-The header has a second row of links to the pages that aren't a month's: the budget, Accounts, Unfiled, Filing rules and CSV formats.
+The header has a second row of links to the pages that aren't a month's: the budget, Records, Accounts, Bank transactions, Filing rules and CSV formats.
 
 ### Frontend
 

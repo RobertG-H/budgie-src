@@ -1,0 +1,9 @@
+<%# locals: (month:, path:) %>
+<%# The dialog the month view's name opens (components/month_links with picker: true), to go to any month in one step: a year stepper and a grid of the year's twelve months. Native <dialog>, opened by the modal controller; it isn't components/modal, whose trigger is a stand-alone button. %>
+<%# The server draws the viewed year, so the grid is never built from nothing; the month-picker controller redraws it for another year (hrefs, names, marks) and does the keyboard. The grid is one tab stop (roving tabindex), and the viewed month is it. A month is marked by a fill (the viewed one, with aria-current) or an outline (this calendar month, also said in its name), never by colour alone, and a "This month" button under the grid puts the word on screen. The years are a date field's own limits (DateRangeFilter). %>
+<% title_id = "month-picker-title-#{SecureRandom.hex(4)}" %>
+<dialog class="modal" aria-labelledby="<%= title_id %>" data-modal-target="dialog" data-month-picker-target="dialog" data-action="click->modal#closeOnBackdrop">
+  <div class="modal-box">
+    <%= render "components/month_picker_box", month: month, path: path, title_id: title_id %>
+  </div>
+</dialog>

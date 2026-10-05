@@ -40,6 +40,9 @@ _Avoid_: Reimbursement, repayment
 Money moved out of an envelope on a given day, into another envelope or back to Ready to Assign. Money going from Ready to Assign into an envelope is Assigned, never a Reallocation.
 _Avoid_: Transfer, move
 
+**Record**:
+A Deposit, Spend, Refund or Reallocation: one dated entry that changes the budget's figures. A bank transaction isn't one; filing makes records from it.
+
 ## Balances
 
 **Available**:

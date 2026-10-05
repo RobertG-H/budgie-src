@@ -37,8 +37,13 @@ RSpec.describe "Filing as guessed", type: :request do
     bank_transactions.to_h { |bank_transaction| [ bank_transaction.id.to_s, Budget::Guesser.new(budget).guess(bank_transaction).review_value ] }
   end
 
-  def file_as_guessed(guessed, page: nil)
-    post guessed_filing_path, params: { guessed: guessed, page: page }.compact
+  def file_as_guessed(guessed, page: nil, filter: nil)
+    post guessed_filing_path, params: { guessed: guessed, page: page, filter: filter }.compact
+  end
+
+  # The Unfiled state of the Bank transactions page, which the review and filing go back to.
+  def unfiled_page(page: nil, **filter)
+    bank_transactions_path(filter: filter.merge(state: "unfiled"), page: page)
   end
 
   describe "GET /unfiled/guessed/new, the review" do
@@ -62,6 +67,51 @@ RSpec.describe "Filing as guessed", type: :request do
       end
     end
 
+    describe "for one Account" do
+      let!(:visa) { create(:budget_account, budget: budget, name: "Visa") }
+      let!(:visa_loblaws) { unfiled("LOBLAWS #4321", account: visa, date: Date.new(2026, 10, 5)) }
+
+      it "reviews only that Account's unfiled rows, and carries the Account to the form, so filing goes back to the same ones" do
+        get new_guessed_filing_path(filter: { account: visa.id.to_s })
+
+        expect(rows).to eq([ "Oct 5, 2026 LOBLAWS #4321 Visa Guess: like LOBLAWS #1234 → Groceries -$20.00" ])
+        assert_select "input[type=hidden][name='filter[account]'][value='#{visa.id}']"
+        assert_select "a.btn[href='#{unfiled_page(account: visa.id.to_s)}']", text: "Cancel"
+        expect(visible_text).to include("1 bank transaction on this page has a Guess.")
+      end
+
+      it "reviews every Account's when none is chosen, and for an Account that isn't the budget's, and carries no Account" do
+        other = create(:budget_account)
+
+        [ {}, { filter: { account: other.id.to_s } }, { filter: { account: "abc" } }, { filter: "//evil.example" } ].each do |params|
+          get new_guessed_filing_path(**params)
+
+          expect(rows.size).to eq(5)
+          assert_select "input[type=hidden][name='filter[account]']", count: 0
+          expect(response.body).not_to include("evil")
+        end
+      end
+
+      it "files the rows reviewed, and goes back to the Unfiled state for that Account, at that page" do
+        file_as_guessed(reviewed(visa_loblaws), page: 2, filter: { account: visa.id.to_s })
+
+        expect(visa_loblaws.reload).to be_filed
+        expect(response).to redirect_to(unfiled_page(account: visa.id.to_s, page: 2))
+      end
+
+      it "goes back to the review for that Account when nothing is ticked, or when it's refused" do
+        post guessed_filing_path, params: { filter: { account: visa.id.to_s }, page: 2 }
+
+        expect(response).to redirect_to(new_guessed_filing_path(filter: { account: visa.id.to_s }, page: 2))
+
+        reviewed_outcomes = reviewed(costco)
+        household.update!(archived_at: Time.current)
+        file_as_guessed(reviewed_outcomes, filter: { account: account.id.to_s })
+
+        expect(response).to redirect_to(new_guessed_filing_path(filter: { account: account.id.to_s }))
+      end
+    end
+
     it "leaves out the rows with no Guess, which stay for the Unfiled list" do
       get new_guessed_filing_path
 
@@ -69,11 +119,11 @@ RSpec.describe "Filing as guessed", type: :request do
       assert_select "input[type=checkbox][name='guessed[#{shell.id}]']", count: 0
     end
 
-    it "says how many have a Guess, and that any can be left out, and Cancel goes back to the Unfiled list" do
+    it "says how many have a Guess, and that any can be left out, and Cancel goes back to the Unfiled state of the Bank transactions page" do
       get new_guessed_filing_path
 
       expect(visible_text).to include("4 bank transactions on this page have a Guess. Untick any you'd rather file yourself.")
-      assert_select "a.btn[href='#{unfiled_bank_transactions_path}']", text: "Cancel"
+      assert_select "a.btn[href='#{unfiled_page}']", text: "Cancel"
     end
 
     it "is for the page it was opened from, and goes back to it" do
@@ -87,7 +137,7 @@ RSpec.describe "Filing as guessed", type: :request do
 
       expect(rows.size).to eq(4)
       assert_select "input[type=hidden][name=page][value='2']"
-      assert_select "a.btn[href='#{unfiled_bank_transactions_path(page: 2)}']", text: "Cancel"
+      assert_select "a.btn[href='#{unfiled_page(page: 2)}']", text: "Cancel"
     end
 
     it "says so when no row on the page has a Guess, and goes back, and offers nothing to file" do
@@ -97,7 +147,7 @@ RSpec.describe "Filing as guessed", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(visible_text).to include("None of the bank transactions on this page has a Guess.")
-      assert_select "a.btn[href='#{unfiled_bank_transactions_path}']", text: "Back to Unfiled"
+      assert_select "a.btn[href='#{unfiled_page}']", text: "Back to Unfiled"
       assert_select "form input[type=submit]", count: 0
     end
 
@@ -150,7 +200,7 @@ RSpec.describe "Filing as guessed", type: :request do
     it "goes back to the page it was reviewed from, saying how many were filed" do
       file_as_guessed(reviewed(loblaws, costco), page: 3)
 
-      expect(response).to redirect_to(unfiled_bank_transactions_path(page: 3))
+      expect(response).to redirect_to(unfiled_page(page: 3))
       follow_redirect!
       expect(response.body).to include("2 bank transactions filed as guessed.")
     end
@@ -158,7 +208,7 @@ RSpec.describe "Filing as guessed", type: :request do
     it "says 1 bank transaction when it's one, and goes to the first page without a page" do
       file_as_guessed(reviewed(loblaws))
 
-      expect(response).to redirect_to(unfiled_bank_transactions_path)
+      expect(response).to redirect_to(unfiled_page)
       expect(flash[:notice]).to eq("1 bank transaction filed as guessed.")
     end
 

@@ -5,10 +5,10 @@ RSpec.describe "Months", type: :request do
 
   before { sign_in_as budget.user }
 
-  # The words under Ready to Assign's number. Its amounts are spans of their own, so the whitespace between the
-  # pieces is collapsed before comparing.
+  # The labelled figures under Ready to Assign's number, as "Carried over $0.00 · Deposited $0.00 · Assigned $0.00". Each
+  # is a label over an amount in a span of its own, so the whitespace between the pieces is collapsed before comparing.
   def stat_description
-    css_select(".stat-desc:not(.text-error)").map { |description| description.text.squish }.sole
+    css_select("#ready-to-assign dl > div").map { |figure| figure.text.squish }.join(" · ")
   end
 
   # The amount an envelope's Assigned button shows, without the words that name the button for assistive technology.
@@ -51,7 +51,7 @@ RSpec.describe "Months", type: :request do
 
       get month_path("9999-12")
       expect(response).to have_http_status(:ok)
-      assert_select "nav[aria-label=Months] a[rel=next]", text: "January 10000"
+      assert_select "nav[aria-label=Months] a[rel=next]", text: /January 10000/
 
       click_next = css_select("nav[aria-label=Months] a[rel=next]").first["href"]
       get click_next
@@ -77,7 +77,7 @@ RSpec.describe "Months", type: :request do
   end
 
   describe "Ready to Assign" do
-    it "is every Deposit for the month and before it, with what was carried over and deposited, linking to the month's Deposits" do
+    it "is every Deposit for the month and before it, with what was carried over and deposited, and a link to the month's Deposits" do
       create(:budget_deposit, budget: budget, amount: 1000, date: Date.new(2026, 8, 1))
       create(:budget_deposit, budget: budget, amount: 3000, date: Date.new(2026, 9, 1))
       create(:budget_deposit, budget: budget, amount: 777, date: Date.new(2026, 10, 1))
@@ -85,10 +85,11 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select "a[href='#{month_deposits_path("2026-09")}']" do
+      assert_select "#ready-to-assign" do
         assert_select ".stat-title", text: "Ready to Assign"
         assert_select ".stat-value", text: "$4,000.00"
         expect(stat_description).to eq("Carried over $1,000.00 · Deposited $3,000.00 · Assigned $0.00")
+        assert_select "a[href='#{month_deposits_path("2026-09")}']", text: "See Deposits", count: 1
       end
     end
 
@@ -97,9 +98,9 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select ".stat-desc span", count: 3
-      assert_select ".stat-desc span", text: "$0.00", count: 2
-      assert_select ".stat-desc span", text: "$3,000.00"
+      assert_select "#ready-to-assign dd span", count: 3
+      assert_select "#ready-to-assign dd span", text: "$0.00", count: 2
+      assert_select "#ready-to-assign dd span", text: "$3,000.00"
     end
 
     it "is $0.00 for a budget with no Deposits" do
@@ -441,8 +442,8 @@ RSpec.describe "Months", type: :request do
     it "shows the amount the way every amount is shown, in a span of its own" do
       get month_path("2026-02")
 
-      assert_select ".stat-desc span", count: 4
-      assert_select ".stat-desc span", text: "$30.00"
+      assert_select "#ready-to-assign dd span", count: 4
+      assert_select "#ready-to-assign dd span", text: "$30.00"
     end
 
     it "carries it into the months after, which show no Reallocated of their own" do
@@ -484,7 +485,7 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-03")
       assert_select ".stat-value", text: "$0.00"
-      assert_select ".stat-desc", text: /More was assigned/, count: 0
+      assert_select "#ready-to-assign", text: /More was assigned/, count: 0
     end
   end
 
@@ -500,7 +501,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value .text-error", text: "-$150.00"
-      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+      assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
       expect(stat_description).to eq("Carried over $0.00 · Deposited $100.00 · Assigned $250.00")
     end
 
@@ -508,15 +509,14 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-10")
 
       assert_select ".stat-value .text-error", text: "-$150.00"
-      assert_select ".stat-desc.text-error", text: "More was assigned than deposited."
+      assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
       expect(stat_description).to eq("Carried over -$150.00 · Deposited $0.00 · Assigned $0.00")
     end
 
     it "isn't reported in a month before the money was assigned" do
       get month_path("2026-08")
 
-      assert_select ".stat-desc.text-error", count: 0
-      assert_select ".stat-value .text-error", count: 0
+      assert_select "#ready-to-assign .text-error", count: 0
     end
 
     it "isn't reported when everything deposited has been assigned, to the cent" do
@@ -525,8 +525,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "$0.00"
-      assert_select ".stat-desc.text-error", count: 0
-      assert_select ".stat-value .text-error", count: 0
+      assert_select "#ready-to-assign .text-error", count: 0
     end
 
     it "isn't reported for a positive amount" do
@@ -535,7 +534,199 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select ".stat-value", text: "$850.00"
-      assert_select ".stat-desc.text-error", count: 0
+      assert_select "#ready-to-assign .text-error", count: 0
+    end
+  end
+
+  # The card says in words whether there's money left to assign, and only the current month gets the loud warning styling.
+  describe "the Ready to Assign card's states" do
+    let!(:groceries) { create(:budget_envelope, budget: budget, name: "Groceries") }
+
+    # September 2026 is the current month, in Eastern time.
+    before { travel_to Time.utc(2026, 9, 15, 16) }
+
+    def deposit(amount, date) = create(:budget_deposit, budget: budget, amount: amount, date: date)
+    def assign(amount, month) = create(:budget_assignment, envelope: groceries, month: month, amount: amount)
+
+    describe "with money left to assign" do
+      before do
+        deposit 3000, Date.new(2026, 9, 1)
+        assign 2800, Date.new(2026, 9, 1)
+      end
+
+      it "says 'left to assign' in a warning badge, on a warning card, in the current month" do
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-warning.bg-warning\\/10" do
+          assert_select ".stat-value", text: "$200.00"
+          assert_select ".badge.badge-warning", text: "left to assign"
+        end
+      end
+
+      it "is the same on the home page, which is the current month too" do
+        get root_path
+
+        assert_select "section#ready-to-assign.border-warning", count: 1
+        assert_select "#ready-to-assign .badge-warning", text: "left to assign"
+      end
+
+      it "says it quietly in a ghost badge, with no warning, in a month that isn't the current one" do
+        get month_path("2026-10")
+
+        assert_select "#ready-to-assign .stat-value", text: "$200.00"
+        assert_select "#ready-to-assign .badge.badge-ghost", text: "left to assign"
+        assert_select "#ready-to-assign .badge-warning", count: 0
+        assert_select "section#ready-to-assign.border-base-300"
+        assert_select "section#ready-to-assign.border-warning", count: 0
+        assert_select "section#ready-to-assign.bg-warning\\/10", count: 0
+
+        get month_path("2026-08")
+        assert_select "#ready-to-assign .badge-warning", count: 0
+      end
+
+      it "never uses the warning colour as text" do
+        get month_path("2026-09")
+
+        assert_select "#ready-to-assign .text-warning", count: 0
+      end
+    end
+
+    describe "with everything assigned" do
+      before do
+        deposit 3000, Date.new(2026, 9, 1)
+        assign 3000, Date.new(2026, 9, 1)
+      end
+
+      it "says 'All assigned' in a success badge on a plain card" do
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-base-300" do
+          assert_select ".stat-value", text: "$0.00"
+          assert_select ".badge.badge-success", text: "All assigned"
+        end
+        assert_select "#ready-to-assign .badge-warning", count: 0
+        assert_select "section#ready-to-assign.border-warning", count: 0
+      end
+
+      it "is the same in a month that isn't the current one, since a plain card has nothing to tone down" do
+        deposit 3000, Date.new(2026, 10, 1)
+        assign 3000, Date.new(2026, 10, 1)
+
+        get month_path("2026-10")
+
+        assert_select "#ready-to-assign .badge.badge-success", text: "All assigned"
+        assert_select "#ready-to-assign .stat-value", text: "$0.00"
+      end
+
+      it "gives way to 'nothing yet' in a later month where nothing at all is carried or entered" do
+        get month_path("2026-12")
+
+        assert_select "#ready-to-assign .badge-success", count: 0
+        assert_select "#ready-to-assign span", text: "Nothing to assign yet."
+      end
+    end
+
+    describe "with more assigned than deposited" do
+      before do
+        deposit 100, Date.new(2026, 9, 1)
+        assign 250, Date.new(2026, 9, 1)
+      end
+
+      it "has an error border and says so in the error colour, in the current month" do
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-error" do
+          assert_select ".stat-value .text-error", text: "-$150.00"
+          assert_select ".text-error", text: "More was assigned than deposited."
+        end
+        assert_select "section#ready-to-assign.border-warning", count: 0
+        assert_select "#ready-to-assign .badge", count: 0
+      end
+
+      it "is error-styled in a later month that carries it, and in a future month that only holds Assigned entered ahead" do
+        get month_path("2026-10")
+        assert_select "section#ready-to-assign.border-error"
+        assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
+
+        Budget::Deposit.delete_all
+        Budget::Assignment.delete_all
+        assign 40, Date.new(2026, 11, 1)
+        get month_path("2026-11")
+        assert_select "section#ready-to-assign.border-error"
+        assert_select "#ready-to-assign .text-error", text: "More was assigned than deposited."
+      end
+
+      it "is over-assigned in a month with no Deposit of its own, however little" do
+        Budget::Deposit.delete_all
+        Budget::Assignment.delete_all
+        assign "0.01", Date.new(2026, 9, 1)
+
+        get month_path("2026-09")
+
+        assert_select "section#ready-to-assign.border-error"
+        assert_select "#ready-to-assign .stat-value .text-error", text: "-$0.01"
+      end
+    end
+
+    describe "with nothing yet" do
+      before { Budget::Envelope.delete_all }
+
+      it "is a new budget's card: muted words and a New deposit button, and never the warning" do
+        get root_path
+
+        assert_select "section#ready-to-assign.border-base-300" do
+          assert_select ".stat-value", text: "$0.00"
+          assert_select "span", text: "Nothing to assign yet."
+          assert_select "a.btn.btn-sm[href='#{new_deposit_path(month: "2026-09", from: "month")}']", text: "New deposit"
+        end
+        assert_select "section#ready-to-assign.border-warning", count: 0
+        assert_select "#ready-to-assign .badge", count: 0
+        assert_select "#ready-to-assign .text-error", count: 0
+      end
+
+      it "is the same for any month nothing has happened in" do
+        get month_path("2028-01")
+
+        assert_select "#ready-to-assign span", text: "Nothing to assign yet."
+        assert_select "#ready-to-assign a", text: "New deposit"
+      end
+
+      it "goes away as soon as a Deposit lands in the month, or before it" do
+        deposit 10, Date.new(2026, 8, 1)
+
+        get month_path("2026-09")
+
+        assert_select "#ready-to-assign span", text: "Nothing to assign yet.", count: 0
+        assert_select "#ready-to-assign a", text: "New deposit", count: 0
+        assert_select "#ready-to-assign .badge-warning", text: "left to assign"
+      end
+    end
+
+    describe "the card" do
+      it "isn't a link, and the way to the month's Deposits is a plain link inside it" do
+        deposit 3000, Date.new(2026, 9, 1)
+
+        get month_path("2026-09")
+
+        expect(css_select("a #ready-to-assign, a section#ready-to-assign")).to be_empty
+        expect(css_select("#ready-to-assign a").map { |link| [ link.text.squish, link["href"] ] })
+          .to eq([ [ "See Deposits", month_deposits_path("2026-09") ] ])
+        expect(css_select("#ready-to-assign a .stat-value, #ready-to-assign a dl")).to be_empty
+      end
+
+      it "labels its figures, and Reallocated is among them only when it isn't zero" do
+        deposit 600, Date.new(2026, 9, 1)
+
+        get month_path("2026-09")
+        expect(css_select("#ready-to-assign dt").map { |label| label.text.squish }).to eq([ "Carried over", "Deposited", "Assigned" ])
+
+        create(:budget_assignment, envelope: groceries, month: Date.new(2026, 9, 1), amount: 600)
+        create(:budget_ready_to_assign_reallocation, envelope: groceries, amount: 30, date: Date.new(2026, 9, 20))
+
+        get month_path("2026-09")
+        expect(css_select("#ready-to-assign dt").map { |label| label.text.squish }).to eq([ "Carried over", "Deposited", "Assigned", "Reallocated" ])
+        assert_select "#ready-to-assign .badge-warning", text: "left to assign"
+      end
     end
   end
 
@@ -629,13 +820,14 @@ RSpec.describe "Months", type: :request do
       expect(response.body.scan("CAD").size).to eq(1)
     end
 
-    it "keeps only Sign out in the main navigation" do
+    it "keeps only Import and Sign out in the main navigation" do
       create(:budget_envelope, budget: budget)
 
       get month_path("2026-09")
 
       assert_select "nav[aria-label=Main] form[action='#{session_path}'] button", text: "Sign out"
-      assert_select "nav[aria-label=Main] a", count: 0
+      assert_select "nav[aria-label=Main] a", count: 1
+      assert_select "nav[aria-label=Main] a[href='#{new_import_path}']", text: "Import"
     end
   end
 
@@ -944,8 +1136,8 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select "a.btn.btn-primary[href='#{new_spend_path(month: "2026-09", from: "month")}']", text: "New spend"
-      assert_select "div.gap-2 a.btn-primary", count: 1
-      expect(css_select("div.gap-2 a.btn").map { |action| action.text.strip }).to eq([ "New spend", "New deposit", "New envelope" ])
+      assert_select "div.flex.flex-wrap.items-center.gap-2 a.btn-primary", count: 1
+      expect(css_select("div.flex.flex-wrap.items-center.gap-2 > a.btn").map { |action| action.text.strip }).to eq([ "New spend", "New deposit", "New envelope" ])
       assert_select "a.btn[href='#{new_deposit_path(month: "2026-09", from: "month")}']", text: "New deposit"
       assert_select "a.btn[href='#{new_envelope_path(month: "2026-09", from: "month")}']", text: "New envelope"
     end
@@ -966,24 +1158,107 @@ RSpec.describe "Months", type: :request do
     it "go to the months either side, and stay on the month view" do
       get month_path("2026-09")
 
-      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-08")}']", text: "August 2026"
-      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-10")}']", text: "October 2026"
+      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-08")}']", text: /August 2026/
+      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-10")}']", text: /October 2026/
     end
 
     it "offer This month only when viewing another month" do
       get month_path("2026-09")
-      assert_select "a", text: "This month", count: 0
+      assert_select "nav[aria-label=Months] a", text: "This month", count: 0
 
       get month_path("2027-03")
-      assert_select "a[href='#{month_path("2026-09")}']", text: "This month"
+      assert_select "nav[aria-label=Months] a[href='#{month_path("2026-09")}']", text: "This month"
     end
 
     it "work in both directions, however far from today" do
       get month_path("1990-01")
-      assert_select "a[href='#{month_path("1989-12")}']", text: "December 1989"
+      assert_select "a[href='#{month_path("1989-12")}']", text: /December 1989/
 
       get month_path("2100-12")
-      assert_select "a[href='#{month_path("2101-01")}']", text: "January 2101"
+      assert_select "a[href='#{month_path("2101-01")}']", text: /January 2101/
+    end
+
+    it "are one control: Previous, the month's name and Next, with the name opening the picker" do
+      get month_path("2026-09")
+
+      assert_select "nav[aria-label=Months] .join > a[rel=prev][aria-label='Previous month, August 2026']"
+      assert_select "nav[aria-label=Months] .join > a[rel=next][aria-label='Next month, October 2026']"
+      assert_select "nav[aria-label=Months] .join > button[hidden][data-month-picker-target=trigger]", text: /September 2026/
+    end
+
+    it "stop Previous in January of year 1, and Next is never stopped" do
+      get month_path("0001-01")
+
+      expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "January 0001"
+      assert_select "nav[aria-label=Months] a[rel=prev]", count: 0
+      assert_select "nav[aria-label=Months] button[disabled][aria-disabled=true]", count: 1
+      assert_select "nav[aria-label=Months] a[rel=next][href='#{month_path("0001-02")}']"
+
+      get month_path("0001-02")
+      assert_select "nav[aria-label=Months] a[rel=prev][href='#{month_path("0001-01")}']"
+    end
+
+    it "render a month as far off as a date field goes" do
+      get month_path("275760-09")
+
+      expect(response).to have_http_status(:ok)
+      assert_select "h1", text: "September 275760"
+      assert_select "nav[aria-label=Months] a[rel=next][href='#{month_path("275760-10")}']"
+      assert_select "input[type=number][value='275760'][max='275760']"
+      assert_select "dialog a[href='#{month_path("275760-09")}'][aria-current=page]"
+    end
+  end
+
+  describe "the month picker" do
+    before { travel_to Time.utc(2026, 9, 15, 16) }
+
+    it "has twelve links to the months of the viewed year, the viewed one marked as the current page, in a dialog" do
+      get month_path("2027-03")
+
+      assert_select "dialog.modal[aria-labelledby]", count: 1
+      assert_select "dialog h2", text: "Choose a month"
+      hrefs = css_select("dialog [role=group] a").map { |link| link["href"] }
+      expect(hrefs).to eq((1..12).map { |month| month_path(format("2027-%02d", month)) })
+      assert_select "dialog [role=group] a[aria-current=page]", count: 1
+      assert_select "dialog [role=group] a[aria-current=page][href='#{month_path("2027-03")}']", text: "Mar"
+      assert_select "dialog input[type=number][value='2027'][min='1'][max='275760']"
+    end
+
+    it "marks this calendar month in a year that has it, in its name and not only by colour" do
+      get month_path("2026-03")
+
+      assert_select "dialog a[href='#{month_path("2026-09")}'][aria-label='September 2026, this month']"
+      assert_select "dialog a.btn-outline", count: 1
+    end
+
+    it "has a This month button under the grid going to the current month, and a Close button" do
+      get month_path("2027-03")
+
+      assert_select "dialog a.btn[href='#{month_path("2026-09")}']", text: "This month"
+      assert_select "dialog form[method=dialog] button", text: "Close"
+    end
+
+    it "is on the home page too, which is the current month" do
+      get root_path
+
+      assert_select "dialog [role=group] a[href='#{month_path("2026-09")}'][aria-current=page]"
+    end
+
+    it "is on the month view only: the Deposits page and an envelope's page have the same links and no dialog" do
+      envelope = create(:budget_envelope, budget: budget, name: "Groceries")
+
+      [ month_deposits_path("2026-10"), month_envelope_path("2026-10", envelope) ].each do |path|
+        get path
+
+        assert_select "nav[aria-label=Months] a[rel=prev]", text: /September 2026/
+        assert_select "nav[aria-label=Months] a[rel=next]", text: /November 2026/
+        assert_select "nav[aria-label=Months] a", text: "This month"
+        assert_select "nav[aria-label=Months] .join > span", text: "October 2026"
+        assert_select "dialog", count: 0
+        assert_select "[data-controller='modal month-picker']", count: 0
+        assert_select "nav[aria-label=Months] button", count: 0
+      end
     end
   end
 

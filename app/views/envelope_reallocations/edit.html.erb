@@ -4,7 +4,7 @@
   <%= render "components/page_header", title: "Edit reallocation" do %>
     <%= render "components/delete_button", path: envelope_reallocation_path(@reallocation),
           confirm: "Delete the #{@reallocation.description_was} reallocation?",
-          params: { from: origin, month: @month.to_param, envelope: opened_from&.id }.compact %>
+          params: origin_params(@month).merge({ envelope: opened_from&.id }.compact) %>
   <% end %>
 
   <%= render "reallocations/form", record: @reallocation %>

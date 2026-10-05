@@ -10,6 +10,11 @@
   <% end %>
 </div>
 
+<%# Which CSV format its bank's files use, when it has one. %>
+<% if @account.default_csv_format %>
+  <p class="mt-2 text-base-content/70">Default CSV format: <%= @account.default_csv_format.name %></p>
+<% end %>
+
 <%# The Import that ran last, which is the one whose summary can still be looked at here. %>
 <% if @latest_import %>
   <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -29,7 +34,7 @@
   <% if @bank_transactions.any? %>
     <%= render "components/record_list" do %>
       <% @bank_transactions.each do |bank_transaction| %>
-        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, from: "account" %>
+        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, origin_params: { from: "account" } %>
       <% end %>
     <% end %>
 

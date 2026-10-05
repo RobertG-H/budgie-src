@@ -62,9 +62,11 @@ en:
       budget/csv_format:
         column_count: Sample file
         money_in_value: Direction for money in
-      # An Import's CSV format is what the form calls it.
+      # An Import's CSV format is what the form calls it, and an Account's default is "Default CSV format", not Rails' "Default csv format".
       budget/import:
         csv_format: CSV format
+      budget/account:
+        default_csv_format: Default CSV format
       # What the Filing rule form calls what a rule does with the bank transactions it fits.
       budget/filing_rule:
         outcome: How to file them
@@ -94,6 +96,9 @@ en:
         budget/import:
           attributes:
             csv_format:
+              required: "can't be blank"
+            # The whole form's Account, which is also what another budget's becomes when it's looked up in the budget's own.
+            account:
               required: "can't be blank"
         # What's shown when an Account with bank transactions is deleted, and when a CSV format that an Import used is.
         budget/account:

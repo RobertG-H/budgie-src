@@ -16,14 +16,44 @@
 class Budget::Month
   ZERO = BigDecimal(0)
 
+  # There's no month before January of year 1: PostgreSQL has no year 0, so /months/0000-12 is a 404. Nothing is bounded after.
+  EARLIEST = Date.new(1, 1, 1)
+
   # Money not yet assigned to an envelope: every Deposit for this month and the months before it, less everything
   # assigned in them, plus everything moved back into it from envelopes. `carried_over` is what was left at the end of
   # last month, `deposited` is what came in this month, `assigned` is what went to envelopes this month, all of them, and
   # `reallocated` is what came back from envelopes this month, all of them.
+  #
+  # The card on the month view says in words which of four states it's in, and these say which so the view does no arithmetic. A
+  # month is in exactly one of them: they all turn on the amount, so they can't overlap, and nothing is "empty" or "all assigned"
+  # while it's over-assigned.
   ReadyToAssign = Data.define(:amount, :carried_over, :deposited, :assigned, :reallocated) do
     # Over-assigned: more has been assigned than there is to assign, so Ready to Assign is below zero.
     def over_assigned?
       amount.negative?
+    end
+
+    # There is money left to assign.
+    def to_assign?
+      amount.positive?
+    end
+
+    # Nothing has happened yet: no Carried over, Deposited, Assigned or Reallocated, such as a new budget's first month.
+    def empty?
+      amount.zero? && [ carried_over, deposited, assigned, reallocated ].all?(&:zero?)
+    end
+
+    # Everything that came in has been assigned: nothing is left, and there is something that came in or went out to show for it.
+    def all_assigned?
+      amount.zero? && !empty?
+    end
+
+    # Which of the four states this is, in the order they win: :over_assigned, :empty, :all_assigned or :to_assign.
+    def state
+      return :over_assigned if over_assigned?
+      return :empty if empty?
+
+      all_assigned? ? :all_assigned : :to_assign
     end
   end
 
@@ -113,6 +143,10 @@ class Budget::Month
 
   def to_param
     date.strftime("%Y-%m")
+  end
+
+  def earliest?
+    date == EARLIEST
   end
 
   def previous

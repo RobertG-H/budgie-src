@@ -1,5 +1,5 @@
 # Filing a bank transaction as the Deposits, Spends and Refunds it was (ADR 0009), and taking that back. The form is opened from the
-# Unfiled list or from the bank transaction's Account, and saving, ignoring or cancelling goes back there (ReturnsToOrigin).
+# Bank transactions page or from the bank transaction's Account, and saving, ignoring or cancelling goes back there (ReturnsToOrigin).
 class BankTransactionFilingsController < ApplicationController
   include BankTransactionScoped
   include FilingFormParams

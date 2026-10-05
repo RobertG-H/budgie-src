@@ -31,8 +31,8 @@ RSpec.describe "Deposits", type: :request do
 
       get month_deposits_path("2026-09")
 
-      assert_select "nav[aria-label=Months] a[href='#{month_deposits_path("2026-08")}']", text: "August 2026"
-      assert_select "nav[aria-label=Months] a[href='#{month_deposits_path("2026-10")}']", text: "October 2026"
+      assert_select "nav[aria-label=Months] a[href='#{month_deposits_path("2026-08")}']", text: /August 2026/
+      assert_select "nav[aria-label=Months] a[href='#{month_deposits_path("2026-10")}']", text: /October 2026/
       assert_select "a", text: "This month", count: 0
       assert_select "a[href='#{month_path("2026-09")}']", text: "Back to September 2026"
 

@@ -5,6 +5,8 @@
 # the same file imported twice, is still an Import: it's the Account's latest, so an earlier one can't be undone from under the
 # rows it skipped.
 #
+# The first Import into an Account that has no default CSV format makes the one it was read with the Account's (see Budget::Account).
+#
 # The budget's Filing rules act on the rows it creates, as they're created and in the same database transaction, so what a rule filed
 # or ignored is undone with the Import like any other filed records (ADR 0012). It says how many in `filed_by_rules` and
 # `ignored_by_rules`, which are what it did then: un-filing a row later doesn't change them.
@@ -61,6 +63,7 @@ class Budget::Import < ApplicationRecord
       self.zero_rows_skipped = reading.zero_rows
       assign_attributes(file_figures(reading.rows))
       save!
+      default_the_accounts_csv_format
       if rows.any?
         Budget::BankTransaction.insert_all!(rows.map { |row| row.merge(import_id: id) })
         apply_filing_rules
@@ -121,6 +124,13 @@ class Budget::Import < ApplicationRecord
   end
 
   private
+    # An Account without a default CSV format gets the one this Import was read with, since it worked, so the Account's next Import, and an
+    # Import from the header, know which format its bank's files use. One that has a default is never changed by an Import. It's inside the
+    # Account's row lock, which has just read its current value, and is one statement.
+    def default_the_accounts_csv_format
+      account.update_columns(default_csv_format_id: csv_format_id, updated_at: Time.current) if account.default_csv_format_id.nil?
+    end
+
     # Files and ignores the rows it brought in that the budget's Filing rules fit, and notes how many. A budget with no rules costs the
     # one query that finds out.
     def apply_filing_rules

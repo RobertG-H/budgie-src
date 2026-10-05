@@ -1,0 +1,31 @@
+<%# locals: (guess:) %>
+<%# What a guess that wasn't certain says, above the whole form that comes back with its best offer chosen, in words: what Budgie worked out, and what to check. Nothing is imported until the form is sent. %>
+<%# A file no CSV format reads says why, for each format, in a "Why" the person can open, and points to the CSV format builder, which can't be given the file: it reads a sample for the request and never keeps it, and a browser can't fill a file field for it. A refusal that's about the file for every format, such as that it isn't UTF-8, is said once, instead. %>
+<% if guess.file_refusal %>
+  <div class="mt-8"><%= render "components/flash", type: :alert, message: "#{guess.file_refusal.message} Choose another file." %></div>
+<% elsif guess.csv_format.nil? %>
+  <div role="alert" class="alert alert-error mt-8 block">
+    <p class="font-medium">No CSV format reads this file.</p>
+    <details class="mt-2">
+      <summary class="cursor-pointer">Why</summary>
+      <ul class="mt-2 list-disc space-y-1 pl-5">
+        <% guess.refusals.each do |rejection| %>
+          <li><%= rejection.csv_format.name %>: <%= rejection.refusal.message %></li>
+        <% end %>
+      </ul>
+    </details>
+    <p class="mt-3">
+      <%= link_to "New CSV format", new_csv_format_path, class: "btn btn-sm" %>
+      In the CSV format builder, choose the same file as its sample.
+    </p>
+  </div>
+<% else %>
+  <% notes = import_guess_notes(guess) %>
+  <% if notes.any? %>
+    <div role="status" class="alert alert-warning mt-8 block">
+      <% notes.each do |note| %>
+        <p><%= note %></p>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

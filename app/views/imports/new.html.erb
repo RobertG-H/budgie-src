@@ -1,15 +1,27 @@
-<% content_for :title, "Import into #{@account.name} · Budgie" %>
+<% content_for :title, (@account_fixed ? "Import into #{@account.name} · Budgie" : "Import · Budgie") %>
 
 <div class="mx-auto max-w-md">
-  <%= render "components/page_header", title: "Import", description: "Into #{@account.name}" %>
+  <%= render "components/page_header", title: "Import",
+        description: (@account_fixed ? "Into #{@account.name}" : "Choose a file, the CSV format that reads it and the Account it's for.") %>
 
-  <% if Current.budget.csv_formats.any? %>
-    <%= render "imports/form", account: @account, import: @import, cancel_path: account_path(@account) %>
-  <% else %>
+  <% if @guess %>
+    <%= render "imports/guess_note", guess: @guess %>
+  <% end %>
+
+  <% if Current.budget.csv_formats.none? %>
     <div class="mt-8">
       <%= render "components/empty_state", message: "You need a CSV format to read a file with." do %>
         <%= link_to "New CSV format", new_csv_format_path, class: "btn btn-primary" %>
       <% end %>
     </div>
+  <% elsif !@account_fixed && Current.budget.accounts.none? %>
+    <div class="mt-8">
+      <%= render "components/empty_state", message: "You need an Account to import into." do %>
+        <%= link_to "New account", new_account_path, class: "btn btn-primary" %>
+      <% end %>
+    </div>
+  <% else %>
+    <%= render "imports/form", account: (@account if @account_fixed), import: @import, again: @guess.present?,
+          cancel_path: (@account_fixed ? account_path(@account) : root_path) %>
   <% end %>
 </div>

@@ -75,7 +75,7 @@ RSpec.describe "Accounts", type: :request do
   end
 
   describe "GET /accounts/new" do
-    it "shows a form for the name, which is all an Account has" do
+    it "shows a form for the name, and for a default CSV format only once there is a CSV format to choose" do
       get new_account_path
 
       expect(response).to have_http_status(:ok)
@@ -89,6 +89,30 @@ RSpec.describe "Accounts", type: :request do
         assert_select "input:not([type=hidden]):not([type=submit])", count: 1
       end
       assert_select "a.btn[href='#{accounts_path}']", text: "Cancel"
+    end
+  end
+
+  describe "GET /accounts/new, with CSV formats" do
+    let!(:cibc) { create(:budget_csv_format, budget: budget, name: "CIBC") }
+    let!(:amex) { create(:budget_csv_format, budget: budget, name: "amex") }
+
+    it "has a Default CSV format select, with None first and the budget's CSV formats alphabetically, and says what it's for" do
+      create(:budget_csv_format, name: "Someone else's")
+
+      get new_account_path
+
+      assert_select "label[for=account_default_csv_format_id]", text: "Default CSV format"
+      expect(css_select("select[name='account[default_csv_format_id]'] option").map { |option| option.text.squish }).to eq([ "None", "amex", "CIBC" ])
+      assert_select "select[name='account[default_csv_format_id]'][aria-describedby=account_default_csv_format_id_hint]"
+      assert_select "p#account_default_csv_format_id_hint", text: "Used to recognise which Account a file is for when you Import from the header."
+      assert_select "select[name='account[default_csv_format_id]'] option[selected]", count: 0
+      expect(response.body).not_to include("Someone else")
+    end
+
+    it "is not required" do
+      get new_account_path
+
+      assert_select "select[name='account[default_csv_format_id]'][required]", count: 0
     end
   end
 
@@ -112,6 +136,42 @@ RSpec.describe "Accounts", type: :request do
       expect { post accounts_path, params: { account: { name: "CHEQUING" } } }.not_to change(Budget::Account, :count)
       assert_select "[role=alert] li", text: "Name has already been taken"
       assert_select "input[name='account[name]'][value=CHEQUING][aria-invalid=true]"
+    end
+
+    describe "with a default CSV format" do
+      let!(:cibc) { create(:budget_csv_format, budget: budget, name: "CIBC") }
+
+      it "saves the one chosen" do
+        post accounts_path, params: { account: { name: "Chequing", default_csv_format_id: cibc.id } }
+
+        expect(budget.accounts.sole.default_csv_format).to eq(cibc)
+      end
+
+      it "saves none when None is chosen, which the form sends as nothing" do
+        post accounts_path, params: { account: { name: "Chequing", default_csv_format_id: "" } }
+
+        expect(response).to redirect_to(accounts_path)
+        expect(budget.accounts.sole.default_csv_format).to be_nil
+      end
+
+      it "refuses another budget's CSV format on the field, and creates nothing, keeping what was typed" do
+        others = create(:budget_csv_format, name: "Someone else's")
+
+        expect { post accounts_path, params: { account: { name: "Chequing", default_csv_format_id: others.id } } }.not_to change(Budget::Account, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_select "[role=alert] li", text: "Default CSV format isn't one of this budget's"
+        assert_select "select[name='account[default_csv_format_id]'][aria-invalid=true]"
+        assert_select "p#account_default_csv_format_id_error", text: "Default CSV format isn't one of this budget's"
+        assert_select "input[name='account[name]'][value=Chequing]"
+      end
+
+      it "refuses an id that isn't a CSV format at all, without an error page" do
+        expect { post accounts_path, params: { account: { name: "Chequing", default_csv_format_id: "0" } } }.not_to change(Budget::Account, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_select "[role=alert] li", text: "Default CSV format isn't one of this budget's"
+      end
     end
 
     it "never takes the budget from the params" do
@@ -141,6 +201,17 @@ RSpec.describe "Accounts", type: :request do
       assert_select "h1", text: "Chequing"
       assert_select "main a.btn.btn-primary[href='#{new_account_import_path(account)}']", text: "Import"
       assert_select "main a.btn[href='#{edit_account_path(account)}']", text: "Edit"
+    end
+
+    it "says which CSV format it uses under its name, when it has one, and nothing when it hasn't" do
+      get account_path(account)
+
+      expect(response.body).not_to include("Default CSV format")
+
+      account.update!(default_csv_format: create(:budget_csv_format, budget: budget, name: "Chequing CSV"))
+      get account_path(account)
+
+      assert_select "main p.text-base-content\\/70", text: "Default CSV format: Chequing CSV"
     end
 
     it "lists its bank transactions newest first, each with its date, description and signed amount, money out red" do
@@ -484,6 +555,18 @@ RSpec.describe "Accounts", type: :request do
       assert_select "form[data-turbo-confirm='Delete the Chequing account? Its 1 Filing rule is deleted with it.']"
     end
 
+    it "shows the default CSV format the Account has, chosen, and None when it has none" do
+      cibc = create(:budget_csv_format, budget: budget, name: "CIBC")
+
+      get edit_account_path(account)
+      assert_select "select[name='account[default_csv_format_id]'] option[selected]", count: 0
+      expect(css_select("select[name='account[default_csv_format_id]'] option").first.text.squish).to eq("None")
+
+      account.update!(default_csv_format: cibc)
+      get edit_account_path(account)
+      assert_select "select[name='account[default_csv_format_id]'] option[selected][value='#{cibc.id}']", text: "CIBC"
+    end
+
     it "is not found for another user's Account" do
       get edit_account_path(others_account)
 
@@ -509,6 +592,38 @@ RSpec.describe "Accounts", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       assert_select "[role=alert] li", text: "Name can't be blank"
       expect(account.reload.name).to eq("Chequing")
+    end
+
+    describe "its default CSV format" do
+      let!(:cibc) { create(:budget_csv_format, budget: budget, name: "CIBC") }
+
+      it "is set to the one chosen, and cleared when None is" do
+        patch account_path(account), params: { account: { name: "Chequing", default_csv_format_id: cibc.id } }
+        expect(account.reload.default_csv_format).to eq(cibc)
+        expect(response).to redirect_to(account_path(account))
+
+        patch account_path(account), params: { account: { name: "Chequing", default_csv_format_id: "" } }
+        expect(account.reload.default_csv_format).to be_nil
+      end
+
+      it "is left as it is when the form doesn't send it" do
+        account.update!(default_csv_format: cibc)
+
+        patch account_path(account), params: { account: { name: "Renamed" } }
+
+        expect(account.reload).to have_attributes(name: "Renamed", default_csv_format_id: cibc.id)
+      end
+
+      it "is refused when it's another budget's, saying so on the field, and changes nothing" do
+        others = create(:budget_csv_format, name: "Someone else's")
+        account.update!(default_csv_format: cibc)
+
+        patch account_path(account), params: { account: { name: "Renamed", default_csv_format_id: others.id } }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_select "[role=alert] li", text: "Default CSV format isn't one of this budget's"
+        expect(account.reload).to have_attributes(name: "Chequing", default_csv_format_id: cibc.id)
+      end
     end
 
     it "never moves it to another budget" do

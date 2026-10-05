@@ -1,0 +1,57 @@
+<% content_for :title, "Bank transactions · Budgie" %>
+<% budget = Current.budget %>
+<% range = @list.date_range %>
+<% other_filters = @list.to_params.except(:date_from, :date_to) %>
+<% unfiled_only = !@list.range_applies? %>
+<%# What a row sends along when it's opened, filed or un-filed from here, so that it comes back to this page as it is. %>
+<% origin_params = { from: "bank_transactions", filter: @list.to_params, page: page_param }.compact %>
+
+<%# A row with a Guess says what it was like and what it would be filed as. A Guess only suggests, so choosing the row still opens the form, which starts on it, and "File N as guessed" opens a review of the page's Guesses before anything is filed. It's only there for the unfiled ones. %>
+<%= render "components/page_header", title: "Bank transactions",
+      description: "Every bank transaction, from every account, whether it has been filed, ignored or not yet. Choose an unfiled one to file it." do %>
+  <% if unfiled_only && @guesses.any? %>
+    <%= link_to "File #{@guesses.size} as guessed", new_guessed_filing_path(filter: @list.account_params, page: page_param), class: "btn btn-primary" %>
+  <% end %>
+<% end %>
+
+<%# The filters are one GET form, so a link to a page of the list, or back from a bank transaction, is the same address. Nothing is sent until Apply is, and the dates are shown disabled for Unfiled, which they don't apply to. %>
+<%= form_with url: bank_transactions_path, method: :get, scope: :filter, class: "mt-6 space-y-4" do |form| %>
+  <div class="grid grid-cols-2 gap-4">
+    <%= render "components/field", form: form, attribute: :state, label: "State", control: :select do |field| %>
+      <%= form.select :state, bank_transaction_state_options, { selected: @list.state }, **field %>
+    <% end %>
+    <%= render "components/field", form: form, attribute: :account, label: "Account", control: :select do |field| %>
+      <%= form.select :account, bank_transaction_account_options(@list.accounts), { selected: @list.account&.id.to_s }, **field %>
+    <% end %>
+  </div>
+
+  <%= render "components/date_range_filter", form: form, filter: range, disabled: unfiled_only,
+        hint: ("Unfiled bank transactions are listed whatever their date." if unfiled_only),
+        path: ->(dates) { bank_transactions_path(filter: other_filters.merge(dates)) } %>
+<% end %>
+
+<div class="mt-8">
+  <% if @bank_transactions.any? %>
+    <%= render "components/record_list" do %>
+      <% @bank_transactions.each do |bank_transaction| %>
+        <%= render "bank_transactions/bank_transaction", bank_transaction: bank_transaction, budget: budget, origin_params: origin_params,
+              show_account: true, show_state: !unfiled_only, guess: @guesses[bank_transaction.id] %>
+      <% end %>
+    <% end %>
+
+    <div class="mt-4">
+      <%= render "components/pager", page: page, more: more_pages?,
+            path: ->(number) { bank_transactions_path(filter: @list.to_params, page: (number unless number == 1)) } %>
+    </div>
+  <% elsif page > 1 %>
+    <%= render "components/empty_state", message: "There are no more bank transactions." do %>
+      <%= link_to "Back to the first page", bank_transactions_path(filter: @list.to_params), class: "btn" %>
+    <% end %>
+  <% elsif unfiled_only %>
+    <%= render "components/empty_state", message: "Every bank transaction has been filed or ignored." %>
+  <% else %>
+    <%= render "components/empty_state", message: "No bank transactions match." do %>
+      <%= link_to "Reset the filters", bank_transactions_path, class: "btn" %>
+    <% end %>
+  <% end %>
+</div>

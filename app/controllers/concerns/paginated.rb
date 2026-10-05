@@ -7,6 +7,12 @@ module Paginated
   # Far past any list, so that a page number that's silly doesn't overflow the database's integers.
   MAX_PAGE = 1_000_000
 
+  # The page a value names, from 1: anything that isn't one is the first. Where a page asks for one, and where a form that was opened from a page
+  # asks which it came from, so both read it the same way.
+  def self.page_number(value)
+    value.to_s.to_i.clamp(1, MAX_PAGE)
+  end
+
   included do
     helper_method :page, :more_pages?
   end
@@ -14,7 +20,7 @@ module Paginated
   private
     # The page asked for, from 1: anything that isn't one is the first.
     def page
-      @page ||= params[:page].to_s.to_i.clamp(1, MAX_PAGE)
+      @page ||= Paginated.page_number(params[:page])
     end
 
     # The rows of one page of `scope`, in the order it's in. Whether there's a page after it is `more_pages?`.

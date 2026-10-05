@@ -1,4 +1,8 @@
-<%# locals: (month: nil) %>
-<%# What a form carries so that saving, deleting or cancelling can go back to the page it was opened from: the page's name, and the month it showed, if it showed one. See ReturnsToOrigin. %>
+<%# locals: (month: nil, filter: nil, page: nil) %>
+<%# What a form carries so that saving, deleting or cancelling can go back to the page it was opened from: the page's name, and the month it showed, if it showed one. The Records page also has its filter, as the params it understood, and the page of its list. See ReturnsToOrigin. %>
 <%= hidden_field_tag :from, origin, id: nil if origin %>
 <%= hidden_field_tag :month, month.to_param, id: nil if month %>
+<% filter&.each do |name, value| %>
+  <%= hidden_field_tag "filter[#{name}]", value, id: nil %>
+<% end %>
+<%= hidden_field_tag :page, page, id: nil if page %>
