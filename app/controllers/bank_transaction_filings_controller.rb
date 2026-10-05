@@ -16,13 +16,14 @@ class BankTransactionFilingsController < ApplicationController
   end
 
   # Files it as the records the form has, all or none, and makes a Filing rule from it if "Always file like this" was ticked, in the same
-  # database transaction. What's wrong comes back on the form, with everything as it was entered.
+  # database transaction. What's wrong comes back on the form, with everything as it was entered. "File and next" goes on to the next unfiled
+  # bank transaction's form when it's done (BankTransactionScoped#redirect_after_filing), and a refusal stays on this one.
   def create
     @entry = Budget::Filing::Entry.new(bank_transaction: @bank_transaction, drafts: draft_params)
     @offer = filing_rule_offer(records: @entry.drafts.size)
 
     if @offer.make? ? @offer.file(@entry) : Budget::Filing.new(Current.budget).file([ @entry ])
-      redirect_to origin_path, notice: notice_with_sweep("Bank transaction filed.", @offer)
+      redirect_after_filing notice_with_sweep("Bank transaction filed.", @offer)
     else
       render :new, status: :unprocessable_content
     end

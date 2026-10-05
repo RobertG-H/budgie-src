@@ -313,6 +313,29 @@ RSpec.describe "The words on the pages", type: :request do
         expect(response.body).not_to match(/filed_by_rules|ignored_by_rules/)
       end
 
+      it "says File and next, Ignore and next, Edit details and Edit rule, and what happens when none is left, in words" do
+        # Paycheck and Loblaws are the two unfiled bank transactions of the Import above.
+        get new_bank_transaction_filing_path(paycheck_row, from: "bank_transactions", filter: { state: "unfiled" })
+
+        expect(visible_text).to include("File and next", "Ignore and next", "Edit details", "Paycheck · Oct 1, 2026 · $2,800.00", "Edit rule", "Always file like this",
+          "Bank transactions with 'paycheck' in their description are filed the same way as they come in.")
+        expect(visible_text).not_to match(/\w+_\w+/)
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_ignore_path(paycheck_row), params: { next: "1", from: "bank_transactions", filter: { state: "unfiled" } }
+        follow_redirect!
+
+        expect(Nokogiri::HTML(response.body).text.squish).to include("Bank transaction ignored.")
+        expect(visible_text).not_to include("and next")
+        expect(visible_text).not_to match(retired_terms)
+
+        post bank_transaction_ignore_path(loblaws_row), params: { next: "1", from: "bank_transactions", filter: { state: "unfiled" } }
+        follow_redirect!
+
+        expect(Nokogiri::HTML(response.body).text.squish).to include("Bank transaction ignored. No more unfiled bank transactions.")
+        expect(Nokogiri::HTML(response.body).text.squish).not_to match(retired_terms)
+      end
+
       it "says Guess, and which bank transaction it was like, on the filing form, in words" do
         post bank_transaction_filing_path(loblaws_row), params: file_params
         later_paycheck = create(:budget_bank_transaction, account: account, description: "Paycheck", date: Date.new(2026, 10, 15), amount: 2800)

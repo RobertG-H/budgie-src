@@ -365,6 +365,12 @@ record's amount is needed), for an error in them, for a field changed from the b
 there, and a browser's invalid field opens the section that holds it, since it can't focus a field in a closed one and File would silently do nothing. A Guess changes only the kind and the
 envelope, so it never opens them. Focus starts on the envelope when it's still to choose, and otherwise on File.
 
+**File and next.** A pile of unfiled bank transactions is worked through without going back to the list after each one. When the filing form was opened from the Bank transactions page (in its Account, if it was
+filtered to one) or from an Account's page, **File and next** and **Ignore and next** do what File and Ignore do and then open the next unfiled bank transaction's form: the next one older in the list's order, and when there's none older, the
+newest one left, so working from the middle of the list still finishes it. The next form carries the same way back and starts on its own Guess, and the notice ("Bank transaction filed.") shows above it. When none is left, it goes back to the list
+with "Bank transaction filed. No more unfiled bank transactions." Which one is next is judged after the filing, and after a rule from the form has swept, so what was just filed is never offered; a refusal stays on the same form. It's one query, run only
+when the buttons are drawn or "and next" is pressed. A form that wasn't opened from a list has no next, and its buttons are File, Ignore and Cancel as before.
+
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
 or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank

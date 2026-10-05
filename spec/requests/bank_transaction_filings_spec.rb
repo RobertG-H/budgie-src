@@ -31,6 +31,8 @@ RSpec.describe "Filing bank transactions", type: :request do
 
   describe "GET /bank_transactions/:bank_transaction_id/filing/new" do
     it "shows the bank transaction, and a form to file it as one record, with a File button, an Ignore button and Cancel" do
+      money_in.ignore # the only other unfiled one, so there's no next to go on to (see "File and next")
+
       get new_bank_transaction_filing_path(money_out, from: "account")
 
       expect(response).to have_http_status(:ok)

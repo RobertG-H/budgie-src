@@ -168,6 +168,16 @@ class Budget::BankTransaction < ApplicationRecord
     !filed? || filed_total == amount.abs
   end
 
+  # The next unfiled bank transaction in `scope`, which is what working through a list one at a time goes to: the first unfiled one older than this
+  # one, in the list's order (`date`, then `id`, newest first), and when none is older, the newest unfiled one left, so working from the middle of
+  # a list still finishes it. Nothing when no other is unfiled. It's judged when it's asked, so one filed since, such as this one just now, is never
+  # offered, and it's one query, wrap included: the older ones are ordered first.
+  def next_unfiled(scope:)
+    older_first = Arel.sql(self.class.sanitize_sql_array([ "(budget_bank_transactions.date, budget_bank_transactions.id) < (?, ?) DESC", date, id ]))
+
+    scope.unfiled.where.not(id: id).order(older_first).newest_first.first
+  end
+
   # Won't be filed: sets when it was ignored, such as for a card payment between a person's own accounts. Only an unfiled bank
   # transaction can be, which is judged once it's locked, so a record filed since it was looked at stops it.
   def ignore
