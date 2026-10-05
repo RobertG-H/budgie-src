@@ -67,7 +67,7 @@ and `success` uses the `-700` shade because `success-600` with white content is 
 
 ## Layout
 
-Mobile-first: design at 375px, add `sm:`/`lg:` for wider. The app shell is a daisyUI `navbar`, with a row of links to the other pages under it once there's a budget (`layouts/_sections`, wrapping on a phone, the current one marked in a bolder weight and `aria-current`), above a centred
+Mobile-first: design at 375px, add `sm:`/`lg:` for wider. The app shell is a daisyUI `navbar` with the app name on the left and, on the right, Import (`btn btn-primary btn-sm`, only with a budget) then Sign out (`btn btn-ghost btn-sm`), which fit at 375px with no menu, with a row of links to the other pages under it once there's a budget (`layouts/_sections`: Budget, Records, Bank transactions, Accounts, Filing rules, CSV formats; wrapping on a phone, the current one marked in a bolder weight and `aria-current`, never colour alone, and Bank transactions followed by a muted "12 unfiled" link to the Unfiled state when there are some, "99+ unfiled" for a hundred or more), above a centred
 `main`; on a phone the budget's currency drops under the app name instead of beside it, so nothing has to
 shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spacing uses Tailwind's scale in
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
@@ -126,6 +126,7 @@ second use turns it into a partial. The partials:
 | `_delete_button` | A button that deletes a record once a `turbo_confirm` question has been answered yes, sending along any params it's given, such as the page the record was opened from. It says Delete unless it's given another label, for what it takes back, such as Undo. It's the full-size button unless it's given `size: :sm`, for a row of a table. A form of its own, so it goes in a page's header actions or a cell of a table. |
 | `_panel` | A bordered box that holds things that belong together and are apart from what's around them, such as the bank transaction on the filing form and the Filing rule it offers to make. A `div` unless given another `tag`, such as a `fieldset` for a group of fields with a legend, and a `class` or `data` goes on it. |
 | `_modal` | A button that opens a native `<dialog>`, via the `modal` Stimulus controller. |
+| `_term` | A word that needs explaining, with its one sentence from `help:` in `config/locales/en.yml` as a daisyUI `tooltip`: the word as a focusable `span` (a dotted underline says it has more to say) described by a real `.tooltip-content` element with `role="tooltip"` (`aria-hidden`, so it doesn't lengthen the name of a header or card that holds it), never `data-tip` or `title`. Around a link or button that is the term (Reallocate, Archive), the block is given the id to put in its own `aria-describedby`, and it gets no extra tab stop. `placement: :bottom` is for where the top would be cut off, such as a table's header, and `align: :start` for a term at the left of a card; the tooltip is hidden below `sm:`, where nothing hovers and a wide one would stick out of the page. |
 
 The month view's Ready to Assign card (`months/_ready_to_assign`) is the one headline number with a caption, so a person doesn't have to work out whether it's good news: "left to assign", "All assigned", "More was assigned than deposited." or "Nothing to assign yet." in words, with the figure it adds up from labelled under it (a `dl` that wraps, `text-xs` labels over `tabular-nums` figures) and "See Deposits", a plain link at its foot, so the card is never one big link. **Warning is for the current month only**: `to_assign?` there is `border-warning bg-warning/10` with a `badge-warning` caption, and in any other month a plain card with a `badge-ghost`; a new budget's empty card is plain with a "New deposit" button, never warning, and over-assigned is `border-error` in every month. The warning is only ever a background or a border, never text on white (2.24:1), and all text on the tinted card stays `base-content`.
 
@@ -136,6 +137,8 @@ A table's least-used columns can go behind one toggle, as the month view's Carri
 A table of what a list of rules does (the Filing rules page) puts one section's rules in one `_table`, with the section's name as the heading and not repeated in a row. Its **Filed count** is a right-aligned number, `0` when none, of the things a rule acted on that still are filed or ignored, said once in the page's description. A row that's inactive keeps an "Inactive" `_label_badge` after its name, and the reason, "Inactive while its envelope is archived.", is said once under the section's heading and not in each row. A delete from a row asks first, names the thing and says what stays ("Delete the Filing rule for 'loblaws'? The 3 bank transactions it filed or ignored stay as they are."), and the page refreshes in place (`turbo_refreshes_with method: :morph, scroll: :preserve`) so the person keeps their place in a long list.
 
 An envelope's archived state is a word and not a colour: the badge beside its name, and its Assigned as plain text where an envelope in use has the button that opens the input, since it's read-only. The month view lists every archived envelope in a native `<details>` ("Archived envelopes") below the table, bordered like a record list (`rounded-box border border-base-300`), each name a `link` filling a row, and only when the budget has some.
+
+`help/_figures` is the same sentences in words, a closed `<details>` ("What do these figures mean?", bordered like the Archived envelopes one) of a `dl` of the terms, on the month view (above Archived envelopes) and an envelope's page (which also lists Reallocate and Archive). It's the one place a phone reads them.
 
 ## Forms: the choice first
 
@@ -157,6 +160,8 @@ text-base font-normal` chip, so it reads as tappable at rest and its figure is t
 with `-mr-2 px-2` so it still lines up with them. The input is `components/field` with `hide_label`. Its form submits to the whole page
 (`data-turbo-frame="_top"`) so that saving refreshes every figure on the page with a morph that keeps the scroll
 position, and an amount that's refused comes back as a Turbo Stream into the frame.
+
+A tooltip is a **desktop shortcut and never the only place** an explanation lives: hover doesn't exist on a phone, so a page whose terms have a tooltip also says the same in words on the page (`help/_figures`), from the same `help:` strings. Tooltips are for the terms in `help:` only, not for every label, and the wording is never in `title=`, which touch and keyboard people don't get. A term is explained by `components/_term`, with a real `.tooltip-content` element that the term is described by; daisyUI shows it on hover and on `:focus-visible`, so a keyboard gets it too. Where an element sits in a scroll container (a table's wrapper) or a card, check the tooltip isn't cut off or adding a scrollbar, at 375px and 1280px.
 
 ## Don't
 

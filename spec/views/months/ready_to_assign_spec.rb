@@ -31,7 +31,7 @@ RSpec.describe "months/_ready_to_assign", type: :view do
     it "is the big number with 'left to assign' in a warning badge, and a warning border and background, in the current month" do
       render_card to_assign, current: true
 
-      assert_select ".stat-title", text: "Ready to Assign"
+      assert_select ".stat-title [aria-describedby]", text: "Ready to Assign"
       assert_select ".stat-value", text: "$200.00"
       assert_select "section.border-warning.bg-warning\\/10"
       assert_select ".badge.badge-warning", text: "left to assign"

@@ -1,0 +1,15 @@
+<%# locals: (actions: false) %>
+<%# The words of a page's figures, in words on the page: what a tooltip (components/_term) says on a desktop, for a phone, which can't hover, and for anyone who doesn't. It's closed, so it takes no room until it's wanted. Both read `help:` in config/locales/en.yml, so they can't disagree. `actions` adds the buttons an envelope's page has, Reallocate and Archive. %>
+<% terms = %i[ ready_to_assign assigned carried_over reallocated available ] %>
+<% terms += %i[ reallocate archive ] if actions %>
+<details class="mt-8 rounded-box border border-base-300">
+  <summary class="cursor-pointer p-4 font-semibold">What do these figures mean?</summary>
+  <dl class="space-y-4 border-t border-base-300 p-4">
+    <% terms.each do |key| %>
+      <div>
+        <dt class="font-medium"><%= help_term(key) %></dt>
+        <dd class="text-base-content/70"><%= help_text(key) %></dd>
+      </div>
+    <% end %>
+  </dl>
+</details>

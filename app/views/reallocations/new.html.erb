@@ -1,7 +1,7 @@
 <% content_for :title, "Reallocate · Budgie" %>
 
 <div class="mx-auto max-w-md">
-  <%= render "components/page_header", title: "Reallocate" %>
+  <%= render "components/page_header", title: "Reallocate", description: help_text(:reallocate_form) %>
 
   <%= render "reallocations/form", record: @reallocation %>
 </div>

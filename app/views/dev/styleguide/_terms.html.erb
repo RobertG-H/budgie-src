@@ -1,0 +1,48 @@
+<%# locals: (budget:) %>
+<section id="terms" aria-labelledby="terms-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="terms-heading" class="text-xl font-semibold">Terms and tooltips</h2>
+  <p class="text-base-content/70">A word that needs explaining gets one sentence from <code>help:</code> in <code>config/locales/en.yml</code>, as a tooltip on hover or keyboard focus. A tooltip is only ever a desktop shortcut: the same sentences are in words on the page, in the <code>&lt;details&gt;</code> below, which is how a phone reaches them (the tooltip is hidden there).</p>
+
+  <h3 class="font-semibold">A term</h3>
+  <p class="text-base-content/70">A plain word made a tab stop, with a dotted underline so it's seen to have more to say. Hover it or Tab to it.</p>
+  <p><%= render "components/term", key: :carried_over %></p>
+
+  <h3 class="font-semibold">In a table header, and at the left of a card</h3>
+  <p class="text-base-content/70">Below the term, where a table's header would be cut off at the top, and from the term's left edge, where one at the left of a card would be cut off if it were centred on it.</p>
+  <div class="overflow-x-auto rounded-box border border-base-300">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Envelope</th>
+          <th scope="col" class="text-right"><%= render "components/term", key: :assigned, placement: :bottom %></th>
+          <th scope="col" class="text-right"><%= render "components/term", key: :reallocated, placement: :bottom %></th>
+          <th scope="col" class="text-right">Available</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Groceries</td>
+          <td class="text-right tabular-nums"><%= money(400, budget: budget) %></td>
+          <td class="text-right tabular-nums"><%= money(0, budget: budget) %></td>
+          <td class="text-right tabular-nums"><%= money(325.5, budget: budget) %></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <%= render "components/stat_card", title: render("components/term", key: :available, placement: :bottom, align: :start, id: "help-available-card"),
+        value: money(325.5, budget: budget) %>
+
+  <h3 class="font-semibold">On a button or a link</h3>
+  <p class="text-base-content/70">Around a link or button that is the term, which is described by the sentence and gets no extra tab stop. A button in a form of its own is wrapped by a <code>div</code>.</p>
+  <div class="flex flex-wrap items-center gap-2">
+    <%= render "components/term", key: :reallocate, placement: :bottom do |described_by| %>
+      <%= link_to "Reallocate", "#", class: "btn", aria: { describedby: described_by } %>
+    <% end %>
+    <%= render "components/term", key: :archive, placement: :bottom, tag: :div do |described_by| %>
+      <%= button_to "Archive", "#", method: :get, class: "btn", aria: { describedby: described_by } %>
+    <% end %>
+  </div>
+
+  <h3 class="font-semibold">The same words on the page</h3>
+  <%= render "help/figures", actions: true %>
+</section>

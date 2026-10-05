@@ -10,13 +10,17 @@
     <% unless @envelope.archived? %>
       <%= link_to "New spend", new_spend_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn btn-primary" %>
       <%= link_to "New refund", new_refund_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
-      <%= link_to "Reallocate", new_reallocation_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn" %>
+      <%= render "components/term", key: :reallocate, placement: :bottom do |described_by| %>
+        <%= link_to "Reallocate", new_reallocation_path(month: @month, from: "envelope", envelope: @envelope.id), class: "btn", aria: { describedby: described_by } %>
+      <% end %>
     <% end %>
     <%= link_to "Edit", edit_envelope_path(@envelope, month: @month, from: "envelope"), class: "btn" %>
     <% if @envelope.archived? %>
       <%= button_to "Unarchive", envelope_archive_path(@envelope), method: :delete, params: { month: @month.to_param }, class: "btn" %>
     <% else %>
-      <%= button_to "Archive", envelope_archive_path(@envelope), method: :post, params: { month: @month.to_param }, class: "btn" %>
+      <%= render "components/term", key: :archive, placement: :bottom, tag: :div do |described_by| %>
+        <%= button_to "Archive", envelope_archive_path(@envelope), method: :post, params: { month: @month.to_param }, class: "btn", aria: { describedby: described_by } %>
+      <% end %>
     <% end %>
     <%= render "components/delete_button", path: envelope_path(@envelope),
           confirm: "Delete the #{@envelope.name} envelope?#{filing_rules_deleted_with(@envelope)}", params: { month: @month.to_param } %>
@@ -29,19 +33,22 @@
 
 <%# Assigned is only shown here: it's set on the month view, where Ready to Assign moves with it. Available is the result of the others, so it ends the last row, beside Reallocated. %>
 <div class="mt-8 grid gap-4 sm:grid-cols-2">
-  <%= render "components/stat_card", title: "Carried over",
+  <%= render "components/stat_card", title: render("components/term", key: :carried_over, placement: :bottom, align: :start),
         value: render("components/money", amount: @line.carried_over, budget: budget) %>
-  <%= render "components/stat_card", title: "Assigned",
+  <%= render "components/stat_card", title: render("components/term", key: :assigned, placement: :bottom, align: :start),
         value: render("components/money", amount: @line.assigned, budget: budget) %>
   <%= render "components/stat_card", title: "Spent",
         value: render("components/money", amount: @line.spent, budget: budget) %>
   <%= render "components/stat_card", title: "Refunded",
         value: render("components/money", amount: @line.refunded, budget: budget) %>
-  <%= render "components/stat_card", title: "Reallocated",
+  <%= render "components/stat_card", title: render("components/term", key: :reallocated, placement: :bottom, align: :start),
         value: render("components/money", amount: @line.reallocated, budget: budget) %>
-  <%= render "components/stat_card", title: "Available",
+  <%= render "components/stat_card", title: render("components/term", key: :available, placement: :bottom, align: :start),
         value: render("components/money", amount: @line.available, budget: budget, overspent: @line.overspent?) %>
 </div>
+
+<%# The same words as the tooltips on the cards and the Reallocate and Archive buttons, which a phone can't hover. %>
+<%= render "help/figures", actions: true %>
 
 <%= render "record_section", title: "Spends", records: @spends, budget: budget, empty_message: "No spends in #{@month.name}.",
       edit_path: ->(spend) { edit_spend_path(spend, month: @month, from: "envelope") } %>

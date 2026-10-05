@@ -14,6 +14,11 @@ RSpec.describe "Envelopes", type: :request do
       css_select("ul.list li").map { |row| row.text.squish }
     end
 
+    # What each stat card is called: the term, and not the tooltip's sentence that some of them hold.
+    def stat_titles
+      css_select(".stat-title").map { |title| (title.at_css("[aria-describedby]") || title).text.strip }
+    end
+
     it "is headed with the envelope's name, the month as its description, and New spend, New refund, Reallocate, Edit and Delete as its actions" do
       get month_envelope_path("2026-09", groceries)
 
@@ -45,7 +50,7 @@ RSpec.describe "Envelopes", type: :request do
     it "shows what it carried over, what's Assigned to it, Spent from it and Refunded to it and Reallocated into it in the month, and what's Available, in that order" do
       get month_envelope_path("2026-09", groceries)
 
-      expect(css_select(".stat-title").map { |title| title.text.strip }).to eq([ "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ])
+      expect(stat_titles).to eq([ "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ])
       expect(css_select(".stat-value").map { |value| value.text.strip }).to eq([ "$250.00", "$0.00", "$0.00", "$0.00", "$0.00", "$250.00" ])
       assert_select ".badge", count: 0
     end
@@ -257,7 +262,7 @@ RSpec.describe "Envelopes", type: :request do
       it "shows the envelope's Reallocated: what came in less what went out, in the month" do
         get month_envelope_path("2026-09", groceries)
 
-        titles = css_select(".stat-title").map { |title| title.text.strip }
+        titles = stat_titles
         values = css_select(".stat-value").map { |value| value.text.squish }
 
         expect(titles).to eq([ "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ])
@@ -333,7 +338,7 @@ RSpec.describe "Envelopes", type: :request do
       it "counts in the envelope's Reallocated and Available, with the ones between envelopes" do
         get month_envelope_path("2026-09", groceries)
 
-        titles = css_select(".stat-title").map { |title| title.text.strip }
+        titles = stat_titles
         values = css_select(".stat-value").map { |value| value.text.squish }
 
         expect(values[titles.index("Reallocated")]).to eq("-$10.00")

@@ -32,11 +32,11 @@
           <thead>
             <tr>
               <th scope="col">Envelope</th>
-              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Carried over</th>
-              <th scope="col" class="text-right">Assigned</th>
+              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell"><%= render "components/term", key: :carried_over, placement: :bottom %></th>
+              <th scope="col" class="text-right"><%= render "components/term", key: :assigned, placement: :bottom %></th>
               <th scope="col" class="text-right">Spent</th>
               <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Refunded</th>
-              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Reallocated</th>
+              <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell"><%= render "components/term", key: :reallocated, placement: :bottom %></th>
               <th scope="col" class="text-right">Available</th>
             </tr>
           </thead>
@@ -86,6 +86,9 @@
     <% end %>
   <% end %>
 </div>
+
+<%# What the figures mean, in words: the same sentences as the tooltips on the card's title and the table's headers, which a phone can't hover. %>
+<%= render "help/figures" %>
 
 <%# Every archived envelope, whether this month shows it or not, so one can be found to unarchive it. Each links to its page for the month being viewed. Only there when the budget has some. %>
 <% if @month.archived_envelopes.any? %>

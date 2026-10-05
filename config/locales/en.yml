@@ -111,3 +111,16 @@ en:
         budget/envelope:
           restrict_dependent_destroy:
             has_many: "This envelope can't be deleted because it has records."
+
+  # One sentence for each word that needs it, in the words the app uses. A tooltip (components/_term) and the page's own words (help/_figures)
+  # both read these, so they can't disagree, and a spec checks that every one is on a page. Nothing is renamed: these only explain.
+  help:
+    ready_to_assign: "Deposited money that hasn't been assigned to an envelope yet."
+    assigned: "Money moved from Ready to Assign into this envelope for the month."
+    carried_over: "What was left in the envelope at the end of last month. Nothing resets at month end."
+    reallocated: "Money moved into this envelope from another, less what was moved out of it."
+    reallocate: "Take money that's already in an envelope and put it in another envelope, or back to Ready to Assign, such as to cover an Overspent envelope."
+    archive: "Put away an envelope you've finished with. It needs an Available of 0, keeps its history, and can be unarchived."
+    available: "What's in the envelope now, including what carried over. Below zero means Overspent."
+    # Under the Reallocate form's title, where Assigned is the thing it's most often confused with.
+    reallocate_form: "Take money that's already in an envelope and put it in another envelope, or back to Ready to Assign. To give an envelope more of what's in Ready to Assign, use Assigned on the month view."

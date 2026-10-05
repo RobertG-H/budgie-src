@@ -164,8 +164,12 @@ Saving a format needs a sample, so that `column_count` is known; editing without
 and `rows_to_skip` at most 1000, in the model and in check constraints. Another user's format is a
 404, `budget_id` is never a permitted param, and the notices are "CSV format added.", "CSV format updated." and "CSV format deleted.".
 
-The header has a second row of links, `layouts/_sections`, for the pages that aren't a month's: Budget, Records, Accounts, Bank transactions, Filing rules and CSV formats now, and
-the importer's other pages join it. It's left out until the person has a budget. The "Main" nav stays only Sign out.
+The header's top row is the app name (with the budget's currency) and, in the `nav aria-label="Main"`, **Import** (a primary button, only with a budget) then Sign out. Under it is a second row of links,
+`layouts/_sections`, for the pages that aren't a month's, in the order Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats; it's left out until the person has a budget. `SectionsHelper#current_section` is the one place that knows which is
+current (`font-semibold` and `aria-current="page"`), by path (`/` and `/months/*` are Budget; `/bank_transactions*` and `/unfiled/*` Bank transactions; `/accounts*` and `/imports/*` Accounts, since an Import belongs to an Account and Import, a button, never marks one),
+and for a Deposit, Spend, Refund or Reallocation form by where it was opened from: `from` of `records` is Records, `bank_transactions` is Bank transactions, `account` is Accounts, and `home`, `month`, `deposits`, `envelope` or none is Budget, as are the envelope forms.
+**Bank transactions** is followed by a muted "12 unfiled" link to the Unfiled state (`Current.unfiled_count`, in `SectionsHelper#unfiled_count_text`), only when there are some: one query, over the unfiled ones, counting at most 100 so it says "99+ unfiled" for more, read once per
+request, so every page with the header has that one query more.
 
 #### Accounts, Imports and bank transactions
 
@@ -515,6 +519,8 @@ Eastern Time has daylight saving, so `30.days` is a span of calendar days there.
 ### Frontend
 
 `DESIGN.md` has the UI rules — colour, layout, money formatting, components and a "Don't" list — and is short enough to read before changing a view. `docs/daisyui.md` is daisyUI's own reference, saved verbatim from its `llms.txt`; read it (by path — it's too big to `@`-import into every session) when adding or changing a daisyUI component.
+
+A tooltip is a desktop shortcut and never the only place an explanation lives, since a phone can't hover: `components/_term` draws a word with its sentence from `help:` in `config/locales/en.yml` (a real `.tooltip-content` the term is `aria-describedby`, hidden below `sm:`), and `help/_figures`, a closed "What do these figures mean?" `<details>` on the month view and an envelope's page, says the same sentences in words. A new term gets its sentence in `help:` and a key in `HelpHelper::TERMS`; `spec/requests/help_spec.rb` checks every sentence is on a page.
 
 daisyUI is vendored as two plugin files, `app/assets/tailwind/daisyui.mjs` and `daisyui-theme.mjs`, pinned to a release rather than fetched live; `docs/daisyui.md` has the pinned version and the bump procedure. They define the one theme, `budgie`; `@theme { --color-*: initial; }` in `app/assets/tailwind/application.css` makes Tailwind's raw palette classes (`bg-gray-200`, `text-red-700`, …) produce nothing, so a stray one fails loudly rather than drifting in unnoticed.
 

@@ -3,6 +3,11 @@ require "rails_helper"
 RSpec.describe "Months", type: :request do
   let(:budget) { create(:budget, currency: "CAD") }
 
+  # The names of the table's columns: the term, without the sentence a tooltip on it holds.
+  def column_headings
+    css_select("thead th").map { |heading| (heading.at_css("[aria-describedby]") || heading).text.squish }
+  end
+
   before { sign_in_as budget.user }
 
   # The labelled figures under Ready to Assign's number, as "Carried over $0.00 · Deposited $0.00 · Assigned $0.00". Each
@@ -86,7 +91,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select "#ready-to-assign" do
-        assert_select ".stat-title", text: "Ready to Assign"
+        assert_select ".stat-title [aria-describedby]", text: "Ready to Assign"
         assert_select ".stat-value", text: "$4,000.00"
         expect(stat_description).to eq("Carried over $1,000.00 · Deposited $3,000.00 · Assigned $0.00")
         assert_select "a[href='#{month_deposits_path("2026-09")}']", text: "See Deposits", count: 1
@@ -161,7 +166,7 @@ RSpec.describe "Months", type: :request do
       set_up_the_worked_example
 
       get month_path("2026-01")
-      assert_select ".stat-title", text: "Ready to Assign"
+      assert_select ".stat-title [aria-describedby]", text: "Ready to Assign"
       assert_select ".stat-value", text: "$200.00"
       expect(stat_description).to eq("Carried over $0.00 · Deposited $3,000.00 · Assigned $2,800.00")
 
@@ -227,7 +232,7 @@ RSpec.describe "Months", type: :request do
     it "keeps Assigned, Spent and Available on a phone, where only Carried over, Refunded and Reallocated are dropped" do
       get month_path("2026-02")
 
-      assert_select "thead th", text: "Assigned"
+      assert_select "thead th", text: /\AAssigned/
       [ 3, 4, 7 ].each do |column|
         assert_select "thead th:nth-child(#{column})[class~='hidden']", count: 0
         assert_select "tbody tr[id] td:nth-child(#{column})[class~='hidden']", count: 0
@@ -864,7 +869,7 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      expect(css_select("thead th").map { |heading| heading.text.squish }).to eq([ "Envelope", "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ])
+      expect(column_headings).to eq([ "Envelope", "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ])
       cells = css_select("tr#envelope_#{groceries.id} td").map { |cell| cell.text.squish }
       expect([ cells[0], cells[1], assigned_for(groceries), *cells[3..] ]).to eq([ "Groceries", "$0.00", "$400.00", "$100.00", "$25.50", "$0.00", "$325.50" ])
     end
@@ -992,10 +997,10 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-02")
 
-      expect(css_select("thead th").map { |heading| heading.text.squish }).to eq(
+      expect(column_headings).to eq(
         [ "Envelope", "Carried over", "Assigned", "Spent", "Refunded", "Reallocated", "Available" ]
       )
-      assert_select "thead th:nth-child(6)[class~='hidden'][class~='sm:in-data-[details=on]:table-cell'][class~='text-right']", text: "Reallocated"
+      assert_select "thead th:nth-child(6)[class~='hidden'][class~='sm:in-data-[details=on]:table-cell'][class~='text-right']", text: /\AReallocated/
       assert_select "tbody tr[id] td:nth-child(6)[class~='hidden'][class~='sm:in-data-[details=on]:table-cell'][class~='tabular-nums']", count: 2
     end
 
@@ -1064,17 +1069,17 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       assert_select "thead th", text: "Envelope"
-      assert_select "thead th", text: "Carried over"
-      assert_select "thead th", text: "Assigned"
+      assert_select "thead th", text: /\ACarried over/
+      assert_select "thead th", text: /\AAssigned/
       assert_select "thead th", text: "Spent"
       assert_select "thead th", text: "Refunded"
-      assert_select "thead th", text: "Reallocated"
+      assert_select "thead th", text: /\AReallocated/
       assert_select "thead th", text: "Available"
-      assert_select "thead th:nth-child(2)", text: "Carried over"
-      assert_select "thead th:nth-child(3)", text: "Assigned"
+      assert_select "thead th:nth-child(2)", text: /\ACarried over/
+      assert_select "thead th:nth-child(3)", text: /\AAssigned/
       assert_select "thead th:nth-child(4)", text: "Spent"
       assert_select "thead th:nth-child(5)", text: "Refunded"
-      assert_select "thead th:nth-child(6)", text: "Reallocated"
+      assert_select "thead th:nth-child(6)", text: /\AReallocated/
       assert_select "thead th:nth-child(7)", text: "Available"
       assert_select "tbody tr[id]", count: 2
       assert_select "tbody tr[id]:first-child", count: 2
@@ -1109,14 +1114,14 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select "thead th[scope=col].text-right", text: "Assigned"
+      assert_select "thead th[scope=col].text-right", text: /\AAssigned/
       assert_select "thead th[scope=col].text-right", text: "Spent"
       assert_select "thead th[scope=col].text-right", text: "Refunded"
-      assert_select "thead th[scope=col].text-right", text: "Reallocated"
+      assert_select "thead th[scope=col].text-right", text: /\AReallocated/
       assert_select "thead th[scope=col].text-right", text: "Available"
-      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: "Carried over"
+      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: /\ACarried over/
       assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: "Refunded"
-      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: "Reallocated"
+      assert_select "thead th[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", text: /\AReallocated/
       assert_select "thead th[class~='hidden']", count: 3
       assert_select "tbody tr[id] td.text-right.tabular-nums", count: 6
       assert_select "tbody tr[id] td[class~='hidden'][class~='sm:in-data-[details=on]:table-cell']", count: 3
@@ -1387,7 +1392,7 @@ RSpec.describe "Months", type: :request do
       get month_path("2026-09")
 
       [ "Carried over", "Refunded", "Reallocated" ].each do |heading|
-        assert_select "thead th.hidden.sm\\:in-data-\\[details\\=on\\]\\:table-cell", text: heading
+        assert_select "thead th.hidden.sm\\:in-data-\\[details\\=on\\]\\:table-cell", text: /\A#{heading}/
       end
       assert_select "thead th.hidden", count: 3
     end

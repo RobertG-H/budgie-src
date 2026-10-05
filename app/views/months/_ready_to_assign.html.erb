@@ -9,7 +9,7 @@
           end %>
 <section id="<%= id %>" aria-labelledby="<%= id %>-title" class="stats w-full border <%= card %>">
   <div class="stat content-start">
-    <h2 id="<%= id %>-title" class="stat-title text-base-content/70">Ready to Assign</h2>
+    <h2 id="<%= id %>-title" class="stat-title text-base-content/70"><%= render "components/term", key: :ready_to_assign, placement: :bottom, align: :start, id: "#{id}-help" %></h2>
     <div class="stat-value whitespace-normal"><%= render "components/money", amount: ready_to_assign.amount, budget: budget %></div>
 
     <%# What the figure means, in words, so a person doesn't have to work out whether it's good news. %>
