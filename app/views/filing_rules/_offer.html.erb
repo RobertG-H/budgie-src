@@ -21,7 +21,7 @@
           <%= render "components/field", form: rule_form, attribute: :account_id, control: :radios, label: "Account" do |field| %>
             <label class="flex items-center gap-3">
               <%= rule_form.radio_button :account_id, offer.bank_transaction.account_id, data: { action: "input->sweep-preview#update" }, **field %>
-              <span>Only in <%= offer.bank_transaction.account.name %></span>
+              <span>Only in <%= offer.account_name %></span>
             </label>
             <label class="flex items-center gap-3">
               <%= rule_form.radio_button :account_id, "", data: { action: "input->sweep-preview#update" }, **field %>

@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { formatMoney } from "controllers/money"
 
 // The records a bank transaction is filed as (app/views/bank_transaction_filings/_form.html.erb), which can be split into several,
 // such as $60 from Groceries and $40 from Household. It adds a record from the template and removes one, numbers the records
@@ -60,15 +61,15 @@ export default class extends Controller {
     this.addTarget.disabled = this.recordTargets.length >= this.maxValue
 
     const remaining = this.amountCents() - this.totalCents()
-    const amount = this.money(this.amountCents())
-    const total = this.money(this.totalCents())
+    const amount = formatMoney(this.unitValue, this.amountCents() / 100)
+    const total = formatMoney(this.unitValue, this.totalCents() / 100)
 
     if (remaining === 0) {
       this.totalTarget.textContent = `Adds up to ${total} of ${amount}.`
     } else if (remaining > 0) {
-      this.totalTarget.textContent = `Adds up to ${total} of ${amount}, with ${this.money(remaining)} left.`
+      this.totalTarget.textContent = `Adds up to ${total} of ${amount}, with ${formatMoney(this.unitValue, remaining / 100)} left.`
     } else {
-      this.totalTarget.textContent = `Adds up to ${total} of ${amount}, which is ${this.money(-remaining)} over.`
+      this.totalTarget.textContent = `Adds up to ${total} of ${amount}, which is ${formatMoney(this.unitValue, -remaining / 100)} over.`
     }
 
     this.totalTarget.classList.toggle("text-error", remaining < 0)
@@ -88,10 +89,5 @@ export default class extends Controller {
   cents(value) {
     const cents = Math.round(parseFloat(value) * 100)
     return Number.isNaN(cents) ? 0 : cents
-  }
-
-  money(cents) {
-    const figure = (Math.abs(cents) / 100).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    return `${cents < 0 ? "-" : ""}${this.unitValue}${figure}`
   }
 }

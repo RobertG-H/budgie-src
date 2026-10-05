@@ -38,9 +38,11 @@ module BankTransactionScoped
     # The bank transactions "and next" goes through, found through the budget so another user's are never reached: every Account's, or the one the
     # Bank transactions page was filtered to, or the Account's own for its page. The state and the dates don't matter to the unfiled ones.
     def next_scope
-      case origin
+      return @next_scope if defined?(@next_scope)
+
+      @next_scope = case origin
       when "bank_transactions"
-        account = Budget::BankTransactionList.parse(Current.budget, params[:filter]).account
+        account = origin_bank_transaction_list.account
         account ? Current.budget.bank_transactions.where(account_id: account.id) : Current.budget.bank_transactions
       when "account" then @bank_transaction.account.bank_transactions
       end

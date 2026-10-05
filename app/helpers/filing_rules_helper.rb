@@ -35,7 +35,7 @@ module FilingRulesHelper
     ending = "' in their description are filed the same way as they come in."
 
     safe_join([
-      content_tag(:span, safe_join([ "#{offer.bank_transaction.account.name} bank transactions with '", echo.call, ending ]), hidden: !offer.pinned?,
+      content_tag(:span, safe_join([ "#{offer.account_name} bank transactions with '", echo.call, ending ]), hidden: !offer.pinned?,
         data: { sweep_preview_target: "variant", variant: "pinned" }),
       content_tag(:span, safe_join([ "Bank transactions in any account with '", echo.call, ending ]), hidden: offer.pinned?,
         data: { sweep_preview_target: "variant", variant: "any" })

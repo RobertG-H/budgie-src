@@ -37,7 +37,9 @@ class Budget::FilingRule::Offer
     @split = split
     super(**attributes)
     self.text = default_text if text.nil?
-    self.account_id = bank_transaction.account_id unless attributes.key?(:account_id) && account_id.nil?
+    # Any Account is only what a form says in so many words, `account_id: nil`: anything else, including saying nothing, is the bank transaction's own.
+    any_account = attributes.key?(:account_id) && account_id.nil?
+    self.account_id = bank_transaction.account_id unless any_account
   end
 
   # Whether a rule is to be made: the box is ticked and the form isn't a split.
@@ -78,9 +80,9 @@ class Budget::FilingRule::Offer
     account_id.present?
   end
 
-  # The Account the rule is for, if it's one.
-  def account
-    bank_transaction.account if pinned?
+  # The name of the bank transaction's own Account, which is what a rule for "Only in" it is for, and what the form says it is.
+  def account_name
+    bank_transaction.account.name
   end
 
   # Whether the text is one a rule can have, and part of the bank's description, so that there's a rule to say anything about.

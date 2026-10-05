@@ -6,7 +6,7 @@ import { Controller } from "@hotwired/stimulus"
 // that answers is the one that holds the box, so the server decides what the numbers are and there's no matching written in JavaScript.
 // The box is sent along, so that it stays as it was ticked. Without JavaScript the numbers are the ones the form started with. A sentence that
 // says the rule's text, as the filing form's does under "Always file like this", marks it as an `echo`, which is kept as the text is edited,
-// normalised as a rule keeps it: trimmed, its spaces collapsed and in lower case. A sentence that also says which Account the rule is for has a
+// normalised nearly as a rule keeps it (trimmed, its spaces collapsed and in lower case), which is only to show: the server decides what the text is. A sentence that also says which Account the rule is for has a
 // `variant` for each choice (`data-variant` is `pinned` or `any`), and the one the Account radio buttons choose is the one that's shown.
 export default class extends Controller {
   static targets = [ "frame", "echo", "variant" ]

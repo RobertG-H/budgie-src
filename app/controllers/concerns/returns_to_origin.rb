@@ -34,8 +34,14 @@ module ReturnsToOrigin
     def origin_filter
       case origin
       when "records" then Budget::RecordList.parse(Current.budget, params[:filter]).to_params
-      when "bank_transactions" then Budget::BankTransactionList.parse(Current.budget, params[:filter]).to_params
+      when "bank_transactions" then origin_bank_transaction_list.to_params
       end
+    end
+
+    # The Bank transactions page's list as the form was opened from it, read once however many times it's asked for, since reading it loads the
+    # Account that was chosen.
+    def origin_bank_transaction_list
+      @origin_bank_transaction_list ||= Budget::BankTransactionList.parse(Current.budget, params[:filter])
     end
 
     # The page of the list the form was opened from, for the pages that have one: a number past the first, and nothing for the first.

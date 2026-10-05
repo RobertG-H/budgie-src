@@ -110,6 +110,19 @@ RSpec.describe "The filing form's Edit details and Edit rule", type: :request do
       assert_select "select[autofocus]", count: 0
     end
 
+    it "autofocuses the envelope of the first record that still has none in a split that comes back, and File when every record has one" do
+      file records: [ record_params(amount: "60"), record_params(envelope_id: "", amount: "30") ]
+
+      assert_select "[data-filing-split-target=records] > fieldset:nth-of-type(2) select[autofocus]"
+      assert_select "[data-filing-split-target=records] > fieldset:nth-of-type(1) select[autofocus]", count: 0
+      assert_select "input[type=submit][autofocus]", count: 0
+
+      file records: [ record_params(amount: "60"), record_params(envelope_id: household.id, amount: "30") ]
+
+      assert_select "select[autofocus]", count: 0
+      assert_select "input[type=submit][value=File][autofocus]"
+    end
+
     it "wires Edit details to the filing-details controller, which keeps the summary and opens it on an invalid field" do
       get new_bank_transaction_filing_path(money_out)
 

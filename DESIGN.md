@@ -73,7 +73,7 @@ shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spa
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
 page scroll at 375px: tables are the one place content can outgrow a phone, so they scroll in their own
 `overflow-x-auto` wrapper rather than the page, and their cell padding drops to a quarter of daisyUI's below `sm:` so
-three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven (with Show details on) fit the page. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row, a list row or a row of links, as the Assigned cell's, a bank transaction's Un-file and the month links' do).
+three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven (with Show details on) fit the page. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row, a list row or a row of links, as the Assigned cell's, a bank transaction's Un-file and the month links' do, or is a small secondary action under a form's fields, as the filing form's "Add another record" is).
 
 ## Money and numbers
 

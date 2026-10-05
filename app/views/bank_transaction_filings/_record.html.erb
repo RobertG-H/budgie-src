@@ -1,11 +1,10 @@
 <%# locals: (form:, draft:, bank_transaction:, details_open:, number: nil, removable: false, autofocus: false, offer: nil) %>
+<%# `autofocus` is for the first record that still has an envelope to choose, whose select focus starts on, which the form works out. %>
 <%# One record a bank transaction is filed as. Money out is only ever a Spend, so it has no kind to choose. Money in is a Deposit or a Refund, and the filing-record Stimulus controller shows only the fields the chosen kind has: an envelope for a Refund, and the month for a Deposit, which the month-choice controller keeps in step with its date. Without JavaScript they all show, and what a kind doesn't have is left out. %>
 <%# What a person chooses is in view: the kind and the envelope, then "Always file like this" (the first record's only, which the filing-split controller moves to whichever record is first, so it has a place in each). What's rarely changed is under a closed "Edit details": the description, date, amount, a Deposit's month and notes. It's open for a split, for an error in it and for a field changed from the bank's own, so nothing that needs attention is hidden (BankTransactionsHelper#filing_details_open?), and the filing-details controller opens it when a field in it is invalid, which the browser can't focus while it's closed. %>
 <% money_in = bank_transaction.amount.positive? %>
 <% budget = Current.budget %>
 <% envelope_error = draft.errors.full_messages_for(:envelope_id).to_sentence.presence %>
-<%# The envelope is where focus starts when it's still to choose, and otherwise on File, which the form decides the same way. %>
-<% needs_envelope = autofocus && filing_envelope_to_choose?(draft) %>
 
 <%# With only one record there's nothing to tell it from, so it has no heading, and nothing to remove; the filing-split controller shows both once there's a second. %>
 <fieldset class="space-y-6" data-controller="filing-record month-choice filing-details" data-filing-split-target="record" data-filing-details-unit-value="<%= budget.currency_unit %>"
@@ -27,7 +26,7 @@
 
   <div data-filing-record-target="group" data-kinds="refund spend">
     <%= render "components/field", form: form, attribute: :envelope_id, label: "Envelope", control: :select, error: envelope_error do |field| %>
-      <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope" }, autofocus: needs_envelope, **field %>
+      <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope" }, autofocus: autofocus, **field %>
     <% end %>
   </div>
 

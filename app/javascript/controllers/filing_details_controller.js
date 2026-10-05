@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { formatMoney } from "controllers/money"
 
 // One record's "Edit details" on the filing form (app/views/bank_transaction_filings/_record.html.erb): the description, date, amount, a
 // Deposit's month and notes, which sit under a closed <details> because they're rarely changed. It does two things. It keeps the line under
@@ -24,7 +25,7 @@ export default class extends Controller {
     let summary = [
       description,
       date && this.spell(date),
-      Number.isNaN(amount) ? null : this.money(amount)
+      Number.isNaN(amount) ? null : formatMoney(this.unitValue, amount)
     ].filter(Boolean).join(" · ")
 
     const month = this.countsTowardMonth(date)
@@ -66,10 +67,5 @@ export default class extends Controller {
 
   spell(date) {
     return date.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
-  }
-
-  money(amount) {
-    const figure = Math.abs(amount).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    return `${amount < 0 ? "-" : ""}${this.unitValue}${figure}`
   }
 }

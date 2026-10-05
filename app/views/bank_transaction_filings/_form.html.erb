@@ -6,6 +6,8 @@
 <%# For one record the form is the choice and little else: its kind and envelope, "Always file like this" with its text tucked under "Edit rule", and "Edit details" holding the rest, closed unless something in it needs attention. The rule is the first record's to hold, since it's between its envelope and its details. %>
 <% bank_transaction = entry.bank_transaction %>
 <% budget = Current.budget %>
+<%# Focus starts on the envelope of the first record that still has one to choose, and otherwise on File. %>
+<% focus_index = entry.drafts.index { |draft| filing_envelope_to_choose?(draft) } %>
 
 <%= form_with scope: :filing, url: bank_transaction_filing_path(bank_transaction), method: :post, class: "mt-8 space-y-6" do |form| %>
   <%= render "form_errors", messages: entry.full_messages + offer.errors.full_messages %>
@@ -22,7 +24,7 @@
       <% entry.drafts.each_with_index do |draft, index| %>
         <%= fields_for "filing[records][#{index}]", draft do |record_form| %>
           <%= render "bank_transaction_filings/record", form: record_form, draft: draft, bank_transaction: bank_transaction, details_open: filing_details_open?(entry, draft),
-                number: index + 1, removable: entry.drafts.size > 1, autofocus: index.zero?, offer: (offer if index.zero?) %>
+                number: index + 1, removable: entry.drafts.size > 1, autofocus: index == focus_index, offer: (offer if index.zero?) %>
         <% end %>
       <% end %>
     </div>
@@ -40,16 +42,15 @@
     <p class="<%= entry.remaining.negative? ? "text-error" : "text-base-content/70" %>" data-filing-split-target="total" aria-live="polite"><%= filing_totals(entry, budget) %></p>
   </div>
 
-  <%# With a next one to go to, the main action is File and next, File and Ignore and next are the same without or with the Ignore, and Cancel is the way to stop: Ignore is replaced, not added to, so there's one way to ignore. With none, including the last one, it's File, Ignore and Cancel. Each "and next" button sends `next`, which the same actions read. %>
+  <%# With a next one to go to, File and next is the main action and goes on to it, File files and stops, and Ignore and next ignores and goes on. Plain Ignore is replaced and not added to, so there's one way to ignore, and Cancel is the way to stop. With none, including the last one, they're File, Ignore and Cancel. Each "and next" button sends `next`, which the same actions read. %>
   <% following = next_unfiled %>
   <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: (following ? "File and next" : "File"), submit_name: ("next" if following),
-        autofocus: !filing_envelope_to_choose?(entry.drafts.first) do %>
-    <%# Ignoring needs none of the records, so it's a button of its own that sends the form to its own address, which only reads where it was opened from. The method is stated again because the form is a post. %>
+        autofocus: focus_index.nil? do %>
     <% if following %>
       <%= form.submit "File", class: "btn" %>
-      <button type="submit" name="next" value="1" formaction="<%= bank_transaction_ignore_path(bank_transaction) %>" formnovalidate class="btn">Ignore and next</button>
-    <% else %>
-      <button type="submit" name="_method" value="post" formaction="<%= bank_transaction_ignore_path(bank_transaction) %>" formnovalidate class="btn">Ignore</button>
     <% end %>
+    <%# Ignoring needs none of the records, so it's a button of its own that sends the form to its own address, which only reads where it was opened from. Without a next the method is stated again, because the form is a post. %>
+    <%= tag.button (following ? "Ignore and next" : "Ignore"), type: "submit", name: (following ? "next" : "_method"), value: (following ? "1" : "post"),
+          formaction: bank_transaction_ignore_path(bank_transaction), formnovalidate: true, class: "btn" %>
   <% end %>
 <% end %>
