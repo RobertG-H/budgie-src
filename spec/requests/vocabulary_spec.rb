@@ -317,8 +317,9 @@ RSpec.describe "The words on the pages", type: :request do
         # Paycheck and Loblaws are the two unfiled bank transactions of the Import above.
         get new_bank_transaction_filing_path(paycheck_row, from: "bank_transactions", filter: { state: "unfiled" })
 
-        expect(visible_text).to include("File and next", "Ignore and next", "Edit details", "Paycheck · Oct 1, 2026 · $2,800.00", "Edit rule", "Always file like this",
-          "Bank transactions with 'paycheck' in their description are filed the same way as they come in.")
+        expect(visible_text).to include("File and next", "Ignore and next", "Edit details", "Paycheck · Oct 1, 2026 · $2,800.00", "Edit rule", "Always file like this", "Only in Chequing", "Any account",
+          "Chequing bank transactions with 'paycheck' in their description are filed the same way as they come in.",
+          "Bank transactions in any account with 'paycheck' in their description are filed the same way as they come in.")
         expect(visible_text).not_to match(/\w+_\w+/)
         expect(visible_text).not_to match(retired_terms)
 

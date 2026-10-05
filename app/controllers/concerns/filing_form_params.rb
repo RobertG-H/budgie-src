@@ -1,5 +1,6 @@
 # What the filing form sends, for the controllers that read it: filing, and ignoring, which sends the same form. It's a form of records,
-# as a bank transaction can be split, and the Filing rule that "Always file like this" makes from what's done.
+# as a bank transaction can be split, and the Filing rule that "Always file like this" makes from what's done: its text, whether it's for the bank transaction's
+# Account or any, and whether it sweeps.
 module FilingFormParams
   extend ActiveSupport::Concern
 
@@ -36,10 +37,12 @@ module FilingFormParams
     # The rule the form offers to make, as it was sent, or as it starts when `sent` is false: ticked, with the bank's description. A
     # form that didn't send the box leaves it unticked, which is no rule, and a form of more than one record is never a rule.
     def filing_rule_offer(sent: true, records: 1)
-      rule = filing_param(:rule, [ :make, :text, :sweep ]) if sent
+      rule = filing_param(:rule, [ :make, :text, :sweep, :account_id ]) if sent
+      # The Account the rule is for is the bank transaction's own unless the form says any, which is a blank. A form that didn't send one has the default.
+      account = rule&.key?(:account_id) ? { account_id: rule[:account_id] } : {}
 
       Budget::FilingRule::Offer.new(@bank_transaction, budget: Current.budget, split: records > 1,
-        make: (sent ? rule&.dig(:make) : true), text: rule&.dig(:text), sweep: (sent ? rule&.dig(:sweep) : true))
+        make: (sent ? rule&.dig(:make) : true), text: rule&.dig(:text), sweep: (sent ? rule&.dig(:sweep) : true), **account)
     end
 
     # What's said once it's done, with what the Filing rule's sweep did, if it did anything: "Bank transaction filed. The Filing rule also

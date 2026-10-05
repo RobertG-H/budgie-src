@@ -278,6 +278,14 @@ RSpec.describe "Filing rules", type: :request do
       expect(existing.reload.envelope).to eq(groceries)
     end
 
+    it "says which Account the other rule is for when it's for one" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws", account: chequing)
+
+      expect { post filing_rules_path, params: rule_params(envelope_id: dining.id, account_id: chequing.id) }.not_to change(Budget::FilingRule, :count)
+
+      assert_select "[role=alert]", text: /Another Filing rule for 'loblaws' in Chequing already has the same text, Account and amount. It files them as Spend from Groceries./
+    end
+
     it "says so, and not with an error page, when a rule with the same text was saved a moment ago, which only the unique index sees" do
       allow_any_instance_of(Budget::FilingRule).to receive(:save).and_raise(ActiveRecord::RecordNotUnique)
 

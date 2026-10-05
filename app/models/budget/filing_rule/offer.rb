@@ -1,6 +1,7 @@
 # The Filing rule that filing or ignoring a bank transaction by hand offers to make: "Always file like this". The text it would look for
-# starts as the bank's whole description, normalised, and can be trimmed right there, and there's no Account or amount condition, which
-# is for the Filing rules page. What it sets is what the person does: a Spend from an envelope, a Refund to one, a Deposit, or Ignore.
+# starts as the bank's whole description, normalised, and can be trimmed right there. It's for the bank transaction's own Account to start
+# with, which is what a rule usually should be, and a person can choose any Account instead; it's never for another Account, since the rule
+# has to fit the bank transaction it's made from. There's no amount condition, which is for the Filing rules page. What it sets is what the person does: a Spend from an envelope, a Refund to one, a Deposit, or Ignore.
 #
 # The rule is made in the same database transaction as the filing or the ignoring, so that neither is done without the other. If a rule
 # with identical conditions exists it's updated in place, and the form says so. A rule made from a bank transaction isn't what filed it:
@@ -23,6 +24,9 @@ class Budget::FilingRule::Offer
   attribute :make, :boolean, default: true
   attribute :text, :string
   attribute :sweep, :boolean, default: true
+  # The Account the rule is for: either none, which is any Account, or the bank transaction's own. It starts as the bank transaction's own, and
+  # anything else that's sent is treated as that, so it can't be one that doesn't fit the bank transaction.
+  attribute :account_id, :integer
 
   attr_reader :bank_transaction, :budget, :swept
 
@@ -33,6 +37,7 @@ class Budget::FilingRule::Offer
     @split = split
     super(**attributes)
     self.text = default_text if text.nil?
+    self.account_id = bank_transaction.account_id unless attributes.key?(:account_id) && account_id.nil?
   end
 
   # Whether a rule is to be made: the box is ticked and the form isn't a split.
@@ -62,9 +67,20 @@ class Budget::FilingRule::Offer
     Budget::FilingRule.normalize_value_for(:text, text.to_s)
   end
 
-  # The rule with these conditions, which is only the text, since there's no Account or amount, if there is one. Saving updates it.
+  # The rule with these conditions, which are the text and the Account it's for, or any, and no amount, if there is one. Saving updates it. A rule
+  # for the Account and one for any Account with the same text are different rules, so neither updates the other.
   def existing_rule
-    budget.filing_rules.includes(:envelope).find_by(text: normalized_text, account_id: nil, amount: nil)
+    budget.filing_rules.includes(:envelope, :account).find_by(text: normalized_text, account_id: account_id, amount: nil)
+  end
+
+  # Whether the rule is for the bank transaction's own Account and not any.
+  def pinned?
+    account_id.present?
+  end
+
+  # The Account the rule is for, if it's one.
+  def account
+    bank_transaction.account if pinned?
   end
 
   # Whether the text is one a rule can have, and part of the bank's description, so that there's a rule to say anything about.
@@ -78,7 +94,7 @@ class Budget::FilingRule::Offer
   # as the one that fits either.
   def sweep_preview
     @sweep_preview ||= begin
-      rule = existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)
+      rule = existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text, account_id: account_id)
       rule.assign_attributes(outcome: "ignore", envelope: nil)
 
       Budget::FilingRule::Sweep.new(rule, made_from: bank_transaction)
@@ -125,7 +141,7 @@ class Budget::FilingRule::Offer
 
     # The rule that already has these conditions, changed to what's been done, or a new one.
     def build_rule(outcome:, envelope_id:)
-      (existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text)).tap { |rule| rule.assign_attributes(outcome: outcome, envelope_id: envelope_id) }
+      (existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text, account_id: account_id)).tap { |rule| rule.assign_attributes(outcome: outcome, envelope_id: envelope_id) }
     end
 
     # Its text has to be one a rule can have, and part of the bank's description, or it wouldn't fit the bank transaction it's made from.

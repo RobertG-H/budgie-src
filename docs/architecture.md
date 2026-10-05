@@ -397,8 +397,7 @@ or un-ignored; the filed records are ordinary ([ADR 0002](adr/0002-budget-record
 never changes what it already filed.
 
 **Always file like this.** Filing or ignoring a bank transaction by hand offers to make a rule from what was done, ticked by default: the text starts as the
-bank's whole description, and can be trimmed right there, before the wrong rule is made, and it has no Account or amount condition. A rule with identical conditions
-is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
+bank's whole description, and can be trimmed right there, before the wrong rule is made. It's for the bank transaction's own Account to start with, since a rule for "loblaws" in one Account usually shouldn't act on another's, and a person can choose any account instead; it's never for another Account, which wouldn't fit the bank transaction it's made from, and it has no amount condition. The sentence under the box says which Account it's for, and the count of other unfiled bank transactions it would file follows the choice. A rule with identical conditions (the same text and Account) is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
 filing as one record and when ignoring, and never for a split, since a split has no one outcome to repeat.
 
 **Sweeping what's already there.** A rule made after an Import has nothing to act on, so saving one can also file the unfiled bank transactions it already fits. Rules still never

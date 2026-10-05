@@ -23,11 +23,21 @@ module FilingRulesHelper
     " Its #{pluralize(count, "Filing rule")} #{count == 1 ? "is" : "are"} deleted with it."
   end
 
-  # What "Always file like this" would do, in the muted line under it: "Bank transactions with 'loblaws' in their description are filed the same way as
-  # they come in." The text is in a span of its own, which the sweep-preview controller keeps in step with the Text field as it's edited, so the
-  # line says what the rule is whether or not "Edit rule" is open.
+  # What "Always file like this" would do, in the muted line under it, which says which Account it's for: "Chequing bank transactions with 'loblaws' in their
+  # description are filed the same way as they come in." or "Bank transactions in any account with 'loblaws' in their description are filed the same way
+  # as they come in." Both are there and the one that doesn't apply is hidden, since the sweep-preview controller changes it when the other Account choice is
+  # made, and keeps the text, which is in a span of its own, in step with the Text field as it's edited, so the line says what the rule is whether or not
+  # "Edit rule" is open.
   def filing_rule_sentence(offer)
-    safe_join([ "Bank transactions with '", content_tag(:span, offer.normalized_text, data: { sweep_preview_target: "echo" }), "' in their description are filed the same way as they come in." ])
+    echo = -> { content_tag(:span, offer.normalized_text, data: { sweep_preview_target: "echo" }) }
+    ending = "' in their description are filed the same way as they come in."
+
+    safe_join([
+      content_tag(:span, safe_join([ "#{offer.bank_transaction.account.name} bank transactions with '", echo.call, ending ]), hidden: !offer.pinned?,
+        data: { sweep_preview_target: "variant", variant: "pinned" }),
+      content_tag(:span, safe_join([ "Bank transactions in any account with '", echo.call, ending ]), hidden: offer.pinned?,
+        data: { sweep_preview_target: "variant", variant: "any" })
+    ])
   end
 
   # What a sweep would do, in two sentences: how many unfiled bank transactions the rule fits and would file or ignore, and, if there are some,

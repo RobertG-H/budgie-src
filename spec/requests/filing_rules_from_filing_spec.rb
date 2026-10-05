@@ -52,11 +52,11 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect(response).to redirect_to(bank_transactions_page)
     end
 
-    it "has no Account or amount to choose, which is for the Filing rules page" do
+    it "has the Account to choose, its own or any, and no amount, which is for the Filing rules page" do
       get new_bank_transaction_filing_path(money_out)
 
-      assert_select "[name^='filing[rule]']", count: 3
-      assert_select "[name='filing[rule][account_id]'], [name='filing[rule][amount]'], [name='filing[rule][outcome]'], [name='filing[rule][envelope_id]']", count: 0
+      assert_select "input[type=radio][name='filing[rule][account_id]']", count: 2
+      assert_select "[name='filing[rule][amount]'], [name='filing[rule][outcome]'], [name='filing[rule][envelope_id]']", count: 0
     end
 
     it "offers it for money in too" do
@@ -74,26 +74,27 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect(visible_text).to include("A Filing rule needs at least 3 characters in the bank transaction's description, so Always file like this isn't offered for this one.")
     end
 
-    it "says when a Filing rule with that text exists, which it would update in place" do
-      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123")
+    it "says when a Filing rule with that text exists for the Account, which it would update in place" do
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", account: account)
 
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123', which files them as Spend from Groceries now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123' in Chequing, which files them as Spend from Groceries now.")
     end
 
     it "says it of an Ignore rule in its own words" do
-      create(:budget_filing_rule, :ignore, budget: budget, text: "costco wholesale #123")
+      create(:budget_filing_rule, :ignore, budget: budget, text: "costco wholesale #123", account: account)
 
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123', which ignores them now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123' in Chequing, which ignores them now.")
     end
 
-    it "says nothing of another budget's rule, or of one with an Account or amount condition, which are other rules" do
+    it "says nothing of another budget's rule, or of one for any Account, another Account or an amount, which are other rules" do
       create(:budget_filing_rule, text: "costco wholesale #123")
-      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", account: account)
-      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", amount: -100)
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123")
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", account: create(:budget_account, budget: budget, name: "Savings"))
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", amount: -100, account: account)
 
       get new_bank_transaction_filing_path(money_out)
 
@@ -108,13 +109,13 @@ RSpec.describe "Filing rules from the filing form", type: :request do
   end
 
   describe "POST /bank_transactions/:bank_transaction_id/filing, with the box ticked" do
-    it "files the bank transaction and makes a Filing rule from what was done: the text, and the outcome with its envelope, and no Account or amount" do
+    it "files the bank transaction and makes a Filing rule from what was done: the text, and the outcome with its envelope, for its own Account and with no amount" do
       expect { post bank_transaction_filing_path(money_out), params: file_params }.to change(Budget::FilingRule, :count).by(1).and change(Budget::Spend, :count).by(1)
 
       expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction filed."
-      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "spend", envelope: groceries, account_id: nil, amount: nil)
+      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "spend", envelope: groceries, account_id: account.id, amount: nil)
     end
 
     it "takes the text as it was edited, normalised" do
@@ -150,7 +151,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
     end
 
     it "updates the rule with identical conditions in place, instead of making another" do
-      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123")
+      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", account: account)
 
       expect { post bank_transaction_filing_path(money_out), params: file_params(envelope_id: household.id) }.not_to change(Budget::FilingRule, :count)
 
@@ -159,7 +160,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
     end
 
     it "turns an existing Spend rule into a Deposit rule, which takes its envelope away" do
-      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "acme payroll")
+      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "acme payroll", account: account)
 
       post bank_transaction_filing_path(money_in), params: file_params(rule: { make: "1", text: "acme payroll" }, kind: "deposit", date: "2026-09-30", amount: "3000", month: "2026-09-01")
 
@@ -256,7 +257,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect(response).to redirect_to(account_path(account))
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction ignored."
-      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "ignore", envelope_id: nil, account_id: nil, amount: nil)
+      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "ignore", envelope_id: nil, account_id: account.id, amount: nil)
       expect(money_out.reload).to be_ignored
       expect(money_out.filing_rule_id).to be_nil
     end
@@ -270,7 +271,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
     end
 
     it "updates an existing rule with identical conditions to Ignore, in place" do
-      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123")
+      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123", account: account)
 
       expect { post bank_transaction_ignore_path(money_out), params: file_params }.not_to change(Budget::FilingRule, :count)
 
@@ -360,7 +361,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       end
 
       it "doesn't count a bank transaction that a more specific Filing rule fits, which is its rule's, and says so" do
-        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale #123 ottawa")
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale #123 ottawa", account: account)
 
         get new_bank_transaction_filing_path(money_out)
 
@@ -368,7 +369,9 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       end
 
       it "says so even when there's nothing else left to file, with no box to tick" do
-        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco", account: account)
+        # An exact amount is more specific than anything else, so each of these is the one to file the bank transaction it fits.
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco", amount: -40)
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco", amount: -60)
 
         get new_bank_transaction_filing_path(money_out)
 
@@ -420,11 +423,11 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       end
 
       it "says when the text is one that a rule already has, which it would update" do
-        create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco")
+        create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco", account: account)
 
         preview(text: "costco")
 
-        expect(response.body).to include("Updates the Filing rule for 'costco', which files them as Spend from Groceries now.")
+        expect(response.body).to include("Updates the Filing rule for 'costco' in Chequing, which files them as Spend from Groceries now.")
       end
 
       it "is not found for another user's bank transaction, and needs sign-in" do
@@ -523,6 +526,152 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         post bank_transaction_filing_path(create(:budget_bank_transaction, account: account, description: "SHELL 2", amount: -5)), params: file_params(rule: { make: "1", text: "shell 2" })
 
         expect([ same_one.reload, another.reload ]).to all(be_unfiled)
+      end
+    end
+  end
+
+  # "Always file like this" is for the bank transaction's own Account unless the person chooses any, which is what a rule usually should be.
+  describe "the Account the rule is for" do
+    let!(:savings) { create(:budget_account, budget: budget, name: "Savings") }
+    let!(:here) { create(:budget_bank_transaction, account: account, description: "COSTCO WHOLESALE #123", date: Date.new(2026, 9, 13), amount: -40) }
+    let!(:there) { create(:budget_bank_transaction, account: savings, description: "COSTCO WHOLESALE #123", date: Date.new(2026, 9, 14), amount: -60) }
+
+    def radios
+      css_select("input[type=radio][name='filing[rule][account_id]']")
+    end
+
+    def preview(**rule)
+      get bank_transaction_rule_preview_path(money_out), params: { filing: { rule: { text: "costco wholesale #123" }.merge(rule) } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
+    end
+
+    describe "GET /bank_transactions/:bank_transaction_id/filing/new" do
+      it "has two radio buttons in Edit rule: only in the bank transaction's own Account, chosen to start with, and any account" do
+        get new_bank_transaction_filing_path(money_out)
+
+        expect(radios.map { |radio| [ radio["value"], radio.key?("checked") ] }).to eq([ [ account.id.to_s, true ], [ "", false ] ])
+        edit_rule = css_select("details").find { |details| details.at("summary").text.squish == "Edit rule" }
+        expect(edit_rule.css("input[type=radio][name='filing[rule][account_id]']").size).to eq(2)
+        expect(edit_rule.at("fieldset legend").text).to eq("Account")
+        expect(edit_rule.css("label").map { |label| label.text.squish }).to include("Only in Chequing", "Any account")
+      end
+
+      it "is not a select of every Account, since a rule for another Account wouldn't fit the bank transaction it's made from" do
+        get new_bank_transaction_filing_path(money_out)
+
+        assert_select "select[name='filing[rule][account_id]']", count: 0
+        expect(response.body).not_to include("Savings")
+      end
+
+      it "says in the sentence which Account it's for: its own to start with, and any when that's the one sent" do
+        get new_bank_transaction_filing_path(money_out)
+
+        pinned, anywhere = css_select("[data-sweep-preview-target=variant]")
+        expect(pinned.text.squish).to eq("Chequing bank transactions with 'costco wholesale #123' in their description are filed the same way as they come in.")
+        expect(pinned.key?("hidden")).to be(false)
+        expect(anywhere.text.squish).to eq("Bank transactions in any account with 'costco wholesale #123' in their description are filed the same way as they come in.")
+        expect(anywhere.key?("hidden")).to be(true)
+      end
+
+      it "counts only the Account's own unfiled bank transactions that the rule fits, which is what's swept" do
+        get new_bank_transaction_filing_path(money_out)
+
+        expect(visible_text).to include("1 other unfiled bank transaction fits.")
+      end
+
+      it "sends the choice with the radios inside the form's rule fields, so the preview already has it" do
+        get new_bank_transaction_filing_path(money_out)
+
+        assert_select "[data-controller~=sweep-preview][data-sweep-preview-scope-value='filing[rule]'] input[type=radio][name='filing[rule][account_id]'][data-action='input->sweep-preview#update']", count: 2
+      end
+    end
+
+    describe "POST /bank_transactions/:bank_transaction_id/filing" do
+      it "makes a rule for the bank transaction's Account when it's chosen, and sweeps only that Account's bank transactions" do
+        post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: account.id.to_s, sweep: "1" })
+
+        expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", account_id: account.id, amount: nil)
+        expect(here.reload).to be_filed
+        expect(there.reload).to be_unfiled
+        follow_redirect!
+        assert_select "[role=status]", text: "Bank transaction filed. The Filing rule also filed 1 other bank transaction."
+      end
+
+      it "makes a rule for any Account when that's chosen, and sweeps every Account's" do
+        post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: "", sweep: "1" })
+
+        expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", account_id: nil)
+        expect([ here.reload, there.reload ]).to all(be_filed)
+        follow_redirect!
+        assert_select "[role=status]", text: "Bank transaction filed. The Filing rule also filed 2 other bank transactions."
+      end
+
+      it "makes the rule for the bank transaction's own Account, whatever other Account's id is sent, since the rule has to fit it" do
+        post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: savings.id.to_s })
+
+        expect(budget.filing_rules.sole.account_id).to eq(account.id)
+      end
+
+      it "makes a rule for the Account when the form doesn't say, as it starts" do
+        post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123" })
+
+        expect(budget.filing_rules.sole.account_id).to eq(account.id)
+      end
+
+      it "makes a different rule for a pinned and an any-account rule with the same text, and updates the one with the same Account in place" do
+        anywhere = create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale #123")
+
+        expect { post bank_transaction_filing_path(money_out), params: file_params }.to change(Budget::FilingRule, :count).by(1)
+
+        expect(anywhere.reload).to have_attributes(envelope: household, account_id: nil)
+        pinned = budget.filing_rules.where.not(id: anywhere.id).sole
+        expect(pinned).to have_attributes(envelope: groceries, account_id: account.id)
+
+        expect { post bank_transaction_filing_path(money_in), params: file_params(rule: { make: "1", text: "acme payroll" }, kind: "deposit", date: "2026-09-30", amount: "3000") }
+          .to change(Budget::FilingRule, :count).by(1)
+      end
+
+      it "makes the rule for the Account from Ignore too" do
+        post bank_transaction_ignore_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: account.id.to_s })
+
+        expect(budget.filing_rules.sole).to have_attributes(outcome: "ignore", account_id: account.id)
+      end
+
+      it "comes back with the choice it was sent when it's refused, and the sentence for it" do
+        post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: "" }, envelope_id: "")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(radios.map { |radio| [ radio["value"], radio.key?("checked") ] }).to eq([ [ account.id.to_s, false ], [ "", true ] ])
+        pinned, anywhere = css_select("[data-sweep-preview-target=variant]")
+        expect(pinned.key?("hidden")).to be(true)
+        expect(anywhere.key?("hidden")).to be(false)
+      end
+    end
+
+    describe "GET /bank_transactions/:bank_transaction_id/filing/rule" do
+      it "counts for the Account as it's chosen" do
+        preview(account_id: account.id.to_s)
+        expect(response.body).to include("1 other unfiled bank transaction fits.")
+
+        preview(account_id: "")
+        expect(response.body).to include("2 other unfiled bank transactions fit.")
+      end
+
+      it "counts for the Account by default, when the choice isn't sent" do
+        preview
+
+        expect(response.body).to include("1 other unfiled bank transaction fits.")
+      end
+
+      it "says which Account's rule it would update, and only that one's" do
+        create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco wholesale #123")
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale #123", account: account)
+
+        preview(account_id: account.id.to_s)
+        expect(response.body).to include("Updates the Filing rule for 'costco wholesale #123' in Chequing, which files them as Spend from Household now.")
+
+        preview(account_id: "")
+        expect(response.body).to include("Updates the Filing rule for 'costco wholesale #123', which files them as Spend from Groceries now.")
+        expect(response.body).not_to include("in Chequing")
       end
     end
   end

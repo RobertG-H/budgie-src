@@ -215,7 +215,7 @@ RSpec.describe "File and next", type: :request do
     end
 
     it "is judged after the filing, so what a rule from the form files too is never the next one" do
-      file_and_next alpha, rule: { make: "1", text: "mart", sweep: "1" }
+      file_and_next alpha, rule: { make: "1", text: "mart", sweep: "1", account_id: "" }
 
       expect(Budget::BankTransaction.unfiled.count).to eq(0)
       expect(response).to redirect_to(bank_transactions_page)
