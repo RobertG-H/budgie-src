@@ -46,6 +46,20 @@ RSpec.describe "components/_delete_button", type: :view do
     assert_select "button.btn.btn-ghost.text-error", text: "Delete"
   end
 
+  it "is the full-size button unless it's given a size" do
+    render_button
+
+    assert_select "button.btn", text: "Delete"
+    assert_select "button.btn-sm", count: 0
+  end
+
+  it "can be a small button, for a row of a table" do
+    render_button size: :sm
+
+    assert_select "button.btn.btn-ghost.btn-sm.text-error", text: "Delete"
+    assert_select "form[data-turbo-confirm='Delete the Paycheck deposit?']"
+  end
+
   it "escapes what it asks" do
     render_button confirm: %(Delete the "<b>Rent</b>" envelope?)
 

@@ -1,5 +1,5 @@
 <%# locals: (budget:) %>
-<%# Assigned and Spent for each envelope. Available is what's left, and Overspent when that's below zero. %>
+<%# Assigned and Spent for each envelope. Available is what's left, and Overspent when that's below zero. Below it, `components/table`: a table of rows to read across, with the Filing rules page's columns, a link in only the first and the actions last. %>
 <% rows = [
      { name: "Groceries", assigned: 400, spent: 250 },
      { name: "Rent", assigned: 1200, spent: 1200 },
@@ -32,4 +32,44 @@
       </tbody>
     </table>
   </div>
+
+  <h3 class="text-lg font-semibold">Table component</h3>
+  <p class="text-base-content/70">`components/table` is the wrapper that scrolls sideways by itself, with a caption for assistive technology only, which the heading above it stands in for. Only the first column is a link, since the rows hold buttons; an Edit button is its own control so the way to edit is visible. Muted words say "Any" and a figure is right-aligned.</p>
+  <%= render "components/table", caption: "Groceries" do %>
+    <thead>
+      <tr>
+        <th scope="col">Text</th>
+        <th scope="col">Does</th>
+        <th scope="col">Account</th>
+        <th scope="col" class="text-right">Amount</th>
+        <th scope="col" class="text-right">Filed count</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% [
+           { text: "loblaws", does: "Spend", account: "Chequing", amount: -82.45, count: 3, inactive: false },
+           { text: "loblaws return", does: "Refund", account: nil, amount: nil, count: 0, inactive: false },
+           { text: "gym membership", does: "Spend", account: nil, amount: -45, count: 12, inactive: true }
+         ].each do |rule| %>
+        <tr>
+          <th scope="row" class="min-w-36 font-semibold">
+            <%= link_to rule[:text], "#", class: "link" %><% if rule[:inactive] %> <%= render "components/label_badge", text: "Inactive" %><% end %>
+          </th>
+          <td><%= rule[:does] %></td>
+          <td class="whitespace-nowrap"><% if rule[:account] %><%= rule[:account] %><% else %><span class="text-base-content/70">Any account</span><% end %></td>
+          <td class="whitespace-nowrap text-right tabular-nums">
+            <% if rule[:amount] %><%= render "components/money", amount: rule[:amount], budget: budget %><% else %><span class="text-base-content/70">Any amount</span><% end %>
+          </td>
+          <td class="text-right tabular-nums"><%= rule[:count] %></td>
+          <td>
+            <div class="flex items-center justify-end gap-1">
+              <%= link_to "Edit", "#", class: "btn btn-ghost btn-sm" %>
+              <button type="button" class="btn btn-ghost btn-sm text-error">Delete</button>
+            </div>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  <% end %>
 </section>

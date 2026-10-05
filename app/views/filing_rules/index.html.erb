@@ -1,22 +1,56 @@
 <% content_for :title, "Filing rules · Budgie" %>
+<%# Deleting a rule comes back to this same page, which Turbo then refreshes in place, morphing it into the new one and keeping the scroll position, so a person deleting down a long list stays where they were. %>
+<% turbo_refreshes_with method: :morph, scroll: :preserve %>
 <% budget = Current.budget %>
 
 <%= render "components/page_header", title: "Filing rules",
-      description: "Standing instructions that file or ignore the bank transactions that come in, the same way each time. They never change what's already filed or ignored." do %>
+      description: "Standing instructions that file or ignore the bank transactions that come in, the same way each time. They never change what's already filed or ignored. Filed count is how many bank transactions a rule filed or ignored that still are." do %>
   <%= link_to "New Filing rule", new_filing_rule_path, class: "btn btn-primary" %>
 <% end %>
 
-<%# One section for each thing a rule sets, so everything that goes to Groceries is the Groceries section: the envelopes alphabetically as in the month view, then Deposit, then Ignore. %>
+<%# One section for each thing a rule sets, so everything that goes to Groceries is the Groceries section: the envelopes alphabetically as in the month view, then Deposit, then Ignore. Each is a table of what its rules match and do, and the envelope is the heading, so it isn't repeated in a row. At 375px every column is kept and the table scrolls sideways in its own wrapper, with the Text first so the way to edit a rule is always on screen. %>
 <div class="mt-8 space-y-8">
   <% if @sections.any? %>
     <% @sections.each do |section| %>
       <section class="space-y-4">
         <h2 class="text-xl font-semibold"><%= section.title %><% if section.envelope&.archived? %> <span class="align-middle"><%= render "components/archived_badge" %></span><% end %></h2>
-        <%= render "components/record_list" do %>
-          <% section.rules.each do |rule| %>
-            <%= render "components/link_row", href: edit_filing_rule_path(rule), name: rule.text, badge: ("Inactive" if rule.inactive?),
-                  detail: filing_rule_detail(rule, @counts.fetch(rule.id, 0), budget) %>
-          <% end %>
+        <% if section.envelope&.archived? %>
+          <p class="text-base-content/70">Inactive while its envelope is archived.</p>
+        <% end %>
+        <%= render "components/table", caption: section.title do %>
+          <thead>
+            <tr>
+              <th scope="col">Text</th>
+              <th scope="col">Does</th>
+              <th scope="col">Account</th>
+              <th scope="col" class="text-right">Amount</th>
+              <th scope="col" class="text-right">Filed count</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% section.rules.each do |rule| %>
+              <% count = @counts.fetch(rule.id, 0) %>
+              <tr>
+                <%# The only link in the row but Edit: the whole row can't link now that it holds buttons. It has room to be read without scrolling. %>
+                <th scope="row" class="min-w-36 font-semibold">
+                  <%= link_to rule.text, edit_filing_rule_path(rule), class: "link" %><% if rule.inactive? %> <%= render "components/label_badge", text: "Inactive" %><% end %>
+                </th>
+                <td><%= rule.outcome.capitalize %></td>
+                <td class="whitespace-nowrap"><% if rule.account %><%= rule.account.name %><% else %><span class="text-base-content/70">Any account</span><% end %></td>
+                <td class="whitespace-nowrap text-right tabular-nums">
+                  <% if rule.amount %><%= render "components/money", amount: rule.amount, budget: budget %><% else %><span class="text-base-content/70">Any amount</span><% end %>
+                </td>
+                <td class="text-right tabular-nums"><%= count %></td>
+                <td>
+                  <div class="flex items-center justify-end gap-1">
+                    <%= link_to "Edit", edit_filing_rule_path(rule), class: "btn btn-ghost btn-sm" %>
+                    <%= render "components/delete_button", path: filing_rule_path(rule), confirm: filing_rule_delete_question(rule, count), size: :sm %>
+                  </div>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
         <% end %>
       </section>
     <% end %>

@@ -1,0 +1,8 @@
+<%# locals: (caption:) %>
+<%# A table of rows to read across, such as the Filing rules of one section: in a wrapper of its own that scrolls sideways when the table is wider than the page, so the page never does, with the border of a record list and a `table-sm`. `caption` names it for assistive technology and isn't shown, since the section's heading is the name that's seen. The block is its `thead` and `tbody`. The month view's own table isn't built on it. %>
+<div class="overflow-x-auto rounded-box border border-base-300">
+  <table class="table table-sm">
+    <caption class="sr-only"><%= caption %></caption>
+    <%= yield %>
+  </table>
+</div>

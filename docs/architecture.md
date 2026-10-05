@@ -407,8 +407,8 @@ sweeps the bank transactions where the new rule is the most specific one that fi
 the ones that went the same way, so an Ignore rule that fits money in and out doesn't act on the other way's. The rule, the filing and the sweep are one database transaction. A bank transaction that a rule fits but a more specific rule files isn't counted, and the form says so, since "no other
 bank transactions fit" would be untrue.
 
-**Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each says how
-many bank transactions it filed or ignored, counting only those that still are. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact
+**Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each section is a table of what its rules match and do: the text,
+what it does (Spend, Refund, Deposit or Ignore), its Account and amount (or "Any"), and how many bank transactions it filed or ignored, counting only those that still are. A rule can be edited or deleted from its row, and deleting asks first, names the rule and says that what it filed stays as it is; the page keeps its place after a delete. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact
 amount if it needs them, and edited or deleted. Because a filed record is ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), changing or deleting a rule only
 affects what comes in from then on; fixing what it already did means un-filing and filing again. A rule for an archived envelope is flagged inactive, in words, and does nothing until the envelope is
 unarchived. Two rules with the same conditions aren't allowed, and the page says what the other one does.

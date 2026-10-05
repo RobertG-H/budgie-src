@@ -278,7 +278,7 @@ RSpec.describe "The words on the pages", type: :request do
 
       it "says Filing rule, and what a rule did, in words: on the filing form with the box and its message, on the summary and on an Account's page" do
         budget_groceries = groceries
-        create(:budget_filing_rule, budget: budget, envelope: budget_groceries, text: "loblaws")
+        create(:budget_filing_rule, budget: budget, envelope: budget_groceries, text: "loblaws", account: account)
         create(:budget_filing_rule, :ignore, budget: budget, text: "hydro")
         hydro = create(:budget_bank_transaction, account: account, description: "Hydro", date: Date.new(2026, 10, 4), amount: -65.5)
         Budget::FilingRule::Applier.new(budget).apply([ hydro.reload ])
@@ -286,7 +286,7 @@ RSpec.describe "The words on the pages", type: :request do
 
         get new_bank_transaction_filing_path(loblaws_row, from: "account")
 
-        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws', which files them as Spend from Groceries now.",
+        expect(visible_text).to include("Always file like this", "Text to look for", "Updates the Filing rule for 'loblaws' in Chequing, which files them as Spend from Groceries now.",
           "1 other unfiled bank transaction fits.", "File or ignore them the same way now", "Only the ones that went the same way as this one.")
 
         get bank_transaction_rule_preview_path(loblaws_row), params: { filing: { rule: { text: "loblaws", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
