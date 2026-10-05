@@ -25,10 +25,11 @@ module CsvFormatsHelper
   end
 
   # What's added to the question before deleting a CSV format that's some Accounts' default, which are left with none: " It's the default for 2
-  # Accounts, which will have none." Nothing when it's no Account's, since nothing changes then.
+  # Accounts, which will have none." Nothing when it's no Account's, since nothing changes then, and nothing when an Import used it, since the delete
+  # is refused and clears nothing.
   def default_for_accounts_note(csv_format)
     count = csv_format.default_for_accounts.count
-    return "" if count.zero?
+    return "" if count.zero? || csv_format.imports.exists?
 
     " It's the default for #{pluralize(count, "Account")}, which will have none."
   end

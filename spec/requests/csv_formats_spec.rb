@@ -334,6 +334,15 @@ RSpec.describe "CSV formats", type: :request do
       expect(account.reload.default_csv_format).to eq(format)
     end
 
+    it "doesn't promise to clear a default when an Import used the format, since the delete is refused and clears nothing" do
+      create(:budget_account, budget: format.budget, default_csv_format: format)
+      create(:budget_import, account: create(:budget_account, budget: format.budget), csv_format: format)
+
+      get edit_csv_format_path(format)
+
+      assert_select "form[data-turbo-confirm='Delete the CIBC CSV format?']"
+    end
+
     it "is not found for another user's CSV format" do
       get edit_csv_format_path(others_format)
 

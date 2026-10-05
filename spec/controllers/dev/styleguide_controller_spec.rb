@@ -40,6 +40,17 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#month-links nav .join > button[disabled][aria-disabled=true]", count: 1
       end
 
+      it "shows the month picker open, in place, with its stepper, its months and This month, beside the live one" do
+        with_development_routes { get :show }
+
+        assert_select "#month-links h3", text: "The picker, open"
+        assert_select "#month-links div.rounded-box h2", text: "Choose a month"
+        assert_select "#month-links div.rounded-box input[type=number][min='1'][max='275760']"
+        assert_select "#month-links div.rounded-box a[data-month-picker-target=month]", count: 12
+        assert_select "#month-links div.rounded-box a.btn-primary[aria-current=page]", count: 1
+        assert_select "#month-links div.rounded-box a[data-month-picker-target=thisMonth]", text: "This month"
+      end
+
       it "shows the month picker, with its twelve months, which is live" do
         with_development_routes { get :show }
 

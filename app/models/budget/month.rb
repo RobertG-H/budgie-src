@@ -16,6 +16,9 @@
 class Budget::Month
   ZERO = BigDecimal(0)
 
+  # There's no month before January of year 1: PostgreSQL has no year 0, so /months/0000-12 is a 404. Nothing is bounded after.
+  EARLIEST = Date.new(1, 1, 1)
+
   # Money not yet assigned to an envelope: every Deposit for this month and the months before it, less everything
   # assigned in them, plus everything moved back into it from envelopes. `carried_over` is what was left at the end of
   # last month, `deposited` is what came in this month, `assigned` is what went to envelopes this month, all of them, and
@@ -141,9 +144,6 @@ class Budget::Month
   def to_param
     date.strftime("%Y-%m")
   end
-
-  # There's no month before January of year 1: PostgreSQL has no year 0, so /months/0000-12 is a 404. Nothing is bounded after.
-  EARLIEST = Date.new(1, 1, 1)
 
   def earliest?
     date == EARLIEST

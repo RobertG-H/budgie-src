@@ -1,5 +1,5 @@
 # Works out a Budget's Guesses: for an unfiled bank transaction that no active Filing rule fits, what it was most like, so that the
-# filing form can start on it and the Unfiled list can show it (ADR 0013). It's the one seam for it: where a Guess comes from is
+# filing form can start on it and the Bank transactions page can show it (ADR 0013). It's the one seam for it: where a Guess comes from is
 # behind `sources`, which for now is only the Budget's own filing history (Budget::Guesser::History), and a later source, such as an LLM
 # call or a bank-sync provider's category, is another entry there, as its own piece of work with its own ADR.
 #

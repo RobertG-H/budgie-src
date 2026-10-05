@@ -16,8 +16,7 @@ class Budget::BankTransactionList
 
   # `filter` is what the page was given: ActionController::Parameters, a Hash, or anything at all.
   def self.parse(budget, filter)
-    values = filter.respond_to?(:to_unsafe_h) ? filter.to_unsafe_h : (filter.is_a?(Hash) ? filter : {})
-    values = values.with_indifferent_access
+    values = Budget::FilterValues.read(filter)
 
     new(budget, date_range: DateRangeFilter.new(from: values[:date_from], to: values[:date_to]), state: values[:state], account_id: values[:account])
   end

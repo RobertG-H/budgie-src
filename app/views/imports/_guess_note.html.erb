@@ -2,9 +2,7 @@
 <%# What a guess that wasn't certain says, above the whole form that comes back with its best offer chosen, in words: what Budgie worked out, and what to check. Nothing is imported until the form is sent. %>
 <%# A file no CSV format reads says why, for each format, in a "Why" the person can open, and points to the CSV format builder, which can't be given the file: it reads a sample for the request and never keeps it, and a browser can't fill a file field for it. A refusal that's about the file for every format, such as that it isn't UTF-8, is said once, instead. %>
 <% if guess.file_refusal %>
-  <div role="alert" class="alert alert-error mt-8">
-    <span><%= guess.file_refusal.message %> Choose another file.</span>
-  </div>
+  <div class="mt-8"><%= render "components/flash", type: :alert, message: "#{guess.file_refusal.message} Choose another file." %></div>
 <% elsif guess.csv_format.nil? %>
   <div role="alert" class="alert alert-error mt-8 block">
     <p class="font-medium">No CSV format reads this file.</p>

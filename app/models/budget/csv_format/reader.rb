@@ -43,14 +43,14 @@ class Budget::CsvFormat::Reader
       anything_in_file ||= !blank
       next if index < @format.rows_to_skip || blank
 
-      refuse(nil, "The file has more than #{MAX_DATA_ROWS.to_fs(:delimited)} rows.", file: true) if rows.size + zero_rows >= MAX_DATA_ROWS
+      refuse(nil, "The file has more than #{MAX_DATA_ROWS.to_fs(:delimited)} rows.", about_the_file: true) if rows.size + zero_rows >= MAX_DATA_ROWS
 
       row = read_row(line, cells)
       row.amount.zero? ? zero_rows += 1 : rows << row
     end
 
     # A file with nothing in it is no format's to read, but one that this format skips all of may be another's.
-    refuse(nil, "There are no rows to read after the rows to skip.", file: !anything_in_file) if rows.empty? && zero_rows.zero?
+    refuse(nil, "There are no rows to read after the rows to skip.", about_the_file: !anything_in_file) if rows.empty? && zero_rows.zero?
     Reading.new(rows: rows, zero_rows: zero_rows, refusal: nil)
   rescue Budget::CsvFormat::Refused => refused
     Reading.new(rows: [], zero_rows: 0, refusal: refused.refusal)
@@ -59,8 +59,8 @@ class Budget::CsvFormat::Reader
   private
     # Stops reading, and says why, and whether it's the file's fault rather than this format's. Nothing is read from a file that has
     # anything wrong with it.
-    def refuse(line, reason, file: false)
-      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: line, reason: reason, file: file)
+    def refuse(line, reason, about_the_file: false)
+      raise Budget::CsvFormat::Refused, Budget::CsvFormat::Refusal.new(line: line, reason: reason, about_the_file: about_the_file)
     end
 
     # A value from the file as a refusal quotes it, which isn't more than a little of it.

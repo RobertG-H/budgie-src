@@ -183,7 +183,7 @@ that was left without; an Account that has one is never changed by an Import, an
 can still be deleted: `Budget::CsvFormat has_many :default_for_accounts, dependent: :nullify`, declared after `has_many :imports, dependent: :restrict_with_error` so it only runs when the delete isn't refused
 (`ON DELETE RESTRICT` is the backstop), which clears the default, and its delete question says so ("It's the default for 2 Accounts, which will have none.", `CsvFormatsHelper#default_for_accounts_note`).
 `Budget#delete_importer_records` deletes Accounts before CSV formats, which the new key needs, and `spec/models/budget_spec.rb` has a spec so a change in that order is caught. The Account's page shows its
-default under the title ("Default CSV format: Chequing CSV") as a muted line; the Accounts list is unchanged. `Budget::Import` (`budget_imports`) is (`budget_imports`) is one CSV file read
+default under the title ("Default CSV format: Chequing CSV") as a muted line; the Accounts list is unchanged. `Budget::Import` (`budget_imports`) is one CSV file read
 into one Account: `csv_format_id`, `file_name` (the file isn't kept), `duplicates_skipped` and `zero_rows_skipped`, and the figures of the file as it
 was read (below), with `created_at` as when it ran and no `user_id`. `Budget::BankTransaction` (`budget_bank_transactions`) is the bank's record of money
 moving: `date`, `description` (as the bank gave it, trimmed), a signed `amount` that's never 0, `import_id` (not null while an

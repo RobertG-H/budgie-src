@@ -92,6 +92,19 @@ RSpec.describe "Imports", type: :request do
       assert_select "main", text: /You need an Account/, count: 0
     end
 
+    it "has no id twice, so the File label finds the form's own field and not the header's hidden one" do
+      [ new_import_path, new_account_import_path(account) ].each do |path|
+        get path
+
+        ids = css_select("[id]").map { |element| element["id"] }
+        expect(ids.tally.select { |_, count| count > 1 }).to eq({})
+        expect(css_select("label[for=import_file]").size).to eq(1)
+        expect(css_select("#import_file").map(&:name)).to eq([ "input" ])
+        assert_select "main #import_file[type=file]"
+        assert_select "header input[type=file]#header_import_file"
+      end
+    end
+
     it "is under Accounts in the header, and Cancel goes home" do
       get new_import_path
 

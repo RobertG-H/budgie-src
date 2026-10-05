@@ -126,6 +126,11 @@ and This month still work. The time zone is Eastern Time (US &
 Canada) for everyone. Records store dates, not times, so it only decides what "today" is: which month `/`
 opens on, and what a date field starts as.
 
+The month view's Ready to Assign card says in words which of four states it's in, from `Budget::Month::ReadyToAssign` (so the view does no
+arithmetic): money left to assign, everything assigned, more assigned than deposited, or nothing yet. Only the current month's "left to assign" gets the
+warning styling; in any other month it's a quiet badge, a new budget's empty card never shouts, and over-assigned is error-styled in every month, since it's a
+fact about the plan. The figures it adds up from are labelled, and the way to the month's Deposits is a plain "See Deposits" link, not the whole card.
+
 Every balance is worked out in one place, `Budget::Month` (`app/models/budget/month.rb`), which views and
 controllers only ask. It works on one calendar month of a budget and runs a fixed number of grouped `SUM`
 queries, split into "before the month" and "in the month", so the number of queries doesn't grow with the

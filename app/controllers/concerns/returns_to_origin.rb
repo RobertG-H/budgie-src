@@ -42,7 +42,7 @@ module ReturnsToOrigin
     def origin_page
       return unless origin.in?(%w[ records bank_transactions ])
 
-      page = params[:page].to_s.to_i.clamp(1, Paginated::MAX_PAGE)
+      page = Paginated.page_number(params[:page])
       page unless page == 1
     end
 

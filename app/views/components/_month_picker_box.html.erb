@@ -1,0 +1,37 @@
+<%# locals: (month:, path:, title_id:) %>
+<%# What the month picker's dialog holds (components/month_picker): its title, a year stepper, a grid of the year's twelve months, "This month" and Close. It's a partial of its own so the styleguide can draw it open, in place, beside the live one. Its Stimulus targets do nothing without the month-picker controller. See components/month_picker for how it's marked and moved about. %>
+<% year_id = "month-picker-year-#{SecureRandom.hex(4)}" %>
+<% year = month.date.year %>
+<h2 id="<%= title_id %>" class="text-lg font-semibold">Choose a month</h2>
+
+<div class="mt-4 space-y-4">
+  <div class="join">
+    <button type="button" class="btn btn-sm join-item" aria-label="Previous year" data-month-picker-target="previousYear" data-action="month-picker#previousYear" <%= "disabled" if year <= DateRangeFilter::MIN_YEAR %>><span aria-hidden="true">‹</span></button>
+    <label for="<%= year_id %>" class="sr-only">Year</label>
+    <input id="<%= year_id %>" type="number" min="<%= DateRangeFilter::MIN_YEAR %>" max="<%= DateRangeFilter::MAX_YEAR %>" inputmode="numeric" value="<%= year %>"
+           class="input input-sm join-item w-28 border-base-content/55 text-center tabular-nums"
+           data-month-picker-target="year" data-action="change->month-picker#yearChanged keydown.enter->month-picker#yearChanged">
+    <button type="button" class="btn btn-sm join-item" aria-label="Next year" data-month-picker-target="nextYear" data-action="month-picker#nextYear" <%= "disabled" if year >= DateRangeFilter::MAX_YEAR %>><span aria-hidden="true">›</span></button>
+  </div>
+
+  <div role="group" aria-label="Months of <%= month.date.strftime("%Y") %>" class="grid grid-cols-3 gap-2" data-month-picker-target="grid"
+       data-action="keydown->month-picker#navigate click->month-picker#choose">
+    <% (1..12).each do |number| %>
+      <% shown = Budget::Month.new(month.budget, Date.new(year, number, 1)) %>
+      <% viewed = shown.date == month.date %>
+      <% this_month = shown.current? %>
+      <%= link_to Date::ABBR_MONTHNAMES[number], path.call(shown),
+            class: class_names("btn btn-sm w-full", "btn-primary": viewed, "btn-outline": this_month && !viewed),
+            aria: { label: [ shown.name, ("this month" if this_month) ].compact.join(", "), current: ("page" if viewed) },
+            tabindex: (viewed ? 0 : -1), data: { month_picker_target: "month" } %>
+    <% end %>
+  </div>
+
+  <%= link_to "This month", path.call(month.current), class: "btn btn-sm", data: { month_picker_target: "thisMonth", action: "click->month-picker#choose" } %>
+</div>
+
+<div class="modal-action">
+  <form method="dialog">
+    <button class="btn">Close</button>
+  </form>
+</div>

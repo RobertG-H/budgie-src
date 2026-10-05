@@ -1,21 +1,19 @@
 import { Controller } from "@hotwired/stimulus"
 
 // The month picker on the month view (app/views/components/_month_picker.html.erb): a year stepper and a grid of the year's
-// twelve months, in a native <dialog> that the modal controller opens. The server draws the viewed year; this redraws the grid
+// twelve months, in a native <dialog> that the modal controller opens, between the years a date field takes (the server says which). The server draws the viewed year; this redraws the grid
 // for another one, which is rewriting each link's href, name and marks. Choosing a month is ordinary navigation (Turbo Drive).
 //
 // The grid is one tab stop (roving tabindex): Left and Right move a month, Up and Down three, Home and End to January and
 // December, PageUp and PageDown a year. None of them wraps over the edge of a year, since a year is a step of its own. Space
 // follows a link too, which it doesn't natively. Esc closes the dialog and gives focus back to the button that opened it, both
 // natively.
-const MIN_YEAR = 1
-const MAX_YEAR = 275760 // a date field's own limit
 const MONTHS = [ "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" ]
 const COLUMNS = 3
 
 export default class extends Controller {
   static targets = [ "trigger", "name", "dialog", "year", "previousYear", "nextYear", "grid", "month" ]
-  static values = { year: Number, month: Number, currentYear: Number, currentMonth: Number, href: String }
+  static values = { year: Number, month: Number, currentYear: Number, currentMonth: Number, href: String, minYear: Number, maxYear: Number }
 
   connect() {
     this.shown = this.yearValue
@@ -78,20 +76,23 @@ export default class extends Controller {
 
   // Going to a month closes the dialog, so choosing the month already being viewed, which Turbo answers by refreshing the
   // page in place, doesn't leave it open over the page.
+  // A click with a modifier opens the link somewhere else, such as a new tab, and leaves this one as it was.
   choose(event) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
     if (event.target.closest("a") && this.dialogTarget.open) this.dialogTarget.close()
   }
 
   step(delta, focusIndex = null) {
     const year = this.shown + delta
-    if (year < MIN_YEAR || year > MAX_YEAR) return
+    if (year < this.minYearValue || year > this.maxYearValue) return
 
     this.show(year)
     if (focusIndex !== null) this.focusMonth(focusIndex)
   }
 
   clamp(year) {
-    return Math.min(Math.max(year, MIN_YEAR), MAX_YEAR)
+    return Math.min(Math.max(year, this.minYearValue), this.maxYearValue)
   }
 
   // Draws the grid for a year. The tab stop stays on the same month of the new year.
@@ -99,8 +100,8 @@ export default class extends Controller {
     this.shown = year
     this.yearTarget.value = year
     this.gridTarget.setAttribute("aria-label", `Months of ${String(year).padStart(4, "0")}`)
-    this.previousYearTarget.disabled = year <= MIN_YEAR
-    this.nextYearTarget.disabled = year >= MAX_YEAR
+    this.previousYearTarget.disabled = year <= this.minYearValue
+    this.nextYearTarget.disabled = year >= this.maxYearValue
 
     this.monthTargets.forEach((link, index) => {
       const month = index + 1

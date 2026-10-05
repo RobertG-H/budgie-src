@@ -6,8 +6,9 @@
 # The file isn't kept, so a form that comes back can't hold it: the browser puts it back in the field (the import-file Stimulus controller), and
 # when it can't, the form says to choose it again.
 class ImportGuessesController < ApplicationController
+  # A budget with no CSV format, or no Account, has nothing to guess with: the whole form says what's missing.
   def create
-    return redirect_to(new_import_path) unless something_to_import_with?
+    return redirect_to(new_import_path) unless Current.budget.importable?
 
     @guess = Budget::ImportGuesser.new(Current.budget).guess(file) if file
     return import_it if @guess&.complete?
@@ -20,11 +21,6 @@ class ImportGuessesController < ApplicationController
   end
 
   private
-    # A budget with no CSV format, or no Account, has nothing to guess with: the whole form says what's missing.
-    def something_to_import_with?
-      Current.budget.csv_formats.exists? && Current.budget.accounts.exists?
-    end
-
     # Both are certain, so it's imported as the form would, with the same Import#run, which reads the file again: one more read of a file of at
     # most 5,000 rows, to keep `run` unchanged. It can only be refused by something that changed since the file was read.
     def import_it

@@ -1,43 +1,9 @@
 <%# locals: (month:, path:) %>
 <%# The dialog the month view's name opens (components/month_links with picker: true), to go to any month in one step: a year stepper and a grid of the year's twelve months. Native <dialog>, opened by the modal controller; it isn't components/modal, whose trigger is a stand-alone button. %>
-<%# The server draws the viewed year, so the grid is never built from nothing; the month-picker controller redraws it for another year (hrefs, names, marks) and does the keyboard. The grid is one tab stop (roving tabindex), and the viewed month is it. A month is marked by a fill (the viewed one, with aria-current) or an outline (this calendar month, also said in its name), never by colour alone, and a "This month" button under the grid puts the word on screen. 275760 is the date field's own limit. %>
+<%# The server draws the viewed year, so the grid is never built from nothing; the month-picker controller redraws it for another year (hrefs, names, marks) and does the keyboard. The grid is one tab stop (roving tabindex), and the viewed month is it. A month is marked by a fill (the viewed one, with aria-current) or an outline (this calendar month, also said in its name), never by colour alone, and a "This month" button under the grid puts the word on screen. The years are a date field's own limits (DateRangeFilter). %>
 <% title_id = "month-picker-title-#{SecureRandom.hex(4)}" %>
-<% year_id = "month-picker-year-#{SecureRandom.hex(4)}" %>
-<% year = month.date.year %>
 <dialog class="modal" aria-labelledby="<%= title_id %>" data-modal-target="dialog" data-month-picker-target="dialog" data-action="click->modal#closeOnBackdrop">
   <div class="modal-box">
-    <h2 id="<%= title_id %>" class="text-lg font-semibold">Choose a month</h2>
-
-    <div class="mt-4 space-y-4">
-      <div class="join">
-        <button type="button" class="btn btn-sm join-item" aria-label="Previous year" data-month-picker-target="previousYear" data-action="month-picker#previousYear" <%= "disabled" if year <= 1 %>><span aria-hidden="true">‹</span></button>
-        <label for="<%= year_id %>" class="sr-only">Year</label>
-        <input id="<%= year_id %>" type="number" min="1" max="275760" inputmode="numeric" value="<%= year %>"
-               class="input input-sm join-item w-28 border-base-content/55 text-center tabular-nums"
-               data-month-picker-target="year" data-action="change->month-picker#yearChanged keydown.enter->month-picker#yearChanged">
-        <button type="button" class="btn btn-sm join-item" aria-label="Next year" data-month-picker-target="nextYear" data-action="month-picker#nextYear" <%= "disabled" if year >= 275760 %>><span aria-hidden="true">›</span></button>
-      </div>
-
-      <div role="group" aria-label="Months of <%= month.date.strftime("%Y") %>" class="grid grid-cols-3 gap-2" data-month-picker-target="grid"
-           data-action="keydown->month-picker#navigate click->month-picker#choose">
-        <% (1..12).each do |number| %>
-          <% shown = Budget::Month.new(month.budget, Date.new(year, number, 1)) %>
-          <% viewed = shown.date == month.date %>
-          <% this_month = shown.current? %>
-          <%= link_to Date::ABBR_MONTHNAMES[number], path.call(shown),
-                class: class_names("btn btn-sm w-full", "btn-primary": viewed, "btn-outline": this_month && !viewed),
-                aria: { label: [ shown.name, ("this month" if this_month) ].compact.join(", "), current: ("page" if viewed) },
-                tabindex: (viewed ? 0 : -1), data: { month_picker_target: "month" } %>
-        <% end %>
-      </div>
-
-      <%= link_to "This month", path.call(month.current), class: "btn btn-sm", data: { month_picker_target: "thisMonth", action: "click->month-picker#choose" } %>
-    </div>
-
-    <div class="modal-action">
-      <form method="dialog">
-        <button class="btn">Close</button>
-      </form>
-    </div>
+    <%= render "components/month_picker_box", month: month, path: path, title_id: title_id %>
   </div>
 </dialog>

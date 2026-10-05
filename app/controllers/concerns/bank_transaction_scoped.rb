@@ -1,5 +1,5 @@
 # What the controllers that act on one bank transaction have in common: they find it through the user's budget, by way of its
-# Account, so another user's is a 404, and they go back to the page the form was opened from, which is the Unfiled list or the
+# Account, so another user's is a 404, and they go back to the page the form was opened from, which is the Bank transactions page or the
 # Account's page (ReturnsToOrigin), or the Account's page when it isn't known.
 module BankTransactionScoped
   extend ActiveSupport::Concern

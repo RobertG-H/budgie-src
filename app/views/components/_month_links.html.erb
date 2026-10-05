@@ -9,7 +9,7 @@
 <%= tag.div data: (picker ? { controller: "modal month-picker", action: "turbo:morph@document->month-picker#sync",
       month_picker_year_value: month.date.year, month_picker_month_value: month.date.month,
       month_picker_current_year_value: month.current.date.year, month_picker_current_month_value: month.current.date.month,
-      month_picker_href_value: month_template } : nil) do %>
+      month_picker_href_value: month_template, month_picker_min_year_value: DateRangeFilter::MIN_YEAR, month_picker_max_year_value: DateRangeFilter::MAX_YEAR } : nil) do %>
   <nav aria-label="Months" class="flex flex-wrap items-center gap-2">
     <div class="join">
       <% if previous_month %>

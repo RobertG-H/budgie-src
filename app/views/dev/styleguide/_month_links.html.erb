@@ -20,4 +20,10 @@
   <h3 class="font-semibold">With the month picker</h3>
   <p class="text-base-content/70">The month view's name opens a dialog to go to any month in one step: a year stepper (type a year, or step with the buttons or PageUp and PageDown) and a grid of the year's months, one tab stop, with the arrow keys, Home and End moving about it. The viewed month is filled, this calendar month is outlined and says so in its name. Open it with the month's name below; it's the real picker, so choosing a month goes to that month's page.</p>
   <%= render "components/month_links", month: another, path: ->(month) { "/months/#{month.to_param}" }, picker: true %>
+
+  <h3 class="font-semibold">The picker, open</h3>
+  <p class="text-base-content/70">What the dialog holds, drawn in place, so it can be checked without opening it: the year stepper, the twelve months of the year (the viewed one filled, this calendar month outlined and said in its name) and "This month" under them. It does nothing here, since it has no controller.</p>
+  <div class="max-w-md rounded-box border border-base-300 bg-base-100 p-6">
+    <%= render "components/month_picker_box", month: Budget::Month.new(budget, Date.current), path: ->(_month) { "#" }, title_id: "month-picker-preview-title" %>
+  </div>
 </section>
