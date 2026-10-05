@@ -18,6 +18,15 @@ RSpec.describe "Navigation", type: :request do
     assert_select "header nav[aria-label=Sections] a[href='#{csv_formats_path}'][aria-current=page]", text: "CSV formats"
   end
 
+  it "puts the sections in order: Budget, Records, Bank transactions, Accounts, Filing rules, CSV formats" do
+    sign_in_as budget.user
+
+    get root_path
+
+    names = css_select("header nav[aria-label=Sections] > ul > li").map { |item| item.at_css("a").text.squish }
+    expect(names).to eq([ "Budget", "Records", "Bank transactions", "Accounts", "Filing rules", "CSV formats" ])
+  end
+
   it "says Budget is the one they're on in a month, and on its pages" do
     sign_in_as budget.user
 
@@ -90,6 +99,214 @@ RSpec.describe "Navigation", type: :request do
 
       assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
       assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+    end
+  end
+
+  describe "the section a form belongs to, which is where it was opened from" do
+    let(:envelope) { create(:budget_envelope, budget: budget, name: "Groceries") }
+    let(:other_envelope) { create(:budget_envelope, budget: budget, name: "Household") }
+    let(:spend) { create(:budget_spend, envelope: envelope, date: Date.new(2026, 9, 12)) }
+    let(:refund) { create(:budget_refund, envelope: envelope, date: Date.new(2026, 9, 12)) }
+    let(:deposit) { create(:budget_deposit, budget: budget, date: Date.new(2026, 9, 12)) }
+    let(:reallocation) { create(:budget_envelope_reallocation, from_envelope: envelope, to_envelope: other_envelope, date: Date.new(2026, 9, 12)) }
+    let(:to_ready_to_assign) { create(:budget_ready_to_assign_reallocation, envelope: envelope, date: Date.new(2026, 9, 12)) }
+    let(:account) { create(:budget_account, budget: budget) }
+
+    before { sign_in_as budget.user }
+
+    def expect_only(section)
+      assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1, text: section
+    end
+
+    it "is Budget for a form opened from the month view, a month's Deposits or an envelope's page, and for the envelope forms" do
+      [ new_spend_path(month: "2026-09", from: "home"),
+        new_spend_path(month: "2026-09", from: "month"),
+        new_deposit_path(month: "2026-09", from: "deposits"),
+        new_refund_path(month: "2026-09", from: "envelope", envelope: envelope.id),
+        new_reallocation_path(month: "2026-09", from: "envelope", envelope: envelope.id),
+        edit_spend_path(spend, month: "2026-09", from: "envelope"),
+        edit_refund_path(refund, month: "2026-09", from: "envelope"),
+        edit_deposit_path(deposit, month: "2026-09", from: "deposits"),
+        edit_envelope_reallocation_path(reallocation, month: "2026-09", from: "envelope", envelope: envelope.id),
+        edit_ready_to_assign_reallocation_path(to_ready_to_assign, month: "2026-09", from: "deposits"),
+        new_envelope_path(month: "2026-09", from: "month"),
+        edit_envelope_path(envelope, month: "2026-09", from: "envelope") ].each do |path|
+        get path
+
+        expect(response).to have_http_status(:ok), path
+        expect_only "Budget"
+      end
+    end
+
+    it "is Budget for a form that wasn't opened from anywhere, which goes back to the month" do
+      get new_spend_path(month: "2026-09")
+
+      expect_only "Budget"
+    end
+
+    it "is Budget for an Assigned input, which is part of the month view" do
+      get edit_month_envelope_assignment_path("2026-09", envelope)
+
+      expect_only "Budget"
+    end
+
+    it "is Records for a record's edit form opened from the Records page" do
+      [ edit_spend_path(spend, from: "records"),
+        edit_refund_path(refund, from: "records"),
+        edit_deposit_path(deposit, from: "records"),
+        edit_envelope_reallocation_path(reallocation, from: "records"),
+        edit_ready_to_assign_reallocation_path(to_ready_to_assign, from: "records") ].each do |path|
+        get path
+
+        expect(response).to have_http_status(:ok), path
+        expect_only "Records"
+      end
+    end
+
+    it "is Records when a form opened from the Records page comes back refused" do
+      patch spend_path(spend), params: { from: "records", spend: { amount: "" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect_only "Records"
+    end
+
+    it "is Bank transactions for a record's edit form opened from the Bank transactions page, and for a bank transaction's filing form" do
+      bank_transaction = create(:budget_bank_transaction, account: account)
+
+      [ edit_spend_path(spend, from: "bank_transactions"),
+        edit_deposit_path(deposit, from: "bank_transactions"),
+        new_bank_transaction_filing_path(bank_transaction, from: "account"),
+        new_bank_transaction_filing_path(bank_transaction, from: "bank_transactions") ].each do |path|
+        get path
+
+        expect(response).to have_http_status(:ok), path
+        expect_only "Bank transactions"
+      end
+    end
+
+    it "is Accounts for a record's edit form opened from an Account's page" do
+      get edit_spend_path(spend, from: "account")
+
+      expect_only "Accounts"
+    end
+
+    it "is Accounts for the whole Import form and an Import's summary, and never marks Import, which is a button and not a section" do
+      import = create(:budget_import, account: account)
+
+      [ new_import_path, import_path(import) ].each do |path|
+        get path
+
+        expect_only "Accounts"
+        assert_select "nav[aria-label=Main] a[aria-current]", count: 0
+      end
+    end
+
+    it "is Accounts when the whole Import form comes back refused" do
+      post imports_path, params: { import: { account_id: account.id } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect_only "Accounts"
+    end
+  end
+
+  describe "the count of unfiled bank transactions" do
+    let(:account) { create(:budget_account, budget: budget) }
+    let(:import) { create(:budget_import, account: account) }
+
+    before { sign_in_as budget.user }
+
+    def make_unfiled(count)
+      create_list(:budget_bank_transaction, count, account: account, import: import)
+    end
+
+    def count_link
+      css_select("nav[aria-label=Sections] li a").find { |link| link.text.include?("unfiled") }
+    end
+
+    it "follows Bank transactions, in words, and is a link to the Unfiled state" do
+      make_unfiled(12)
+
+      get root_path
+
+      item = css_select("nav[aria-label=Sections] li").find { |li| li.at_css("a").text.squish == "Bank transactions" }
+      links = item.css("a")
+      expect(links.map { |link| link.text.squish }).to eq([ "Bank transactions", "12 unfiled" ])
+      expect(links.first["href"]).to eq(bank_transactions_path)
+      expect(links.last["href"]).to eq(bank_transactions_path(filter: { state: "unfiled" }))
+    end
+
+    it "counts only the unfiled ones, not the filed or ignored" do
+      make_unfiled(2)
+      create(:budget_bank_transaction, :filed, account: account, import: import)
+      create(:budget_bank_transaction, :ignored, account: account, import: import)
+
+      get root_path
+
+      expect(count_link.text.squish).to eq("2 unfiled")
+    end
+
+    it "counts the whole budget's, across its Accounts, and not another budget's" do
+      other_account = create(:budget_account, budget: budget)
+      make_unfiled(1)
+      create(:budget_bank_transaction, account: other_account)
+      create(:budget_bank_transaction, account: create(:budget_account, budget: create(:budget)))
+
+      get root_path
+
+      expect(count_link.text.squish).to eq("2 unfiled")
+    end
+
+    it "is there on every page that has the header" do
+      make_unfiled(3)
+
+      [ records_path, accounts_path, bank_transactions_path, csv_formats_path ].each do |path|
+        get path
+
+        expect(count_link.text.squish).to eq("3 unfiled")
+      end
+    end
+
+    it "is muted, and marks no page as current by itself" do
+      make_unfiled(3)
+
+      get bank_transactions_path
+
+      expect(count_link["class"]).to include("text-base-content/70")
+      assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1, text: "Bank transactions"
+    end
+
+    it "is capped: 99 is 99 and a hundred or more is 99+" do
+      make_unfiled(99)
+      get root_path
+      expect(count_link.text.squish).to eq("99 unfiled")
+
+      make_unfiled(1)
+      get root_path
+      expect(count_link.text.squish).to eq("99+ unfiled")
+
+      make_unfiled(3)
+      get root_path
+      expect(count_link.text.squish).to eq("99+ unfiled")
+    end
+
+    it "is left out when there are none" do
+      create(:budget_bank_transaction, :ignored, account: account, import: import)
+
+      get root_path
+
+      expect(count_link).to be_nil
+      assert_select "nav[aria-label=Sections] a", count: 6
+    end
+
+    it "is one query, however many bank transactions there are, read once per request" do
+      make_unfiled(30)
+      statements = []
+      collector = ->(*, payload) { statements << payload[:sql] if payload[:sql].include?("budget_bank_transactions") }
+
+      ActiveSupport::Notifications.subscribed(collector, "sql.active_record") { get csv_formats_path }
+
+      expect(statements.size).to eq(1)
+      expect(statements.first).to include("LIMIT")
     end
   end
 
