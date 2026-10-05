@@ -23,6 +23,13 @@ module FilingRulesHelper
     " Its #{pluralize(count, "Filing rule")} #{count == 1 ? "is" : "are"} deleted with it."
   end
 
+  # What "Always file like this" would do, in the muted line under it: "Bank transactions with 'loblaws' in their description are filed the same way as
+  # they come in." The text is in a span of its own, which the sweep-preview controller keeps in step with the Text field as it's edited, so the
+  # line says what the rule is whether or not "Edit rule" is open.
+  def filing_rule_sentence(offer)
+    safe_join([ "Bank transactions with '", content_tag(:span, offer.normalized_text, data: { sweep_preview_target: "echo" }), "' in their description are filed the same way as they come in." ])
+  end
+
   # What a sweep would do, in two sentences: how many unfiled bank transactions the rule fits and would file or ignore, and, if there are some,
   # how many it fits but a more specific rule files, which aren't counted and shouldn't be taken for none. `others` is for the filing form, where
   # the bank transaction being filed isn't one of them. The second is nothing when there's nothing to say.

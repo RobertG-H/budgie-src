@@ -358,6 +358,13 @@ and the server refuses a form that doesn't add up, saying by how much, and keeps
 Spends, money in any mix of Deposits and Refunds, and one invalid record means none are created. Un-filing deletes every record, and
 wherever a bank transaction shows what it was filed as, its records are listed together.
 
+**The common case first.** For one record the filing form shows the choice and little else: the envelope (and the kind, for money in), "Always file like this" with one
+sentence of what it would do, and File. What's rarely changed is under a closed `<details>`: "Edit details" holds the description, date, amount, a Deposit's month and notes, with a line saying
+what's in it so that closing it isn't a mystery, and "Edit rule" holds the rule's text. Nothing that needs attention is left in a closed section, so they open themselves for a split (every
+record's amount is needed), for an error in them, for a field changed from the bank's own on a form that comes back refused, for a rule text that was changed or that would update a rule that's
+there, and a browser's invalid field opens the section that holds it, since it can't focus a field in a closed one and File would silently do nothing. A Guess changes only the kind and the
+envelope, so it never opens them. Focus starts on the envelope when it's still to choose, and otherwise on File.
+
 **One operation.** Filing is one operation that takes bank transactions, each with the records it's to be filed as, and files them all
 or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank

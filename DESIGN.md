@@ -134,6 +134,15 @@ A table's least-used columns can go behind one toggle, as the month view's Carri
 
 An envelope's archived state is a word and not a colour: the badge beside its name, and its Assigned as plain text where an envelope in use has the button that opens the input, since it's read-only. The month view lists every archived envelope in a native `<details>` ("Archived envelopes") below the table, bordered like a record list (`rounded-box border border-base-300`), each name a `link` filling a row, and only when the budget has some.
 
+## Forms: the choice first
+
+A form puts what a person is choosing in view and what they rarely change away. The filing form (`bank_transaction_filings/_form` and `_record`) is the model: for one record, top to bottom at every width, the bank
+transaction's panel and Guess label, the kind (money in) and the envelope, "Always file like this" with one muted sentence of what it would do, a closed **Edit details** and then "Add another record" (a `btn btn-ghost btn-sm`), the running total and the actions.
+A field that's rarely changed sits under a native `<details>` (no component; a `rounded-box border border-base-300` with a `cursor-pointer` `summary`) whose summary says what's in it in a muted line, so closing it isn't a mystery.
+**A closed `<details>` never holds anything that needs attention**: the server renders it `open` for an error in it, for a field the person changed that the form is coming back with, and for a split, which needs every field;
+and a small controller opens the one that holds a field the browser reports `invalid`, since the browser can't focus a field in a closed section and the submit button would silently do nothing. Focus starts on the first thing still to choose, and otherwise on the main
+action (`autofocus`), never on a field inside a closed `<details>`.
+
 ## Interactivity
 
 Turbo Frames and Streams and Stimulus first. Native `<dialog>` (the `_modal` partial) and `<details>` where

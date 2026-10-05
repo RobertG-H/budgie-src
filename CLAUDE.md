@@ -317,7 +317,13 @@ $10.00 over." in the error colour), in the same words `filing_totals` renders on
 records as they were entered and the total as it was sent; there's no JavaScript library and no fallback for adding one without
 JavaScript. Each record has its own kind (money out has none to choose: a hidden Spend), envelope (only envelopes in use), description,
 date, a Deposit's month choice (`month-choice`) and notes, and the `filing-record` controller shows an envelope for a Refund or Spend
-and the month for a Deposit. A split never offers "Always file like this" (see #78). File posts it (`POST .../filing`), Ignore sends the same form to `POST .../ignore`, which only
+and the month for a Deposit. **The form's order** is the choice first: for one record, the bank transaction's panel and Guess label, the kind (money in) and the envelope, "Always file like this" (see "Making a rule
+from the filing form", which sits in the first record, between its envelope and its details, in a `ruleSlot` the `filing-split` controller moves it between when that record is removed), a `<details>` **Edit details** holding the description, date, a Deposit's month and amount and notes, then
+"Add another record", the running total and the actions. Edit details' summary says what's in it ("LOBLAWS #1234 · Oct 3, 2026 · $82.45", and ", counts toward November" for a Deposit saved for the month
+after its date), worked out by `BankTransactionsHelper#filing_details_summary` and kept in step by the `filing-details` Stimulus controller (on each record's fieldset). It's rendered `open` (`filing_details_open?`) for a
+split, for an error on description, date, amount, month or notes, and for a record that comes back with one of them changed from the bank's own (`Budget::Filing::Draft#edited_from?`); a Guess changes only the kind and the
+envelope, so it never opens it. `filing-split` opens every record's details when a record is added, and `filing-details` opens the `<details>` that holds a field the browser reports `invalid` (caught with `:capture`,
+since the event doesn't bubble), because the browser can't focus a field in a closed one. Focus starts on the envelope select when it's still to choose (a Spend or a Refund with none) and otherwise on File, and never inside a closed details. A split never offers "Always file like this" (see #78). File posts it (`POST .../filing`), Ignore sends the same form to `POST .../ignore`, which only
 reads where it was opened from, Un-file is `DELETE .../filing` and Un-ignore `DELETE .../ignore`; the notices are "Bank transaction
 filed.", "Bank transaction ignored.", "Bank transaction unfiled." and "Bank transaction un-ignored.", and a refusal is an alert. `from`
 gains the pages `bank_transactions` and `account` in `ReturnsToOrigin` (which also takes no month for them, and goes back to the bank transaction's
@@ -391,7 +397,7 @@ ignored in `filed_by_rules` and `ignored_by_rules` (as it did then: un-filing a 
 loaded target `restrict_with_error` would find after Undo deletes them.
 
 **Making a rule from the filing form.** "Always file like this" is `Budget::FilingRule::Offer`: the text starts as the bank transaction's `description_for_matching`,
-editable right there, with no Account or amount condition, ticked by default, and not offered for a split (the `filing-split` controller hides and disables its
+editable right there (under a closed `<details>` **Edit rule**, which holds the text, the second box and the count, and is `open` when the rule has an error, the text was changed or it would update a rule that's there: `Offer#needs_attention?`; the box and one muted sentence under it, "Bank transactions with 'loblaws' in their description are filed the same way as they come in.", stay in view, the `sweep-preview` controller keeping the text in it current as the field is edited), with no Account or amount condition, ticked by default, and not offered for a split (the `filing-split` controller hides and disables its
 fieldset while there's more than one record, and the server makes none for more than one record whatever it was sent) or for a description under 3 characters,
 which says so instead. The text has to be part of the bank transaction's own description, so the rule fits it. `Offer#file(entry)` and `#ignore` do the filing or
 ignoring and save the rule in one database transaction, and neither is done without the other; a rule with identical conditions is updated in place (an Ignore turns a

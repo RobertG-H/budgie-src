@@ -3,6 +3,7 @@
 <%# "Always file like this" is a Filing rule made from what's done, whether it's filing or ignoring, and never from a split: the filing-split controller turns it off while there's more than one record. %>
 <%# A Guess is where the form starts when no Filing rule fits and the Budget has filed something like it: the kind and the envelope are already chosen, and the line says why. It's only where it starts, so it's left off a form that's coming back as it was entered. %>
 <%# Records are numbered by their place in the form, and the form sends them as a hash from each number, which the controller reads in order. A record added in the page is numbered by the time, so it's after all before it. %>
+<%# For one record the form is the choice and little else: its kind and envelope, "Always file like this" with its text tucked under "Edit rule", and "Edit details" holding the rest, closed unless something in it needs attention. The rule is the first record's to hold, since it's between its envelope and its details. %>
 <% bank_transaction = entry.bank_transaction %>
 <% budget = Current.budget %>
 
@@ -20,8 +21,8 @@
     <div class="space-y-8" data-filing-split-target="records">
       <% entry.drafts.each_with_index do |draft, index| %>
         <%= fields_for "filing[records][#{index}]", draft do |record_form| %>
-          <%= render "bank_transaction_filings/record", form: record_form, draft: draft, bank_transaction: bank_transaction,
-                number: index + 1, removable: entry.drafts.size > 1, autofocus: index.zero? %>
+          <%= render "bank_transaction_filings/record", form: record_form, draft: draft, bank_transaction: bank_transaction, details_open: filing_details_open?(entry, draft),
+                number: index + 1, removable: entry.drafts.size > 1, autofocus: index.zero?, offer: (offer if index.zero?) %>
         <% end %>
       <% end %>
     </div>
@@ -30,18 +31,16 @@
     <template data-filing-split-target="template">
       <%= fields_for "filing[records][NEW_RECORD]", Budget::Filing::Draft.for(bank_transaction, amount: nil) do |record_form| %>
         <%= render "bank_transaction_filings/record", form: record_form, draft: Budget::Filing::Draft.for(bank_transaction, amount: nil),
-              bank_transaction: bank_transaction, number: nil, removable: true, autofocus: false %>
+              bank_transaction: bank_transaction, details_open: true, number: nil, removable: true, autofocus: false %>
       <% end %>
     </template>
 
-    <button type="button" class="btn" data-action="filing-split#addRecord" data-filing-split-target="add">Add another record</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="filing-split#addRecord" data-filing-split-target="add">Add another record</button>
 
     <p class="<%= entry.remaining.negative? ? "text-error" : "text-base-content/70" %>" data-filing-split-target="total" aria-live="polite"><%= filing_totals(entry, budget) %></p>
-
-    <%= render "filing_rules/offer", offer: offer %>
   </div>
 
-  <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: "File" do %>
+  <%= render "components/form_actions", form: form, cancel_path: cancel_path, submit: "File", autofocus: !filing_envelope_to_choose?(entry.drafts.first) do %>
     <%# Ignoring needs none of the records, so it's a button of its own that sends the form to its own address, which only reads where it was opened from. The method is stated again because the form is a post. %>
     <button type="submit" name="_method" value="post" formaction="<%= bank_transaction_ignore_path(bank_transaction) %>" formnovalidate class="btn">Ignore</button>
   <% end %>

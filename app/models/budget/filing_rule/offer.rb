@@ -51,6 +51,17 @@ class Budget::FilingRule::Offer
     bank_transaction.description_for_matching
   end
 
+  # Whether something about the rule needs a person's attention, so that the filing form doesn't leave it in a closed section: it has an error, the
+  # text isn't the bank's own, or it would update a rule that's there.
+  def needs_attention?
+    errors.any? || normalized_text != default_text || existing_rule.present?
+  end
+
+  # The text as a rule keeps it, which is how the bank's description is read for matching.
+  def normalized_text
+    Budget::FilingRule.normalize_value_for(:text, text.to_s)
+  end
+
   # The rule with these conditions, which is only the text, since there's no Account or amount, if there is one. Saving updates it.
   def existing_rule
     budget.filing_rules.includes(:envelope).find_by(text: normalized_text, account_id: nil, amount: nil)
@@ -125,9 +136,5 @@ class Budget::FilingRule::Offer
       errors.add(:text, "must be part of the bank transaction's description, so that the rule fits it") unless bank_transaction.description_for_matching.include?(normalized_text)
 
       errors.empty?
-    end
-
-    def normalized_text
-      Budget::FilingRule.normalize_value_for(:text, text.to_s)
     end
 end

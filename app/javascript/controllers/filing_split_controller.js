@@ -5,9 +5,11 @@ import { Controller } from "@hotwired/stimulus"
 // and says what they add up to, against the bank transaction's amount, as they change. That's only to help: the server decides
 // whether they add up, and says so in the same words. The records are `filing[records][N]`, and a record added here is numbered
 // by the time, so it comes after every one before it and the server reads them in order. "Always file like this" makes a Filing rule from
-// what's done, and never from a split, so while there's more than one record it's hidden and disabled, which sends none of it.
+// what's done, and never from a split, so while there's more than one record it's hidden and disabled, which sends none of it. It sits in the
+// first record, between its envelope and its "Edit details", so it moves to whichever record is first when that one is removed. A split needs
+// every record's amount, so a second record opens every record's "Edit details".
 export default class extends Controller {
-  static targets = [ "records", "template", "record", "legend", "remove", "add", "total", "rule" ]
+  static targets = [ "records", "template", "record", "legend", "remove", "add", "total", "rule", "ruleSlot", "details" ]
   static values = { amount: String, unit: String, max: Number }
 
   connect() {
@@ -24,6 +26,7 @@ export default class extends Controller {
     const remaining = this.amountCents() - this.totalCents()
     if (remaining > 0) added.querySelector("[name$='[amount]']").value = (remaining / 100).toFixed(2)
 
+    this.detailsTargets.forEach((details) => { details.open = true })
     this.update()
     added.querySelector("select, input:not([type=hidden])")?.focus()
   }
@@ -32,7 +35,11 @@ export default class extends Controller {
   removeRecord(event) {
     if (this.recordTargets.length <= 1) return
 
-    event.target.closest("[data-filing-split-target=record]").remove()
+    const record = event.target.closest("[data-filing-split-target=record]")
+    const rule = this.ruleTargets.find((target) => record.contains(target))
+
+    record.remove()
+    if (rule) this.ruleSlotTargets[0].append(rule)
     this.update()
   }
 

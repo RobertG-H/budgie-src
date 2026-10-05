@@ -1,10 +1,15 @@
-<%# locals: (form:, draft:, bank_transaction:, number: nil, removable: false, autofocus: false) %>
+<%# locals: (form:, draft:, bank_transaction:, details_open:, number: nil, removable: false, autofocus: false, offer: nil) %>
 <%# One record a bank transaction is filed as. Money out is only ever a Spend, so it has no kind to choose. Money in is a Deposit or a Refund, and the filing-record Stimulus controller shows only the fields the chosen kind has: an envelope for a Refund, and the month for a Deposit, which the month-choice controller keeps in step with its date. Without JavaScript they all show, and what a kind doesn't have is left out. %>
+<%# What a person chooses is in view: the kind and the envelope, then "Always file like this" (the first record's only, which the filing-split controller moves to whichever record is first, so it has a place in each). What's rarely changed is under a closed "Edit details": the description, date, amount, a Deposit's month and notes. It's open for a split, for an error in it and for a field changed from the bank's own, so nothing that needs attention is hidden (BankTransactionsHelper#filing_details_open?), and the filing-details controller opens it when a field in it is invalid, which the browser can't focus while it's closed. %>
 <% money_in = bank_transaction.amount.positive? %>
+<% budget = Current.budget %>
 <% envelope_error = draft.errors.full_messages_for(:envelope_id).to_sentence.presence %>
+<%# The envelope is where focus starts when it's still to choose, and otherwise on File, which the form decides the same way. %>
+<% needs_envelope = autofocus && filing_envelope_to_choose?(draft) %>
 
 <%# With only one record there's nothing to tell it from, so it has no heading, and nothing to remove; the filing-split controller shows both once there's a second. %>
-<fieldset class="space-y-6" data-controller="filing-record month-choice" data-filing-split-target="record">
+<fieldset class="space-y-6" data-controller="filing-record month-choice filing-details" data-filing-split-target="record" data-filing-details-unit-value="<%= budget.currency_unit %>"
+  data-action="input->filing-details#update change->filing-details#update invalid->filing-details#reveal:capture">
   <legend class="text-lg font-semibold" data-filing-split-target="legend" <%= "hidden" unless removable %>>Record<%= " #{number}" if number %></legend>
 
   <% if money_in %>
@@ -22,41 +27,51 @@
 
   <div data-filing-record-target="group" data-kinds="refund spend">
     <%= render "components/field", form: form, attribute: :envelope_id, label: "Envelope", control: :select, error: envelope_error do |field| %>
-      <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope" }, autofocus: (autofocus && draft.envelope_id.blank?), **field %>
+      <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope" }, autofocus: needs_envelope, **field %>
     <% end %>
   </div>
 
-  <%= render "components/field", form: form, attribute: :description, hint: "Starts as the bank's description. Say what the money was." do |field| %>
-    <%= form.text_field :description, required: true, autofocus: (autofocus && draft.envelope_id.present?), **field %>
-  <% end %>
+  <%= content_tag :div, (render("filing_rules/offer", offer: offer) if offer), class: "empty:hidden", data: { filing_split_target: "ruleSlot" } %>
 
-  <%= render "components/field", form: form, attribute: :date do |field| %>
-    <%= form.date_field :date, required: true, data: { month_choice_target: "date", action: "input->month-choice#update" }, **field %>
-  <% end %>
+  <details class="rounded-box border border-base-300" data-filing-split-target="details" <%= "open" if details_open %>>
+    <summary class="cursor-pointer p-4">
+      <span class="font-semibold">Edit details</span>
+      <span class="block text-sm text-base-content/70" data-filing-details-target="summary"><%= filing_details_summary(draft, budget) %></span>
+    </summary>
+    <div class="space-y-6 border-t border-base-300 p-4">
+      <%= render "components/field", form: form, attribute: :description, hint: "Starts as the bank's description. Say what the money was." do |field| %>
+        <%= form.text_field :description, required: true, **field %>
+      <% end %>
 
-  <% if money_in %>
-    <% months = Budget::Deposit.months_for(draft.date || bank_transaction.date) %>
-    <div data-filing-record-target="group" data-kinds="deposit">
-      <%= render "components/field", form: form, attribute: :month, control: :radios,
-            hint: "Choose the month after to save this Deposit for next month." do |field| %>
-        <% months.each do |month| %>
-          <label class="flex items-center gap-3">
-            <%= form.radio_button :month, month.iso8601, checked: month == (draft.month || months.first), data: { month_choice_target: "radio" }, **field %>
-            <span data-month-choice-target="name"><%= month.to_fs(:month_and_year) %></span>
-          </label>
-        <% end %>
+      <%= render "components/field", form: form, attribute: :date do |field| %>
+        <%= form.date_field :date, required: true, data: { month_choice_target: "date", action: "input->month-choice#update" }, **field %>
+      <% end %>
+
+      <% if money_in %>
+        <% months = Budget::Deposit.months_for(draft.date || bank_transaction.date) %>
+        <div data-filing-record-target="group" data-kinds="deposit">
+          <%= render "components/field", form: form, attribute: :month, control: :radios,
+                hint: "Choose the month after to save this Deposit for next month." do |field| %>
+            <% months.each do |month| %>
+              <label class="flex items-center gap-3">
+                <%= form.radio_button :month, month.iso8601, checked: month == (draft.month || months.first), data: { month_choice_target: "radio" }, **field %>
+                <span data-month-choice-target="name"><%= month.to_fs(:month_and_year) %></span>
+              </label>
+            <% end %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <%= render "components/field", form: form, attribute: :amount, hint: "Of the bank transaction's amount, as a positive figure." do |field| %>
+        <%# What a bank transaction starts as is shown to the cent, and what was typed is as it was typed. %>
+        <%= form.number_field :amount, step: 0.01, required: true, value: (format("%.2f", draft.amount) if draft.amount.is_a?(BigDecimal)) || draft.amount, **field %>
+      <% end %>
+
+      <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
+        <%= form.text_area :notes, rows: 3, **field %>
       <% end %>
     </div>
-  <% end %>
-
-  <%= render "components/field", form: form, attribute: :amount, hint: "Of the bank transaction's amount, as a positive figure." do |field| %>
-    <%# What a bank transaction starts as is shown to the cent, and what was typed is as it was typed. %>
-    <%= form.number_field :amount, step: 0.01, required: true, value: (format("%.2f", draft.amount) if draft.amount.is_a?(BigDecimal)) || draft.amount, **field %>
-  <% end %>
-
-  <%= render "components/field", form: form, attribute: :notes, control: :textarea do |field| %>
-    <%= form.text_area :notes, rows: 3, **field %>
-  <% end %>
+  </details>
 
   <button type="button" class="btn btn-ghost" data-action="filing-split#removeRecord" data-filing-split-target="remove" <%= "hidden" unless removable %>>Remove</button>
 </fieldset>
