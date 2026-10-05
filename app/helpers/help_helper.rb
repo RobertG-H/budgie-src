@@ -24,7 +24,7 @@ module HelpHelper
 
   # The id of the element that holds a term's sentence, which the term is described by. Hyphens, since a key's underscores are never in markup.
   def help_id(key)
-    help_term(key)
+    help_term(key) # which refuses a key that isn't a term
     "help-#{key.to_s.dasherize}"
   end
 end

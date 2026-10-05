@@ -210,7 +210,8 @@ RSpec.describe "Archived envelopes", type: :request do
         get month_envelope_path("2026-10", gym)
 
         assert_select ".stat-title [aria-describedby]", text: "Assigned"
-        assert_select ".stats", text: /Assigned.*\$40\.00/m
+        assigned = css_select(".stats").find { |card| card.at_css(".stat-title [aria-describedby]")&.text == "Assigned" }
+        expect(assigned.at_css(".stat-value").text.strip).to eq("$40.00")
       end
     end
 

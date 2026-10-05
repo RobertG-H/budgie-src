@@ -76,6 +76,16 @@ RSpec.describe "Help", type: :request do
     end
   end
 
+  it "never leaves a tooltip as the only place a sentence is: every tooltip's sentence is in the page's <details> too" do
+    [ month_path("2026-09"), month_envelope_path("2026-09", groceries) ].each do |path|
+      get path
+
+      tooltips = css_select("[role=tooltip]").map { |tip| tip.text.squish }
+      expect(tooltips).not_to be_empty
+      expect(explained(figures).values).to include(*tooltips), path
+    end
+  end
+
   it "puts the <details> above the Archived envelopes, which is where a person looks for what's put away" do
     other = create(:budget_envelope, budget: budget, name: "Gym")
     other.archive!

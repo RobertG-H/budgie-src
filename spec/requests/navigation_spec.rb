@@ -138,6 +138,12 @@ RSpec.describe "Navigation", type: :request do
       end
     end
 
+    it "is Budget for an envelope's form whatever it says it was opened from, since only the month view opens them" do
+      get edit_envelope_path(envelope, month: "2026-09", from: "records")
+
+      expect_only "Budget"
+    end
+
     it "is Budget for a form that wasn't opened from anywhere, which goes back to the month" do
       get new_spend_path(month: "2026-09")
 
