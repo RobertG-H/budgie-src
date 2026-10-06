@@ -115,7 +115,7 @@ jobs:
 
           echo "newest: $name, $size bytes, $age_hours hours old (limit $MAX_AGE_HOURS)"
 
-          [ "$size" -ge "$min_bytes" ] ||
+          [ "$size" -gt "$min_bytes" ] ||
             fail "the newest dump, $name, is only $size bytes, under $min_bytes"
           [ "$age_seconds" -le "$max_seconds" ] ||
             fail "the newest dump, $name, is $age_hours hours old, over the limit of $MAX_AGE_HOURS. Look at: sudo journalctl -u 'budgie-backup@nightly' on the $DESTINATION host."

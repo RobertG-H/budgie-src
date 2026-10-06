@@ -191,7 +191,7 @@ docker compose run --rm --no-deps -T --entrypoint age-keygen restore | pbcopy
 pbpaste | docker compose run --rm --no-deps -T --entrypoint age-keygen restore -y
 ```
 
-Paste the clipboard into a new document, print it or save it to the USB stick, then delete the document, empty the trash and clear the clipboard. A second copy somewhere else is worth having. Name it `Budgie backup key (recovery)`.
+Paste the clipboard into a new document, print it or save it to the USB stick, then delete the document, empty the trash and clear the clipboard again with `pbcopy < /dev/null`. A second copy somewhere else is worth having. Name it `Budgie backup key (recovery)`.
 
 ### The two recipients
 
@@ -230,7 +230,7 @@ Fill each value in from 1Password in your editor: the **read-only** token's, for
 
 Do this once per host, testing first, and only after `kamal setup` has created its `budgie-db`.
 
-**1. Write the host's token to a file on your laptop**, `r2.env`, from the `…-write` token for that host, with the endpoint from its page:
+**1. Write the host's token to a file on your laptop, outside the checkout**, so the repo, which is public, can never pick it up. Use `~/budgie-r2.env`, from the `…-write` token for that host, with the endpoint from its page:
 
 ```
 R2_ACCESS_KEY_ID=...
@@ -238,12 +238,14 @@ R2_SECRET_ACCESS_KEY=...
 R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
 ```
 
+Then `chmod 600 ~/budgie-r2.env`.
+
 **2. Run the script**, with both public keys, passing the token on stdin:
 
 ```sh
 scp script/backup-setup.sh budgie-testing:
-ssh budgie-testing 'sudo bash backup-setup.sh testing --recipient age1<primary> --recipient age1<recovery>' < r2.env
-rm r2.env
+ssh budgie-testing 'sudo bash backup-setup.sh testing --recipient age1<primary> --recipient age1<recovery>' < ~/budgie-r2.env
+rm ~/budgie-r2.env
 ```
 
 Reading the token from stdin keeps it out of your shell history, out of `ps` on the host and out of any file left behind on it: the only copy on the host is `/etc/budgie-backup.env`, which only root can read. That's different from `cloudflared`, whose token ends up in a world-readable unit.
@@ -564,7 +566,7 @@ The restored database is as old as its dump, so entries since are gone. Whoever 
 - **Two private keys, never on a host.** The primary is in 1Password; the recovery key is offline, somewhere else. The hosts hold only public keys, so a compromised host or a stolen token can't read a dump, old or new. The private keys are never in GitHub or the repo.
 - **Losing both makes every backup unreadable.** Check once a year that the recovery key can be found and read.
 - **Rotating a key.** Generate a new one as in [section 2](#2-the-age-keys), then re-run `backup-setup.sh` on both hosts with the new recipient list: dumps from then on are encrypted to it, and the dumps already in the buckets stay encrypted to the old one. **Keep the old private key until the last dump it encrypted has expired:** 90 days for production, 7 for testing. Then run [the drill](#the-restore-drill) with the new key, and update [the table of recipients](#the-two-recipients).
-- **Rotating a host token.** Create a new `…-write` token, re-run `backup-setup.sh` with the new `r2.env` (it checks the token reaches the bucket before it changes anything), then delete the old token in Cloudflare. If it leaked, do this at once: the lock protects the history, but not the bucket from a flood of junk uploads, which would fill the free tier.
+- **Rotating a host token.** Create a new `…-write` token, re-run `backup-setup.sh` with a new `~/budgie-r2.env` (it checks the token reaches the bucket before it changes anything), then delete the old token in Cloudflare. If it leaked, do this at once: the lock protects the history, but not the bucket from a flood of junk uploads, which would fill the free tier.
 - **Rotating a read-only token.** Create a new `…-read` token, replace it in 1Password, `.env.backup` and that destination's GitHub environment secrets, then delete the old one.
 
 ## Retention and deleted users

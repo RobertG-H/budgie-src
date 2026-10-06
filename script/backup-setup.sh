@@ -361,10 +361,12 @@ docker exec -i "$DB_CONTAINER" pg_restore --list <"$work/dump" >/dev/null ||
 
 # $BACKUP_AGE_RECIPIENTS is two public keys, split on the space between them on purpose.
 recipient_args=()
+recipient_count=0
 for recipient in $BACKUP_AGE_RECIPIENTS; do
   recipient_args+=(-r "$recipient")
+  recipient_count=$((recipient_count + 1))
 done
-[ "${#recipient_args[@]}" -eq 4 ] || fail "BACKUP_AGE_RECIPIENTS has to hold exactly two recipients"
+[ "$recipient_count" -eq 2 ] || fail "BACKUP_AGE_RECIPIENTS has to hold exactly two recipients"
 
 age "${recipient_args[@]}" -o "$work/$name" "$work/dump"
 rm -f "$work/dump"
