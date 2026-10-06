@@ -43,8 +43,7 @@ Neither host answers at its IP address: `cloudflared` dials out to Cloudflare, s
 Deploys run in CI — a merge to `main` deploys testing once the checks pass, and the operator dispatches
 **Deploy production** to promote a commit testing has already run.
 
-> **Production's database is on the VPS's own disk and nowhere else.** There are no backups and no restore
-> drill yet, so keep to invites, sign-ins and envelopes you can afford to lose.
+> **Production holds no real budget data until [Backups](docs/backups.md#before-production-holds-real-data) says it can.** Each host's database is dumped nightly, encrypted, to Cloudflare R2, and that page has the checklist and the date the last restore drill passed.
 
 ## Docs
 
@@ -58,6 +57,7 @@ Deploys run in CI — a merge to `main` deploys testing once the checks pass, an
 | [Email](docs/email.md) | Reading mail in development, and Zedmail's SMTP relay in testing and production |
 | [Provisioning the hosts](docs/provisioning.md) | Ordering the OVHcloud VPS instances, `script/provision.sh` and the checks |
 | [Cloudflare](docs/cloudflare.md) | The domain, the zone settings, the tunnels, and keeping the hosts off the public internet |
+| [Backups](docs/backups.md) | The nightly encrypted dump to Cloudflare R2, the quarterly restore drill, and a real restore |
 | [Deploying](docs/deployment.md) | Kamal and the deploy workflows: secrets, first deploys, rollback, break-glass deploys and the checks |
 | [CI](docs/ci.md) | The checks on every pull request, running them locally, the schema drift check and the ruleset |
 | [Design](DESIGN.md) | The UI rules: colour, layout, money formatting and components |

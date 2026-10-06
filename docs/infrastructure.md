@@ -27,7 +27,7 @@ dispatch. See [Architecture](architecture.md) for how the pieces fit.
 | | For |
 | --- | --- |
 | [OVHcloud](https://www.ovhcloud.com/) account | The two VPS hosts |
-| [Cloudflare](https://dash.cloudflare.com/) account | The domain, DNS, TLS and the tunnels |
+| [Cloudflare](https://dash.cloudflare.com/) account | The domain, DNS, TLS, the tunnels, and R2 for the database backups |
 | [Google Cloud](https://console.cloud.google.com/) account | The OAuth clients people sign in with |
 | [Zedmail](https://zedmail.com/) account | Sending invite email |
 | GitHub account with admin on the repo | CI, the image registry and the deploy secrets |
@@ -83,7 +83,8 @@ Two copies, under the same names:
   creates `.env.kamal`, `.env.testing` and `.env.production`, generates the values that are only random, and
   checks that nothing is left empty.
 - **In GitHub**, for CI: [the environments and their secrets](deployment.md#ci-deploys). Create the `testing`
-  and `production` environments, limit both to the `main` branch, and add each one's nine secrets.
+  and `production` environments, limit both to the `main` branch, and add each one's nine secrets. The three more
+  for backups come with [step 11](#11-set-up-backups).
 
 The master copy of every value lives in your password manager. The repository is public, so the host IP
 addresses live in these files too rather than in the destination configs.
@@ -120,19 +121,38 @@ Then work through [Verify](deployment.md#verify) for testing.
 Only after testing passes its checks:
 
 ```sh
-docker compose run --rm kamal setup -d production --skip-push
+docker compose run --rm kamal setup -d production --skip-push --skip-hooks
 ```
 
 `--skip-push` pulls the image testing already built from the same commit, so production runs exactly what
-testing ran. Then work through [Verify](deployment.md#verify) again for production, including the sign-in
+testing ran. `--skip-hooks` skips the pre-deploy backup hook, which has nothing to back up yet and no job to
+call. Then work through [Verify](deployment.md#verify) again for production, including the sign-in
 with an address that isn't the Google Cloud project's owner.
 
-## 11. Require the checks on `main`
+## 11. Set up backups
+
+[Backups](backups.md). Production's database is on its VPS's own disk until this step, so do it before anyone
+puts real data in. Testing first, so the job is proven where nothing depends on it:
+
+1. [Turn on R2](backups.md#1-cloudflare-r2), create the two buckets with their lock and lifecycle rules, and
+   create the four tokens.
+2. [Generate the two age keys](backups.md#2-the-age-keys): the primary into 1Password, the recovery key offline.
+3. [Make `.env.backup`](backups.md#3-the-laptops-copy-of-the-read-only-tokens) and add each destination's three
+   read-only secrets to its [GitHub environment](backups.md#5-github-the-freshness-check).
+4. [Run `script/backup-setup.sh`](backups.md#4-installing-the-host-job) on each host, now that `kamal setup` has
+   created its `budgie-db`.
+5. Work through [Verify](backups.md#7-verify): a drill from each bucket, the live restore on testing, and the
+   rest of the checklist. Production's [no-real-data rule](backups.md#before-production-holds-real-data) lifts
+   only once every box on that page is ticked.
+
+From here on, a production deploy takes a restore point first, through a Kamal hook.
+
+## 12. Require the checks on `main`
 
 [The ruleset](ci.md#the-ruleset). Until it exists, a pull request can merge with failing checks, and a
 merge deploys testing regardless.
 
-## 12. Hand over to CI
+## 13. Hand over to CI
 
 From here the [everyday path](deployment.md#everyday-deploys) is: merge to `main`, CI deploys testing on
 its own, and the operator dispatches **Deploy production** to promote a commit testing has already run.
@@ -146,16 +166,17 @@ docker compose run --rm kamal task invite:create EMAIL=you@example.com -d produc
 
 See [Operating Budgie](operations.md) for the rest of the tasks.
 
-> **Production's database is on the VPS's own disk and nowhere else.** There are no backups and no restore
-> drill, so until there are, keep to invites, sign-ins and envelopes you can afford to lose.
+> **Production holds no real budget data until [Backups](backups.md#before-production-holds-real-data) says it can.**
+> That page's checklist is what step 11 works through, and it has the date the last restore drill passed.
 
 ## Rebuilding
 
 Nothing here has to be done twice in full:
 
 - **A rebuilt host** keeps its tunnel and its Cloudflare configuration; it needs provisioning again, the
-  tunnel script re-run with the same token, a new IP address and host key in both copies of the secrets,
-  and `kamal setup`. See [Rebuilding a host](deployment.md#rebuilding-a-host).
+  tunnel script re-run with the same token, a new IP address and host key in both copies of the secrets, the
+  database restored from its newest backup, `kamal setup`, and the backup job installed again. See
+  [Rebuilding a host](deployment.md#rebuilding-a-host).
 - **A third host** is an entry in `~/.ssh/config`, one `provision.sh` run and one tunnel. The script is the
   only place a host's configuration is written down.
 - **A rotated key or secret** is covered by [Recreating one](deployment.md#recreating-one).

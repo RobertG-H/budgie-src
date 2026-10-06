@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Kamal's pre-deploy hook: take a restore point of production's database before a deploy boots the new
+# version, whose entrypoint runs db:prepare and so may run migrations. It starts budgie-backup@predeploy on
+# the host, which is the same job as the nightly backup, and waits for it.
+#
+# Fail-closed: no dump, no deploy. If the unit is missing, the host is unreachable or the dump fails, this
+# exits non-zero and Kamal stops before touching the running app. That's why a first `kamal setup` of a
+# destination, and a host rebuild, pass --skip-hooks: the backup unit doesn't exist yet and the database is
+# empty. See docs/backups.md.
+#
+# Production only. Testing deploys on every merge, so a dump per deploy there would be noise. A rollback
+# runs no migration, so it skips the dump too and stays as quick as it is.
+#
+# Kamal sets KAMAL_COMMAND, KAMAL_DESTINATION and KAMAL_HOSTS (comma-separated). It runs from the repo root,
+# on the machine running Kamal: the kamal Compose service, or a CI runner. Both already hold the deploy key
+# and the host's key, so ssh here is as strict as Kamal's own connection.
+#
+# To try the failure path against testing, pretend it's production with testing's address; see
+# docs/backups.md#verify.
+
+set -euo pipefail
+
+if [ "${KAMAL_DESTINATION:-}" != production ] || [ "${KAMAL_COMMAND:-}" = rollback ]; then
+  exit 0
+fi
+
+HOSTS=${KAMAL_HOSTS:-}
+if [ -z "$HOSTS" ]; then
+  echo "pre-deploy: KAMAL_HOSTS is empty, so there's no host to take a restore point on" >&2
+  exit 1
+fi
+
+# `systemctl start` on a oneshot unit returns when it finishes, and non-zero when it failed.
+# BatchMode so a missing key fails rather than asking; the timeout is for a hung connection or upload.
+ssh_host() {
+  local host=$1
+  shift
+  timeout 1500 ssh -n -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 "deploy@$host" "$@"
+}
+
+# One restore point per host, however many roles or accessories Kamal lists it under. ssh -n above keeps
+# ssh from reading the host list this loop is reading.
+while IFS= read -r host; do
+  echo "pre-deploy: taking a restore point on $host"
+  if ! ssh_host "$host" sudo -n systemctl start budgie-backup@predeploy.service; then
+    echo "pre-deploy: the backup on $host failed, so this deploy is stopped. Its last log lines:" >&2
+    ssh_host "$host" sudo -n journalctl -u budgie-backup@predeploy.service -n 20 --no-pager >&2 || true
+    exit 1
+  fi
+  echo "pre-deploy: restore point taken on $host"
+done < <(printf '%s\n' "${HOSTS//,/$'\n'}" | sort -u)

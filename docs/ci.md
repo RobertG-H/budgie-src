@@ -24,6 +24,7 @@ A [ruleset](#the-ruleset) on `main` requires the first five to pass before a pul
 | The checks | `.github/workflows/ci.yml`, the only definition of CI |
 | Which checks `main` requires | The `main` ruleset, in the repo's **Settings → Rules → Rulesets**, and [below](#the-ruleset) so it can be rebuilt |
 | What Dependabot proposes | `.github/dependabot.yml` |
+| The daily backup freshness check and the quarterly restore-drill reminder | `.github/workflows/backup-checks.yml`, and [Backups](backups.md#5-github-the-freshness-check) |
 
 ## How the jobs run
 
@@ -104,6 +105,16 @@ The page doesn't make a missing check obvious, and **Require status checks to pa
 Two pull requests that each pass but break when combined are caught instead by the `push` run on `main` straight after the second merge.
 
 The admin bypass, or a direct push, can still land a commit on `main` that never passed. That's why `deploy_testing` checks this workflow's result on `main` itself, through `supersede_check`, rather than trusting that the pull request was green.
+
+## Backup checks
+
+[`.github/workflows/backup-checks.yml`](../.github/workflows/backup-checks.yml) isn't part of CI: it runs on a schedule, never on a pull request or a push, so it's never a required check and the [ruleset](#the-ruleset) doesn't list it.
+
+- **`freshness`** runs at 12:00 UTC every day, once for `testing` and once for `production`, each under its own GitHub environment. It lists that destination's R2 bucket with the environment's read-only token and fails when the newest dump is older than 12 hours or under 10 KB. A failure is emailed by GitHub to whoever last edited the schedule.
+- **`restore_drill_issue`** opens a **Restore drill due** issue on the 1st of January, April, July and October.
+- **Run it by hand** from **Actions → Backup checks → Run workflow**. **max_age_hours** set to `0` makes `freshness` fail on purpose, and **open_drill_issue** ticked opens the issue, which is how [the checks](backups.md#7-verify) see both work.
+
+GitHub disables a scheduled workflow after 60 days without activity in the repository, which would stop the alert and the reminder together. See [Backups](backups.md#5-github-the-freshness-check).
 
 ## Dependabot
 

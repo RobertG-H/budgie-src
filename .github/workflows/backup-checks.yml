@@ -1,0 +1,166 @@
+name: Backup checks
+
+# Two scheduled jobs, plus a manual dispatch for trying both. See docs/backups.md.
+#
+# freshness looks at each destination's bucket from the outside, with that destination's read-only token,
+# and fails when the newest dump is too old or too small. It checks the artifact, not the host job's claim,
+# and it works even if the host is dead. GitHub emails a failed scheduled run to whoever last edited the
+# schedule below.
+#
+# restore_drill_issue opens a "Restore drill due" issue each quarter, so the reminder lives in the tracker.
+#
+# Never a required check: it runs on a schedule, so no pull request can report it.
+on:
+  schedule:
+    # Daily at 12:00 UTC: four hours after the 08:00 UTC nightly dump, so a missing dump shows the same day.
+    - cron: "0 12 * * *"
+    # The 1st of January, April, July and October, for the quarterly restore drill.
+    - cron: "30 12 1 1,4,7,10 *"
+  workflow_dispatch:
+    inputs:
+      max_age_hours:
+        description: "Fail when the newest dump is older than this. 12 on a schedule; 0 forces a failure, to see the check fail."
+        required: false
+        type: string
+        default: "12"
+      open_drill_issue:
+        description: "Also open this quarter's Restore drill due issue, to test that step."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    name: freshness (${{ matrix.destination }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Each destination reads its own environment's secrets, and deployment: false keeps this check from
+    # showing up as a deployment of that environment.
+    environment:
+      name: ${{ matrix.destination }}
+      deployment: false
+    strategy:
+      # One destination's failure must not hide the other's.
+      fail-fast: false
+      matrix:
+        include:
+          - destination: testing
+            prefix: TESTING
+          - destination: production
+            prefix: PRODUCTION
+
+    # The read-only token, which can only fetch ciphertext, and its account's endpoint. The names are
+    # prefixed by destination, as in .env.backup; see docs/backups.md. The host's own read-write token is
+    # never here.
+    env:
+      DESTINATION: ${{ matrix.destination }}
+      ENDPOINT: ${{ secrets[format('{0}_BACKUP_R2_ENDPOINT', matrix.prefix)] }}
+      ACCESS_KEY_ID: ${{ secrets[format('{0}_BACKUP_R2_ACCESS_KEY_ID', matrix.prefix)] }}
+      SECRET_ACCESS_KEY: ${{ secrets[format('{0}_BACKUP_R2_SECRET_ACCESS_KEY', matrix.prefix)] }}
+      MAX_AGE_HOURS: ${{ inputs.max_age_hours || '12' }}
+
+    steps:
+      # From Ubuntu's apt, as on the hosts, so the two read the bucket the same way.
+      - name: Install rclone
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rclone
+
+      - name: Check the newest dump in budgie-backups-${{ matrix.destination }}
+        run: |
+          set -euo pipefail
+
+          # The same environment-only configuration as the host job, with no rclone.conf.
+          export RCLONE_CONFIG=/dev/null
+          export RCLONE_CONFIG_R2_TYPE=s3
+          export RCLONE_CONFIG_R2_PROVIDER=Cloudflare
+          export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$ACCESS_KEY_ID"
+          export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$SECRET_ACCESS_KEY"
+          export RCLONE_CONFIG_R2_ENDPOINT="$ENDPOINT"
+          export RCLONE_CONFIG_R2_REGION=auto
+          export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+
+          # The smallest an encrypted dump of a real database can be, the same floor the host job uses.
+          min_bytes=10240
+          bucket="budgie-backups-$DESTINATION"
+
+          fail() {
+            echo "::error title=Backup check failed ($DESTINATION)::$*"
+            echo "### $DESTINATION: FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "$*" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+          [[ $MAX_AGE_HOURS =~ ^[0-9]+(\.[0-9]+)?$ ]] || fail "max_age_hours has to be a number, not '$MAX_AGE_HOURS'"
+          [ -n "$ENDPOINT" ] && [ -n "$ACCESS_KEY_ID" ] && [ -n "$SECRET_ACCESS_KEY" ] ||
+            fail "the ${DESTINATION} environment is missing one of its BACKUP_R2_ secrets. See docs/backups.md."
+
+          listing=$(rclone lsjson --files-only "r2:$bucket") ||
+            fail "couldn't list $bucket with the read-only token, so nobody can tell whether a backup ran"
+
+          newest=$(jq -c '
+            [ .[] | select(.Name | test("^budgie_production-[0-9]{8}T[0-9]{6}Z-(nightly|predeploy)\\.dump\\.age$")) ]
+            | sort_by(.ModTime) | last // empty' <<<"$listing")
+          [ -n "$newest" ] || fail "$bucket has no dump at all"
+
+          name=$(jq -r .Name <<<"$newest")
+          size=$(jq -r .Size <<<"$newest")
+          modified=$(jq -r .ModTime <<<"$newest")
+          age_seconds=$(( $(date -u +%s) - $(date -u -d "$modified" +%s) ))
+          max_seconds=$(awk -v hours="$MAX_AGE_HOURS" 'BEGIN { printf "%d", hours * 3600 }')
+          age_hours=$(awk -v s="$age_seconds" 'BEGIN { printf "%.1f", s / 3600 }')
+
+          echo "newest: $name, $size bytes, $age_hours hours old (limit $MAX_AGE_HOURS)"
+
+          [ "$size" -gt "$min_bytes" ] ||
+            fail "the newest dump, $name, is only $size bytes, under $min_bytes"
+          [ "$age_seconds" -le "$max_seconds" ] ||
+            fail "the newest dump, $name, is $age_hours hours old, over the limit of $MAX_AGE_HOURS. Look at: sudo journalctl -u 'budgie-backup@nightly' on the $DESTINATION host."
+
+          echo "### $DESTINATION: ok" >> "$GITHUB_STEP_SUMMARY"
+          echo "$name, $size bytes, $age_hours hours old." >> "$GITHUB_STEP_SUMMARY"
+
+  restore_drill_issue:
+    if: github.event.schedule == '30 12 1 1,4,7,10 *' || (github.event_name == 'workflow_dispatch' && inputs.open_drill_issue)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Open this quarter's Restore drill due issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          quarter=$(( ($(date -u +%-m) - 1) / 3 + 1 ))
+          title="Restore drill due: $(date -u +%Y) Q$quarter"
+
+          # A second dispatch in the same quarter doesn't open a second issue.
+          open=$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json title --jq "[.[] | select(.title == \"$title\")] | length")
+          if [ "$open" -gt 0 ]; then
+            echo "::notice::\"$title\" is already open"
+            exit 0
+          fi
+
+          body=$(cat <<EOF
+          The quarterly restore drill is due. It proves the newest backup in each destination's bucket decrypts and restores; an untested backup is a hope.
+
+          Run it as written in [docs/backups.md](https://github.com/$REPO/blob/main/docs/backups.md#the-restore-drill), for both destinations, and decrypt once with the 1Password key and once with the recovery key.
+
+          - [ ] Testing: passes all five criteria
+          - [ ] Production: passes all five criteria, with the 1Password key
+          - [ ] Production: the same dump decrypts with the recovery key
+          - [ ] "Last drill passed" in docs/backups.md has today's date
+
+          Also due after any change to the backup script, either age key, or the PostgreSQL major version.
+          EOF
+          )
+
+          gh issue create --repo "$REPO" --title "$title" --body "$body"

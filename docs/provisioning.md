@@ -36,7 +36,7 @@ Do this twice, once per host, in the [OVHcloud panel](https://www.ovhcloud.com/)
 - **Image:** Ubuntu 26.04 LTS, with no control panel and no extra options.
   Both hosts get the same release. If the panel doesn't offer 26.04 for the region you picked, change both hosts rather than running one release on each — a testing host that doesn't match production is the thing this setup is trying to avoid.
 - **SSH key:** paste the `Budgie` public key, the contents of `~/.ssh/budgie/budgie.pub`. It's what gets you in the first time, as the image's `ubuntu` user.
-- **Backups and options:** none.
+- **Backups and options:** none. OVH's own backups aren't used: Budgie's database is dumped, encrypted, to Cloudflare R2 by its own job. See [Backups](backups.md).
 
 Two things in the panel to leave alone:
 
