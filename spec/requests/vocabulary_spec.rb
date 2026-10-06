@@ -62,9 +62,16 @@ RSpec.describe "The words on the pages", type: :request do
 
   before { sign_in_as budget.user }
 
-  # What a person reads on the page, not its markup.
+  # What a person reads on the page, not its markup. A tooltip is shown only on hover or focus and says what the page's own words, the
+  # "What do these figures mean?" section, say too, so it's left out: and every sentence in `help:` is checked on its own, below.
+  def text_of(node)
+    copy = node.dup
+    copy.css("[role=tooltip]").each(&:remove)
+    copy.text.squish
+  end
+
   def visible_text
-    Nokogiri::HTML(response.body).at("main").text.squish
+    text_of(Nokogiri::HTML(response.body).at("main"))
   end
 
   {
@@ -132,6 +139,22 @@ RSpec.describe "The words on the pages", type: :request do
       expect(response).to have_http_status(:ok)
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
+    end
+  end
+
+  describe "the help sentences" do
+    it "use only the terms CLAUDE.md lists and none of the retired ones, and spell no key" do
+      sentences = I18n.t("help")
+      expect(sentences).not_to be_empty
+
+      sentences.each do |key, sentence|
+        expect(sentence).not_to match(retired_terms), "help.#{key}"
+        expect(sentence).not_to match(/\w+_\w+/), "help.#{key}"
+      end
+    end
+
+    it "belong to a term, one for each, but the Reallocate form's paragraph" do
+      expect(HelpHelper::TERMS.keys).to match_array(I18n.t("help").keys - [ :reallocate_form ])
     end
   end
 
@@ -646,7 +669,7 @@ RSpec.describe "The words on the pages", type: :request do
 
   describe "the Ready to Assign card's four states" do
     def card_text
-      Nokogiri::HTML(response.body).at("#ready-to-assign").text.squish
+      text_of(Nokogiri::HTML(response.body).at("#ready-to-assign"))
     end
 
     it "says money is left to assign" do

@@ -1,0 +1,16 @@
+<%# locals: (key:, placement: nil, align: nil, tag: :span, id: nil) %>
+<%# A word that needs explaining (a key of `help:` in config/locales/en.yml, such as :carried_over) with its one sentence as a daisyUI tooltip. A tooltip is a desktop shortcut and never the only place the explanation is: hover doesn't exist on a phone, so a page that has one also says it in words (help/_figures), and the tooltip is hidden there, where it would only stick out of the page. %>
+<%# The sentence is a real `.tooltip-content` element, which the term is described by, and not `data-tip`, whose text a screen reader can't read, or `title`, which touch and keyboard people don't get. daisyUI shows it on hover and when something inside has :focus-visible, so a keyboard gets it too. %>
+<%# By default the term is a plain word made a tab stop. A link or button that is the term goes in the block, which is given the id to describe itself by (`aria: { describedby: id }`); the tooltip is wrapped around it and it gets no extra tab stop. %>
+<%# `placement: :bottom` is for where the top would be cut off, such as a table's header, and `align: :start` for a term at the left of a card, where a tooltip centred on it would be cut off at the edge. `tag: :div` is for a form (a button_to) inside it, which a span can't hold. The sentence's `id` is the key's unless it's given one, for a page that draws the same term twice. %>
+<%# The sentence is `aria-hidden`: the term is described by it whether or not it's hidden, and a column header or a card's heading that holds it would otherwise be named by the whole sentence as well. %>
+<% id ||= help_id(key) %>
+<% wrapped = yield(id) %>
+<%= content_tag tag, class: class_names("tooltip", { "tooltip-bottom" => placement == :bottom, "tooltip-start" => align == :start }) do %>
+  <% if wrapped.present? %>
+    <%= wrapped %>
+  <% else %>
+    <%= content_tag :span, help_term(key), tabindex: 0, aria: { describedby: id }, class: "cursor-help underline decoration-dotted decoration-base-content/50 underline-offset-4 max-sm:no-underline" %>
+  <% end %>
+  <%= content_tag :span, help_text(key), id: id, role: "tooltip", aria: { hidden: true }, class: "tooltip-content max-w-64 max-sm:hidden" %>
+<% end %>

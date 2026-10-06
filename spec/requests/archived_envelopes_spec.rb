@@ -209,8 +209,9 @@ RSpec.describe "Archived envelopes", type: :request do
       it "still shows its figures" do
         get month_envelope_path("2026-10", gym)
 
-        assert_select ".stat-title", text: "Assigned"
-        assert_select ".stats", text: /Assigned\s*\$40\.00/
+        assert_select ".stat-title [aria-describedby]", text: "Assigned"
+        assigned = css_select(".stats").find { |card| card.at_css(".stat-title [aria-describedby]")&.text == "Assigned" }
+        expect(assigned.at_css(".stat-value").text.strip).to eq("$40.00")
       end
     end
 
@@ -281,7 +282,7 @@ RSpec.describe "Archived envelopes", type: :request do
 
       get month_path("2026-09")
 
-      assert_select "details", count: 0
+      assert_select "details summary", text: "Archived envelopes", count: 0
       assert_select "main", text: /Archived envelopes/, count: 0
     end
 
@@ -306,7 +307,7 @@ RSpec.describe "Archived envelopes", type: :request do
       get month_path("2026-11")
 
       assert_select "main p", text: "You don't have any envelopes yet."
-      assert_select "details", count: 0
+      assert_select "details summary", text: "Archived envelopes", count: 0
     end
 
     it "leaves Ready to Assign counting its Assigned in the months it had it" do

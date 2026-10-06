@@ -433,7 +433,9 @@ never a newer Guess that wasn't seen, and it goes through the same operation a p
 the review, it refuses, saying which bank transaction and why. It makes no Filing rule, because a Guess isn't one, and what it files is ordinary: Undo and un-filing treat it like anything else. A Guess is
 never filed without that click, at any likeness.
 
-The header has a second row of links to the pages that aren't a month's: the budget, Records, Accounts, Bank transactions, Filing rules and CSV formats.
+The header's top row has Import, the primary button, beside Sign out, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
+bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and Import is a button, so it never marks a section. Bank transactions is followed by a muted
+count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state: it's one query, counting at most 100 and read once per request, so every page with the header costs one query more.
 
 ### Frontend
 
@@ -441,6 +443,9 @@ One daisyUI theme, `budgie`, defined by two vendored plugin files pinned to a re
 live. `@theme { --color-*: initial; }` in `app/assets/tailwind/application.css` makes Tailwind's raw palette
 classes produce nothing, so a stray `bg-gray-200` fails loudly instead of drifting in. Reusable markup lives
 in `app/views/components/`. [`DESIGN.md`](../DESIGN.md) has the rules.
+
+The words that need explaining (Ready to Assign, Assigned, Carried over, Reallocated, Reallocate, Archive and Available) have one sentence each under `help:` in `config/locales/en.yml`. A tooltip (`components/_term`) shows it on hover or keyboard
+focus, and a closed `<details>` on the month view and an envelope's page (`help/_figures`) says the same in words, which is how a phone, with no hover, reads it. Nothing is renamed: they only explain.
 
 ### Development-only surfaces
 

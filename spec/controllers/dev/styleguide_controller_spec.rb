@@ -198,6 +198,19 @@ RSpec.describe Dev::StyleguideController, type: :controller do
         assert_select "#tables tbody tr:last-child td:last-child", text: /-\$30\.00\s+Overspent/
       end
 
+      it "shows a term, a tooltip on a header, a card and a button, and the same words in a <details>" do
+        with_development_routes { get :show }
+
+        assert_select "#terms [aria-describedby='help-carried-over'][tabindex='0']", text: "Carried over"
+        assert_select "#terms th .tooltip.tooltip-bottom [role=tooltip]", count: 2
+        assert_select "#terms .stat-title .tooltip.tooltip-start"
+        assert_select "#terms a.btn[aria-describedby='help-reallocate']", text: "Reallocate"
+        assert_select "#terms .tooltip form button[aria-describedby='help-archive']", text: "Archive"
+        assert_select "#terms details summary", text: "What do these figures mean?"
+        ids = css_select("[role=tooltip]").map { |tip| tip["id"] }
+        expect(ids).to eq(ids.uniq)
+      end
+
       it "shows a stat card, all four flash types, an empty state and a modal" do
         with_development_routes { get :show }
 

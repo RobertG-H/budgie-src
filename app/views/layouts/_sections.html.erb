@@ -1,12 +1,19 @@
 <%# locals: () %>
-<%# Where a signed-in person with a budget can go: the pages that aren't a month's. They wrap under each other on a phone, so however many there are, none is cut off. The one being looked at is marked in a word's weight and for assistive technology, and not by colour alone. %>
+<%# Where a signed-in person with a budget can go: the pages that aren't a month's. They wrap under each other on a phone, so however many there are, none is cut off. The one being looked at is marked in a word's weight and for assistive technology, and not by colour alone (SectionsHelper#current_section is the one place that knows which it is). %>
+<%# The count of unfiled bank transactions is its own link, to the Unfiled state, beside the one to the page's default; it's muted, and left out when there are none. %>
 <nav aria-label="Sections" class="mx-auto max-w-3xl px-4 pb-2 sm:px-6">
   <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-    <li><%= section_link "Budget", root_path, current: request.path == root_path || request.path.start_with?("/months/") %></li>
-    <li><%= section_link "Records", records_path, current: request.path.start_with?(records_path) %></li>
-    <li><%= section_link "Accounts", accounts_path, current: request.path.start_with?(accounts_path) || request.path.start_with?("/imports/") %></li>
-    <li><%= section_link "Bank transactions", bank_transactions_path, current: request.path == bank_transactions_path || request.path.start_with?("/unfiled") %></li>
-    <li><%= section_link "Filing rules", filing_rules_path, current: request.path.start_with?(filing_rules_path) %></li>
-    <li><%= section_link "CSV formats", csv_formats_path, current: request.path.start_with?(csv_formats_path) %></li>
+    <li><%= section_link "Budget", root_path %></li>
+    <li><%= section_link "Records", records_path %></li>
+    <li>
+      <%= section_link "Bank transactions", bank_transactions_path %>
+      <% unfiled = Current.unfiled_count %>
+      <% if unfiled.positive? %>
+        <%= link_to unfiled_count_text(unfiled), bank_transactions_path(filter: { state: "unfiled" }), class: "link link-hover ms-1 py-1 text-base-content/70" %>
+      <% end %>
+    </li>
+    <li><%= section_link "Accounts", accounts_path %></li>
+    <li><%= section_link "Filing rules", filing_rules_path %></li>
+    <li><%= section_link "CSV formats", csv_formats_path %></li>
   </ul>
 </nav>
