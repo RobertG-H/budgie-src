@@ -19,7 +19,7 @@ What differs between them comes from each destination's config file and secrets,
 **CI deploys, not your laptop.** A merge to `main` deploys to testing on its own, once CI has passed on that commit on `main` itself. Production only deploys when the operator dispatches **Deploy production**, in GitHub's Actions tab, and only for a commit that testing has already run, using the very image testing built. See [CI deploys](#ci-deploys).
 Deploying from your laptop, covered from [Deploying by hand](#deploying-by-hand-break-glass) onward, still works, but it's break-glass only: for the first setup of a destination, for a deploy when Actions itself is down, and for the operator tasks in [Operating Budgie](operations.md), which run through the same `kamal` Compose service.
 
-> **Production holds no real budget data until backups exist.** Its database is on the VPS's own disk and nowhere else, and no restore has been rehearsed, so use production for invites, sign-ins and envelopes you can afford to lose.
+> **Production holds no real budget data until [Backups](backups.md#before-production-holds-real-data) says it can.** That page has the checklist that has to be ticked first, and the date the last restore drill passed.
 
 ## What lives where
 
@@ -34,7 +34,8 @@ Deploying from your laptop, covered from [Deploying by hand](#deploying-by-hand-
 | TLS, the allowed hostnames and the host in email links | `config/environments/production.rb` |
 | The image | `ghcr.io/robertg-h/budgie`, a private GitHub package, tagged with the commit SHA it was built from |
 | The build cache | `ghcr.io/robertg-h/budgie-build-cache`, a private GitHub package |
-| The database | `/home/deploy/budgie-db/data` on each host, and nowhere else yet |
+| The database | `/home/deploy/budgie-db/data` on each host, with a nightly encrypted copy in that destination's R2 bucket. See [Backups](backups.md) |
+| The restore point taken before a production deploy | `.kamal/hooks/pre-deploy`. See [Backups](backups.md#6-the-pre-deploy-hook) |
 | The workflows that deploy | `.github/workflows/ci.yml`'s `deploy_testing` job, and `.github/workflows/deploy-production.yml` |
 | The SSH key you log in with | 1Password, with its public half in `~/.ssh/budgie/budgie.pub` |
 | The SSH key Kamal deploys with, for a break-glass deploy | `~/.ssh/budgie/kamal` on your laptop, loaded into the macOS agent |
@@ -70,7 +71,7 @@ A fresh runner's `~/.ssh/known_hosts` is empty, so without pinning the host key,
 
 ### The environment secrets
 
-Each environment has nine secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's copy](#the-secrets-on-your-laptop) for what each one is:
+Each environment has twelve secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's copy](#the-secrets-on-your-laptop) for what the first nine are:
 
 | Secret | What it is |
 | --- | --- |
@@ -83,14 +84,19 @@ Each environment has nine secrets, named the same way `.env.testing` and `.env.p
 | `TESTING_GOOGLE_CLIENT_SECRET` / `PRODUCTION_GOOGLE_CLIENT_SECRET` | That destination's Google OAuth client secret |
 | `TESTING_SMTP_USERNAME` / `PRODUCTION_SMTP_USERNAME` | The Zedmail login email address |
 | `TESTING_SMTP_PASSWORD` / `PRODUCTION_SMTP_PASSWORD` | That destination's Zedmail API key |
+| `TESTING_BACKUP_R2_ENDPOINT` / `PRODUCTION_BACKUP_R2_ENDPOINT` | The R2 endpoint of that destination's backup bucket |
+| `TESTING_BACKUP_R2_ACCESS_KEY_ID` / `PRODUCTION_BACKUP_R2_ACCESS_KEY_ID` | That destination's **read-only** R2 token, its access key ID |
+| `TESTING_BACKUP_R2_SECRET_ACCESS_KEY` / `PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY` | The same token's secret access key |
 
-`KAMAL_REGISTRY_PASSWORD` isn't one of the nine: each deploy job sets it directly in its `env:` from `secrets.GITHUB_TOKEN`, the run's own built-in token, rather than storing it. `deploy_testing` has `packages: write`, so Kamal can push; `deploy`'s `packages: read` only lets it pull. Kamal logs each host in to `ghcr.io` with it too, so the credential that ends up in `/home/deploy/.docker/config.json` expires with the job rather than being a long-lived token.
+The last three aren't read by a deploy at all, and aren't in `.kamal/secrets*`: only [`backup-checks.yml`](../.github/workflows/backup-checks.yml) reads them, to check that the newest backup is fresh. They're the read-only token, which can only fetch ciphertext. See [Backups](backups.md#5-github-the-freshness-check).
+
+`KAMAL_REGISTRY_PASSWORD` isn't one of the twelve: each deploy job sets it directly in its `env:` from `secrets.GITHUB_TOKEN`, the run's own built-in token, rather than storing it. `deploy_testing` has `packages: write`, so Kamal can push; `deploy`'s `packages: read` only lets it pull. Kamal logs each host in to `ghcr.io` with it too, so the credential that ends up in `/home/deploy/.docker/config.json` expires with the job rather than being a long-lived token.
 
 ### Recreating one
 
 - **A compromised or rotated deploy key:** generate a new `ed25519` key pair, authorise the public half with `provision.sh`'s extra-key argument on that key's own host, replace `TESTING_SSH_PRIVATE_KEY` or `PRODUCTION_SSH_PRIVATE_KEY` in that environment's secrets, then remove the old key's line from the host's `authorized_keys` the way [revoking Kamal's own key](#kamals-ssh-key) works.
 - **A rebuilt host:** see [Rebuilding a host](#rebuilding-a-host). Both the `_HOST_IP` and `_SSH_KNOWN_HOSTS` secrets change.
-- **Any of the other six:** update the value in **Settings → Environments → (testing or production) → Environment secrets**, the same value you'd put in `.env.testing` or `.env.production`. Update your password manager's copy too, since it's still the master copy.
+- **Any of the other nine:** update the value in **Settings → Environments → (testing or production) → Environment secrets**, the same value you'd put in `.env.testing` or `.env.production`. Update your password manager's copy too, since it's still the master copy.
 
 ## Deploying by hand (break-glass)
 
@@ -306,14 +312,15 @@ It ends with:
 Finished all in 612.3 seconds
 ```
 
-For production, add `--skip-push`:
+For production, add `--skip-push` and `--skip-hooks`:
 
 ```sh
-docker compose run --rm kamal setup -d production --skip-push
+docker compose run --rm kamal setup -d production --skip-push --skip-hooks
 ```
 
-That pulls the image testing built from the same commit instead of building it again, so production runs exactly what testing ran.
+`--skip-push` pulls the image testing built from the same commit instead of building it again, so production runs exactly what testing ran.
 If it fails to pull with `manifest unknown`, testing hasn't deployed this commit yet.
+`--skip-hooks` skips [the pre-deploy backup hook](backups.md#6-the-pre-deploy-hook): the host has no backup job yet, and its database is empty anyway. Every deploy after the first one runs the hook.
 
 **3. The proxy binds loopback only, from its very first start.** There's no separate step for this.
 `proxy.run.bind_ips` in `config/deploy.yml` puts `127.0.0.1` into the `docker run` that first creates `kamal-proxy`, so it never listens on `0.0.0.0`, even once.
@@ -347,7 +354,7 @@ Then work through [Verify](#verify).
 
 1. Merge to `main`. CI deploys it to testing on its own, once `scan_ruby`, `scan_js`, `lint`, `test` and `supersede_check` all pass — no command to run.
 2. Check testing, once `deploy_testing` is green: `https://testing.budgiebuddie.com/up` returns `200`, and whatever you changed works there.
-3. Dispatch **Deploy production** (**Actions → Deploy production → Run workflow**, or `gh workflow run deploy-production.yml`), leaving `sha` blank to deploy main's tip.
+3. Dispatch **Deploy production** (**Actions → Deploy production → Run workflow**, or `gh workflow run deploy-production.yml`), leaving `sha` blank to deploy main's tip. It takes a restore point of the database first, through [the pre-deploy hook](backups.md#6-the-pre-deploy-hook), and doesn't deploy if that fails.
 
 Migrations run when the new container starts, because the entrypoint runs `db:prepare`, while the old container is still serving. A migration has to work with the code that's still running, and rolling back the code doesn't roll back a migration.
 
@@ -526,7 +533,7 @@ Docker restarts all three itself, since Kamal starts them with `--restart unless
 **No secret is committed.** From the repo root:
 
 ```sh
-cat .env.kamal .env.testing .env.production | grep -E '^[A-Z_]+=.' | while IFS= read -r line; do
+cat .env.kamal .env.testing .env.production .env.backup | grep -E '^[A-Z_]+=.' | while IFS= read -r line; do
   git grep -qF -e "${line#*=}" $(git rev-list --all) && echo "in git: ${line%%=*}"
 done; echo checked
 ```
@@ -535,17 +542,20 @@ done; echo checked
 checked
 ```
 
+`.env.backup` is only there once [Backups](backups.md#3-the-laptops-copy-of-the-read-only-tokens) has made it; `cat` says so and the check carries on without it.
 An `in git:` line names a variable whose value is somewhere in the history. `.kamal/secrets*` should only ever hold `$NAME` references.
 The exception is `TESTING_HOST_IP` and `PRODUCTION_HOST_IP`. They show up until the hosts have new addresses, because commits from before the addresses moved out of the destination files still hold them.
 
 ## Rebuilding a host
 
-A rebuilt host has a new IP address and a new host key:
+A rebuilt host has a new IP address, a new host key and an empty database:
 
 1. Forget the old host key with `ssh-keygen -R <old ip>`, and put the new IP address in that destination's `_HOST_IP` variable and your password manager, as that host's `HostName` in `~/.ssh/config`, and in its `_HOST_IP` GitHub environment secret.
 2. Provision it, passing `kamal.pub` as the extra key so that [Kamal's key](#kamals-ssh-key) is authorised from the start. Then provision it a second time, passing that destination's CI deploy key's public half, so [its CI key](#the-keys-and-known_hosts) is authorised too. See [Provisioning the hosts](provisioning.md).
 3. Put it behind its tunnel again. See [Cloudflare](cloudflare.md).
-4. `docker compose run --rm kamal setup -d <destination>`, with `--skip-push` for production.
-5. Record the new host's key under its new IP address, the way [the laptop already does](#each-hosts-key-under-its-ip-address), and update that destination's `_SSH_KNOWN_HOSTS` GitHub environment secret with `ssh-keygen -F <new ip>`'s output.
+4. Boot only the database, and restore the latest backup into it, so that `kamal setup` finds a schema that's already there. See [Backups](backups.md#rebuilding-a-host-from-a-backup).
+5. `docker compose run --rm kamal setup -d <destination>`, with `--skip-push` and `--skip-hooks` for production, since the hook only acts there and the new host has no backup job yet. `db:prepare` finds the migrations current.
+6. Record the new host's key under its new IP address, the way [the laptop already does](#each-hosts-key-under-its-ip-address), and update that destination's `_SSH_KNOWN_HOSTS` GitHub environment secret with `ssh-keygen -F <new ip>`'s output.
+7. Install the backup job again, with the same token and recipients. See [Backups](backups.md#4-installing-the-host-job).
 
-Its database starts empty: there's no backup to restore.
+Its database is as old as the backup it was restored from: entries made since are gone.

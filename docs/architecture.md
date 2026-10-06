@@ -65,6 +65,13 @@ configuration rather than a lookalike of it.
 | `testing` | `budgie-testing` | `testing.budgiebuddie.com` |
 | `production` | `budgie-production` | `budgiebuddie.com` |
 
+**Each host's database is also copied off the host every night.** A systemd timer runs a job that dumps
+`budgie_production`, encrypts it with `age` to two public keys (the private ones are never on a host), and
+uploads it to that destination's own Cloudflare R2 bucket, which is locked and expires dumps after 90 days on
+production and 7 on testing. Production takes one more before every deploy, through a Kamal `pre-deploy` hook.
+A scheduled GitHub workflow checks the newest dump is fresh, and a quarterly restore drill on the operator's
+laptop proves one decrypts and restores. See [Backups](backups.md).
+
 ## Inside the application
 
 ### Sign-in
@@ -479,8 +486,10 @@ What builds, runs and delivers the application. None of this is reachable from t
 | Docker and Compose | Runs everything locally, and builds the production image from the same `Dockerfile` | [Local development](development.md) |
 | [OVHcloud](provisioning.md) | Two VPS instances on Ubuntu 26.04 LTS, `budgie-testing` and `budgie-production`, built from one script | `script/provision.sh` |
 | [Cloudflare](cloudflare.md) | Registrar, DNS, TLS and edge rules for `budgiebuddie.com`, plus one Tunnel per host so neither answers on its IP | The Cloudflare dashboard and `script/cloudflare-tunnel.sh` |
-| [Kamal](deployment.md) | Builds, pushes and runs the image on each host, with PostgreSQL as an accessory | `config/deploy*.yml` and `.kamal/secrets*` |
-| GitHub Actions | Runs the checks on every pull request, deploys testing on every merge, and deploys production on dispatch | [CI](ci.md) and [Deploying](deployment.md) |
+| [Kamal](deployment.md) | Builds, pushes and runs the image on each host, with PostgreSQL as an accessory. On production a `pre-deploy` hook takes a restore point first | `config/deploy*.yml`, `.kamal/secrets*` and `.kamal/hooks/pre-deploy` |
+| [Cloudflare R2](backups.md) | One bucket per destination, locked and expiring, holding that host's nightly encrypted database dump | The Cloudflare dashboard and `script/backup-setup.sh` |
+| [age](backups.md#2-the-age-keys) | Encrypts every dump on the host to two public keys, so a host or a token can't read one. The private keys are in 1Password and offline | `script/backup-setup.sh` and [Backups](backups.md#key-custody-and-rotation) |
+| GitHub Actions | Runs the checks on every pull request, deploys testing on every merge, and deploys production on dispatch. A scheduled workflow checks each backup bucket is fresh | [CI](ci.md) and [Deploying](deployment.md) |
 | GitHub Container Registry | Holds the private image `ghcr.io/robertg-h/budgie` and its build cache | `config/deploy.yml` |
 | GitHub environments | Holds each destination's deploy secrets and restricts deploys to `main` | [Deploying](deployment.md#the-environment-secrets) |
 | Dependabot | Weekly pull requests for gems and Actions, which run the same required checks | `.github/dependabot.yml` |
@@ -501,6 +510,7 @@ What builds, runs and delivers the application. None of this is reachable from t
 | Secret values, for CI | The `testing` and `production` GitHub environments |
 | Development secrets | `.env`, gitignored, loaded into the `web` container |
 | The checks and the deploys | `.github/workflows/ci.yml` and `.github/workflows/deploy-production.yml` |
+| The backup job, its freshness check and the restore drill | `script/backup-setup.sh`, `.github/workflows/backup-checks.yml`, and `Dockerfile.restore` with the `restore` services in `compose.yaml`. See [Backups](backups.md) |
 | UI rules | [`DESIGN.md`](../DESIGN.md) |
 
 The repository is public, so the host IP addresses stay out of git: the destination files read them from

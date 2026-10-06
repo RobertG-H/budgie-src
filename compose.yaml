@@ -83,6 +83,44 @@ services:
         target: /root/.ssh/known_hosts
         read_only: true
 
+  # Rehearses restoring a backup, for the operator: `docker compose run --rm restore production`. See
+  # docs/backups.md. It has age, rclone and pg_restore, and no Docker socket, SSH agent or app code. The
+  # restore profile keeps `docker compose up` from starting it or its scratch database.
+  restore:
+    build:
+      context: .
+      dockerfile: Dockerfile.restore
+    profiles: [ restore ]
+    # The read-only R2 tokens for both destinations. Optional so the image builds without them.
+    env_file:
+      - path: .env.backup
+        required: false
+    volumes:
+      - ./script:/script:ro
+      # Where --keep leaves the decrypted dump. Git ignores tmp/.
+      - ./tmp/restore:/restore
+    depends_on:
+      restore-db:
+        condition: service_healthy
+
+  # The scratch PostgreSQL the drill restores into. It's on tmpfs, so a restored copy of real data
+  # is gone when its container is, and `docker compose --profile restore rm -sf restore-db` removes it.
+  restore-db:
+    image: postgres:18
+    profiles: [ restore ]
+    environment:
+      POSTGRES_USER: budgie
+      POSTGRES_PASSWORD: restore
+      POSTGRES_DB: budgie_production
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      # Checks over TCP because the image's first-boot init server only listens on a socket.
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--username=budgie"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
 volumes:
   bundle:
   postgres:

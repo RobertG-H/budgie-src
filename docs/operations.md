@@ -63,6 +63,9 @@ user, their identities, their sessions (which signs them out), their budget with
 invite — so the address can be invited again with `invite:create`. That makes it the easy way to test the
 invite flow with an account you've already signed in with.
 
+It deletes from the live database only. The nightly [backups](backups.md#retention-and-deleted-users) still hold the
+user until their dump expires, up to 90 days on production and 7 on testing.
+
 ## Changing a budget's currency
 
 There's no page for this, and it's the only way to change a currency:
@@ -115,7 +118,10 @@ docker compose run --rm kamal console -d production
 `user:delete` and `budget:currency` ask you to type the email to confirm, which is why the `task` alias is
 interactive.
 
-## A caution about production
+## Backups
 
-Production's database lives on the VPS's own disk and nowhere else: there are no backups and no restore
-drill yet. Only invite people who know that. See [Deploying](deployment.md).
+Each host's database is dumped every night, encrypted, to its own Cloudflare R2 bucket, and production also takes a
+restore point before every deploy. Production holds no real budget data until
+[Backups](backups.md#before-production-holds-real-data) says it can. That page also covers the quarterly restore drill,
+restoring for real, and what to do when the **Backup checks** workflow fails: a failed run means the newest dump is
+missing, old or too small, so look at `sudo journalctl -u 'budgie-backup@nightly'` on that host first.
