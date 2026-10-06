@@ -14,7 +14,7 @@ RSpec.describe Budget::Account, type: :model do
   end
 
   it "has no balance, currency, kind or last four digits, since Budgie doesn't track what's in it" do
-    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "created_at", "updated_at")
+    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "created_at", "updated_at")
   end
 
   describe "name" do
@@ -96,6 +96,27 @@ RSpec.describe Budget::Account, type: :model do
     end
   end
 
+  describe "files_with_rules" do
+    it "is on for a new Account, so every Account keeps working as it did before the setting" do
+      expect(Budget::Account.new.files_with_rules).to be(true)
+      expect(create(:budget_account).reload.files_with_rules).to be(true)
+    end
+
+    it "can be turned off, which keeps Filing rules from acting on the Account's bank transactions" do
+      account = create(:budget_account, files_with_rules: false)
+
+      expect(account.reload.files_with_rules).to be(false)
+    end
+
+    it "has scopes for the Accounts that have Filing rules on and the ones that have them off" do
+      on = create(:budget_account)
+      off = create(:budget_account, budget: on.budget, files_with_rules: false)
+
+      expect(Budget::Account.with_filing_rules).to eq([ on ])
+      expect(Budget::Account.without_filing_rules).to eq([ off ])
+    end
+  end
+
   describe "#latest_import" do
     let(:account) { create(:budget_account) }
 
@@ -137,7 +158,7 @@ RSpec.describe Budget::Account, type: :model do
         .to raise_error(ActiveRecord::RecordNotUnique, /index_budget_accounts_on_budget_id_and_lower_name/)
     end
 
-    %w[ budget_id name ].each do |column|
+    %w[ budget_id name files_with_rules ].each do |column|
       it "requires a #{column}" do
         expect { update_account(account, "#{column} = NULL") }.to raise_error(ActiveRecord::NotNullViolation)
       end

@@ -159,6 +159,18 @@ RSpec.describe "Filing as guessed", type: :request do
       expect(visible_text).not_to include("COSTCO #99")
     end
 
+    it "has a Guess for a row in an Account that has Filing rules off even when a rule fits it, which is the one a rule would otherwise have filed" do
+      create(:budget_filing_rule, budget: budget, envelope: household, text: "costco")
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      share = unfiled("COSTCO #77", amount: -60, date: Date.new(2026, 10, 5), account: splitwise)
+
+      get new_guessed_filing_path
+
+      expect(visible_text).to include("COSTCO #77")
+      expect(visible_text).not_to include("COSTCO #99")
+      assert_select "input[type=checkbox][name='guessed[#{share.id}]'][checked]"
+    end
+
     it "creates and changes nothing, by being shown" do
       expect { get new_guessed_filing_path }
         .not_to change { [ Budget::Spend.count, Budget::Refund.count, Budget::Deposit.count, Budget::FilingRule.count, Budget::BankTransaction.unfiled.count ] }
@@ -217,6 +229,18 @@ RSpec.describe "Filing as guessed", type: :request do
 
       expect([ loblaws, costco, payroll, return_row ].map { |row| row.reload.filing_rule_id }).to all(be_nil)
       expect([ loblaws, costco, payroll, return_row ].map { |row| row.filed_by_rule }).to all(be_nil)
+    end
+
+    it "files a row in an Account that has Filing rules off as it was reviewed, with no rule noted, since it's a person's click and no rule's" do
+      create(:budget_filing_rule, budget: budget, envelope: household, text: "costco")
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      share = unfiled("COSTCO #77", amount: -60, date: Date.new(2026, 10, 5), account: splitwise)
+
+      expect { file_as_guessed(reviewed(share)) }.to change(Budget::Spend, :count).by(1)
+
+      expect(share.reload).to be_filed.and have_attributes(filing_rule_id: nil)
+      expect(share.spend_links.sole.spend).to have_attributes(envelope_id: household.id, amount: 60)
+      expect(flash[:notice]).to eq("1 bank transaction filed as guessed.")
     end
 
     it "files only the rows that were ticked, and leaves the rest as they were, with no Guess or not" do

@@ -7,6 +7,9 @@
 # with identical conditions exists it's updated in place, and the form says so. A rule made from a bank transaction isn't what filed it:
 # a person did, so the bank transaction has no rule noted, and a rule with overlapping but different text is just another rule.
 #
+# It's never made for a bank transaction in an Account that has Filing rules off (`files_with_rules`), whatever the form sends: nothing would file the
+# bank transactions that rule fits there, since every one of them waits for a person, so the form doesn't offer it and says why.
+#
 # It can also sweep the other unfiled bank transactions the rule fits, in the same database transaction (Budget::FilingRule::Sweep), when
 # that box is ticked as well: only the ones that went the same way as this one, so that an Ignore rule, which fits either, doesn't act on the
 # others, and which the form says how many of as the text is edited.
@@ -42,9 +45,14 @@ class Budget::FilingRule::Offer
     self.account_id = bank_transaction.account_id unless any_account
   end
 
-  # Whether a rule is to be made: the box is ticked and the form isn't a split.
+  # Whether a rule is to be made: the box is ticked, the form isn't a split, and the bank transaction's Account has Filing rules on.
   def make?
-    make && !@split
+    make && !@split && account_files_with_rules?
+  end
+
+  # Whether Filing rules act on the bank transactions in the bank transaction's Account at all. When they don't, no rule is offered, since it would act on none of them.
+  def account_files_with_rules?
+    bank_transaction.account.files_with_rules?
   end
 
   # A rule needs text of at least 3 characters, and the text is the bank's description until it's edited, so a shorter description has

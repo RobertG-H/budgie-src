@@ -185,6 +185,87 @@ RSpec.describe "Filing rules", type: :request do
       expect(css_select("main section").first.text).not_to include("Inactive")
     end
 
+    # An Account that has Filing rules off has every bank transaction wait for a person, so a rule pinned to it does nothing, as one on an archived envelope doesn't.
+    describe "a rule pinned to an Account that has Filing rules off" do
+      let!(:splitwise) { create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false) }
+      let!(:pinned) { create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco", account: splitwise) }
+      let!(:anywhere) { create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws") }
+      let!(:on_chequing) { create(:budget_filing_rule, budget: budget, envelope: groceries, text: "shell", account: chequing) }
+
+      it "is Inactive in words, with a badge by its text and the reason in its Account cell, and no other rule is" do
+        get filing_rules_path
+
+        expect(tables).to eq([ [
+          [ "costco Inactive", "Spend", "Splitwise Inactive while its Account's Filing rules are off.", "Any amount", "0", "Edit Delete" ],
+          [ "loblaws", "Spend", "Any account", "Any amount", "0", "Edit Delete" ],
+          [ "shell", "Spend", "Chequing", "Any amount", "0", "Edit Delete" ]
+        ] ])
+        expect(css_select("main tbody .badge").map(&:text)).to eq([ "Inactive" ])
+        expect(visible_text.scan("Inactive while its Account's Filing rules are off.").size).to eq(1)
+        expect(visible_text).not_to include("Inactive while its envelope is archived.")
+      end
+
+      it "says it in the row and not under the section's heading, since the section's other rules are active" do
+        get filing_rules_path
+
+        expect(css_select("main section").sole.css("h2 + p")).to be_empty
+      end
+
+      it "can still be edited and deleted, from its row" do
+        get filing_rules_path
+
+        assert_select "main tbody tr", text: /costco/ do
+          assert_select "a.btn[href='#{edit_filing_rule_path(pinned)}']", text: "Edit"
+          assert_select "button", text: "Delete"
+        end
+
+        patch filing_rule_path(pinned), params: rule_params(text: "costco wholesale", account_id: splitwise.id)
+        expect(response).to redirect_to(filing_rules_path)
+        expect(pinned.reload.text).to eq("costco wholesale")
+
+        delete filing_rule_path(pinned)
+        expect(Budget::FilingRule.exists?(pinned.id)).to be(false)
+      end
+
+      it "is active again, with nothing said, once the Account's Filing rules are turned on, and files nothing that's there" do
+        waiting = create(:budget_bank_transaction, account: splitwise, description: "COSTCO #1", amount: -50)
+
+        patch account_path(splitwise), params: { account: { name: "Splitwise", files_with_rules: "1" } }
+        get filing_rules_path
+
+        expect(tables.first.first).to eq([ "costco", "Spend", "Splitwise", "Any amount", "0", "Edit Delete" ])
+        expect(visible_text).not_to include("Inactive")
+        expect(waiting.reload).to be_unfiled
+        expect(Budget::Spend.count).to eq(0)
+      end
+
+      it "is Inactive for both reasons when its envelope is archived too, with each said where it belongs" do
+        envelope = create(:budget_envelope, budget: budget, name: "Old gym")
+        create(:budget_filing_rule, budget: budget, envelope: envelope, text: "gym membership", account: splitwise)
+        envelope.archive!
+
+        get filing_rules_path
+
+        old_gym = css_select("main section").find { |section| section.at("h2").text.include?("Old gym") }
+        expect(old_gym.at("h2").next_element.text.squish).to eq("Inactive while its envelope is archived.")
+        expect(old_gym.css("tbody tr th .badge").map(&:text)).to eq([ "Inactive" ])
+        expect(old_gym.css("tbody tr td")[1].text.squish).to eq("Splitwise Inactive while its Account's Filing rules are off.")
+      end
+
+      it "runs the same number of queries however many rules there are, whichever Accounts they're pinned to" do
+        get filing_rules_path
+        few = count_queries { get filing_rules_path }
+
+        8.times do |n|
+          other = create(:budget_account, budget: budget, name: "Other #{n}", files_with_rules: n.even?)
+          create(:budget_filing_rule, budget: budget, envelope: groceries, text: "merchant-#{n.to_s.tr("0-9", "a-j")}", account: other)
+        end
+        many = count_queries { get filing_rules_path }
+
+        expect(many).to eq(few)
+      end
+    end
+
     it "no longer says the long sentence of what a rule does in each row" do
       create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
 
@@ -428,6 +509,33 @@ RSpec.describe "Filing rules", type: :request do
       expect(groceries.spends.count).to eq(2)
       expect([ untouched.reload ]).to all(be_unfiled)
       expect(filed.reload.filing_rule_id).to be_nil
+    end
+
+    it "leaves out the bank transactions of an Account that has Filing rules off, which wait for a person, from what it files and says it filed" do
+      account = create(:budget_account, budget: budget)
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      mine = create(:budget_bank_transaction, account: account, description: "LOBLAWS #1", amount: -20)
+      waiting = Array.new(2) { |n| create(:budget_bank_transaction, account: splitwise, description: "LOBLAWS #{n + 2}", amount: -20) }
+
+      post filing_rules_path, params: { filing_rule: rule_params[:filing_rule].merge(sweep: "1") }
+
+      follow_redirect!
+      assert_select "[role=status]", text: "Filing rule added. It also filed 1 bank transaction."
+      expect(mine.reload).to be_filed
+      expect(waiting.map { |row| row.reload.state }).to eq(%i[ unfiled unfiled ])
+      expect(groceries.spends.count).to eq(1)
+    end
+
+    it "sweeps nothing for a rule pinned to an Account that has Filing rules off, which is inactive, though it fits its bank transactions" do
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      waiting = create(:budget_bank_transaction, account: splitwise, description: "LOBLAWS #1", amount: -20)
+
+      post filing_rules_path, params: { filing_rule: rule_params(account_id: splitwise.id)[:filing_rule].merge(sweep: "1") }
+
+      follow_redirect!
+      assert_select "[role=status]", text: "Filing rule added."
+      expect(budget.filing_rules.sole.account).to eq(splitwise)
+      expect(waiting.reload).to be_unfiled
     end
 
     it "sweeps with an Ignore rule in both directions, since there's no bank transaction it's being made from" do
@@ -692,6 +800,31 @@ RSpec.describe "Filing rules", type: :request do
 
       sweep(text: "loblaws", outcome: "ignore", account_id: create(:budget_account, budget: budget).id)
       expect(frame_text).to include("No unfiled bank transactions fit.")
+    end
+
+    it "doesn't count the bank transactions of an Account that has Filing rules off, or say a more specific rule files them" do
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      create(:budget_bank_transaction, account: splitwise, description: "LOBLAWS #3", amount: -20)
+      create(:budget_bank_transaction, account: splitwise, description: "LOBLAWS TORONTO", amount: -20)
+      create(:budget_filing_rule, :ignore, budget: budget, text: "loblaws toronto")
+
+      sweep(text: "loblaws", outcome: "spend", envelope_id: groceries.id)
+
+      expect(frame_text).to include("1 unfiled bank transaction fits.")
+      expect(frame_text).not_to include("more specific Filing rule")
+
+      sweep(text: "loblaws", outcome: "spend", envelope_id: groceries.id, account_id: splitwise.id)
+      expect(frame_text).to include("No unfiled bank transactions fit.")
+    end
+
+    it "counts them again once the Account's Filing rules are on" do
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      create(:budget_bank_transaction, account: splitwise, description: "LOBLAWS #3", amount: -20)
+
+      splitwise.update!(files_with_rules: true)
+      sweep(text: "loblaws", outcome: "spend", envelope_id: groceries.id)
+
+      expect(frame_text).to include("2 unfiled bank transactions fit.")
     end
 
     it "says when a bank transaction fits but a more specific rule files it, and doesn't count it" do

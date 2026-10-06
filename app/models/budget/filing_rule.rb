@@ -6,8 +6,8 @@
 # and, if it has them, by Account and by an exact amount. It sets one outcome for the whole amount: a Spend from an envelope, a Refund to one, a Deposit, or Ignore. There are
 # no splits, and nothing else is set: the record's description is the bank's, and a Deposit's month is its date's.
 #
-# It belongs to its budget and never to a user. It has no stored "active" flag: it's inactive while its envelope is archived, and
-# active again once it's unarchived. Filing never writes to it, so `updated_at` is when it was last edited, which is one of the
+# It belongs to its budget and never to a user. It has no stored "active" flag: it's inactive while its envelope is archived, or while the Account
+# it's pinned to has Filing rules off (`files_with_rules`), and active again once it's unarchived or they're on again. Filing never writes to it, so `updated_at` is when it was last edited, which is one of the
 # things that decides which of several rules wins (see `specificity`).
 class Budget::FilingRule < ApplicationRecord
   OUTCOMES = %w[ spend refund deposit ignore ].freeze
@@ -48,9 +48,13 @@ class Budget::FilingRule < ApplicationRecord
   attr_reader :swept
 
   scope :alphabetical_by_text, -> { order(:text, :id) }
-  # The rules that act: those that aren't for an archived envelope. A rule with no envelope has none to be archived. The envelopes come
-  # with them, so that asking one whether it's inactive costs nothing.
-  scope :active, -> { eager_load(:envelope).where(budget_envelopes: { archived_at: nil }) }
+  # The rules that act: those that aren't for an archived envelope, or pinned to an Account that has Filing rules off. A rule with no envelope has none to be
+  # archived, and one with no Account fits every Account, so it stays active, and only skips the bank transactions of an Account that has them off (see
+  # Budget::FilingRule::Matcher). The envelopes and Accounts come with them, so that asking one whether it's inactive costs nothing.
+  scope :active, -> {
+    eager_load(:envelope, :account).where(budget_envelopes: { archived_at: nil })
+      .where("budget_filing_rules.account_id IS NULL OR budget_accounts.files_with_rules")
+  }
 
   # Saves it, and files and ignores the unfiled bank transactions it now fits if `sweep`, in one database transaction: when either fails,
   # neither is done. What the sweep did is `swept`. Two saves of the same conditions can race, which only the unique index sees, and the
@@ -66,9 +70,15 @@ class Budget::FilingRule < ApplicationRecord
     false
   end
 
-  # Whether it does nothing for now, because its envelope is archived.
+  # Whether it does nothing for now, because its envelope is archived or the Account it's pinned to has Filing rules off.
   def inactive?
-    envelope&.archived? || false
+    envelope&.archived? || account_without_filing_rules?
+  end
+
+  # Whether it's pinned to an Account that has Filing rules off, which is one of the two reasons it's inactive. A rule for any Account isn't, though it skips
+  # that Account's bank transactions.
+  def account_without_filing_rules?
+    account.present? && !account.files_with_rules?
   end
 
   # What it does, in the words a person uses: "Spend from Groceries", "Refund to Groceries", "Deposit" or "Ignore".

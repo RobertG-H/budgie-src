@@ -313,6 +313,20 @@ RSpec.describe "The Bank transactions page", type: :request do
         expect(rows.first).not_to include("Guess")
       end
 
+      it "shows the Guess of an unfiled row in an Account that has Filing rules off even when a rule fits it, and none for the same row in an Account that has them on" do
+        filed("COSTCO #12", groceries)
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "costco")
+        splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+        unfiled("COSTCO #99", date: Date.new(2026, 10, 6), account: splitwise)
+        unfiled("COSTCO #98", date: Date.new(2026, 10, 5))
+
+        get bank_transactions_path(filter: { state: "unfiled" })
+
+        expect(row_for("COSTCO #99").text.squish).to include("Guess: like COSTCO #12 → Groceries")
+        expect(row_for("COSTCO #98").text.squish).not_to include("Guess")
+        assert_select "main a.btn[href='#{new_guessed_filing_path}']", text: "File 1 as guessed"
+      end
+
       it "says which Account each row is in" do
         make(:unfiled, "Costco", account: visa)
 

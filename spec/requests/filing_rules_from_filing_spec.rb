@@ -280,6 +280,114 @@ RSpec.describe "Filing rules from the filing form", type: :request do
     end
   end
 
+  # An Account whose Filing rules are off has every bank transaction wait for a person, such as the Splitwise Account, so a rule made from one would
+  # never act on the others, and isn't offered.
+  describe "a bank transaction in an Account that has Filing rules off" do
+    let!(:splitwise) { create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false) }
+    let!(:share) { create(:budget_bank_transaction, account: splitwise, description: "COSTCO  WHOLESALE #123", date: Date.new(2026, 9, 12), amount: -100) }
+    let!(:another_share) { create(:budget_bank_transaction, account: splitwise, description: "COSTCO  WHOLESALE #456", date: Date.new(2026, 9, 13), amount: -40) }
+
+    describe "GET /bank_transactions/:bank_transaction_id/filing/new" do
+      it "doesn't offer 'Always file like this', and says why, in a muted line" do
+        get new_bank_transaction_filing_path(share)
+
+        expect(response).to have_http_status(:ok)
+        assert_select "input[name^='filing[rule]']", count: 0
+        assert_select "[data-filing-split-target=rule]", count: 0
+        assert_select "label[for=filing_rule_make]", count: 0
+        assert_select "main p.text-base-content\\/70", text: "Filing rules are off for Splitwise."
+        expect(visible_text).not_to include("Always file like this")
+        expect(visible_text).not_to include("Edit rule")
+      end
+
+      it "still offers it for a bank transaction in an Account that has them on, and says nothing of it there" do
+        get new_bank_transaction_filing_path(money_out)
+
+        assert_select "input[type=checkbox][name='filing[rule][make]']"
+        expect(visible_text).not_to include("Filing rules are off")
+      end
+
+      it "offers it again once the Account's Filing rules are turned on" do
+        splitwise.update!(files_with_rules: true)
+
+        get new_bank_transaction_filing_path(share)
+
+        assert_select "input[type=checkbox][name='filing[rule][make]'][checked]"
+        expect(visible_text).not_to include("Filing rules are off")
+      end
+
+      it "names the Account it's in, and the form still files and ignores as it always has" do
+        other = create(:budget_account, budget: budget, name: "Visa Infinite", files_with_rules: false)
+        in_other = create(:budget_bank_transaction, account: other, description: "SHELL #9", amount: -30)
+
+        get new_bank_transaction_filing_path(in_other)
+
+        assert_select "main p.text-base-content\\/70", text: "Filing rules are off for Visa Infinite."
+        assert_select "input[type=submit][value=File]"
+        assert_select "button[formaction='#{bank_transaction_ignore_path(in_other)}']", text: "Ignore"
+      end
+    end
+
+    describe "POST /bank_transactions/:bank_transaction_id/filing, with the box sent anyway" do
+      it "files the bank transaction and makes no Filing rule, whatever the form sends, and sweeps nothing" do
+        expect { post bank_transaction_filing_path(share), params: file_params(rule: { make: "1", text: "costco wholesale", sweep: "1" }) }
+          .not_to change(Budget::FilingRule, :count)
+
+        expect(response).to redirect_to(bank_transactions_page)
+        follow_redirect!
+        assert_select "[role=status]", text: "Bank transaction filed."
+        expect(share.reload).to be_filed
+        expect(another_share.reload).to be_unfiled
+      end
+
+      it "makes no rule for any Account either, which is the choice that would have reached the other Accounts" do
+        expect { post bank_transaction_filing_path(share), params: file_params(rule: { make: "1", text: "costco wholesale", account_id: "", sweep: "1" }) }
+          .not_to change(Budget::FilingRule, :count)
+
+        expect(share.reload).to be_filed
+        expect(money_out.reload).to be_unfiled
+      end
+
+      it "doesn't touch a rule that's there for the same text" do
+        existing = create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale")
+
+        post bank_transaction_filing_path(share), params: file_params(rule: { make: "1", text: "costco wholesale" })
+
+        expect(existing.reload.envelope).to eq(household)
+        expect(share.reload).to be_filed
+      end
+    end
+
+    describe "POST /bank_transactions/:bank_transaction_id/ignore, with the box sent anyway" do
+      it "ignores the bank transaction and makes no Ignore rule" do
+        expect { post bank_transaction_ignore_path(share), params: file_params(rule: { make: "1", text: "costco wholesale", sweep: "1" }) }
+          .not_to change(Budget::FilingRule, :count)
+
+        expect(share.reload).to be_ignored
+        expect(another_share.reload).to be_unfiled
+      end
+    end
+
+    it "still sweeps for a bank transaction in an Account that has them on, which leaves this Account's bank transactions alone" do
+      expect { post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale", account_id: "", sweep: "1" }) }
+        .to change(Budget::FilingRule, :count).by(1)
+
+      expect(money_out.reload).to be_filed
+      expect([ share.reload, another_share.reload ]).to all(be_unfiled)
+    end
+
+    it "doesn't count the Account's bank transactions in the sweep of a rule made from another Account, though they fit its text" do
+      get bank_transaction_rule_preview_path(money_out), params: { filing: { rule: { text: "costco", account_id: "", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
+
+      expect(response.body).to include("No other unfiled bank transactions fit.")
+
+      splitwise.update!(files_with_rules: true)
+      get bank_transaction_rule_preview_path(money_out), params: { filing: { rule: { text: "costco", account_id: "", sweep: "1" } } }, headers: { "Turbo-Frame" => "filing-rule-preview" }
+
+      expect(response.body).to include("2 other unfiled bank transactions fit.")
+    end
+  end
+
   describe "POST /bank_transactions/:bank_transaction_id/ignore, with the box ticked" do
     it "ignores the bank transaction and makes an Ignore rule from the text, with no envelope, which fits money in or out" do
       expect { post bank_transaction_ignore_path(money_out), params: file_params.merge(from: "account") }.to change(Budget::FilingRule, :count).by(1)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_06_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -20,6 +20,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_120000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "default_csv_format_id"
+    t.boolean "files_with_rules", default: true, null: false
     t.index "budget_id, lower((name)::text)", name: "index_budget_accounts_on_budget_id_and_lower_name", unique: true
     t.index ["default_csv_format_id"], name: "index_budget_accounts_on_default_csv_format_id"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_accounts_name_not_blank"
