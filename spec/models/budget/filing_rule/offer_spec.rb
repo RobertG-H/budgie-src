@@ -57,6 +57,65 @@ RSpec.describe Budget::FilingRule::Offer do
     end
   end
 
+  # What changes from one bank transaction to the next isn't part of the rule it offers (#117).
+  describe "its text" do
+    let!(:etransfer) { create(:budget_bank_transaction, account: chequing, description: "Internet Banking E-TRANSFER 106121984683 James Graham-Hu", amount: 80) }
+
+    it "starts as the description without its numbers and symbols, which always fits its own bank transaction" do
+      offer = described_class.new(etransfer, budget: budget)
+
+      expect(offer.text).to eq("internet banking e-transfer james graham-hu")
+      expect(offer).to be_valid_text
+      expect(described_class.new(loblaws, budget: budget).text).to eq("loblaws")
+    end
+
+    it "makes a rule that fits the next bank transaction with another number" do
+      offer = described_class.new(etransfer, budget: budget)
+      entry = Budget::Filing::Entry.new(bank_transaction: etransfer, drafts: [ Budget::Filing::Draft.for(etransfer, kind: "deposit", amount: 80) ])
+      expect(offer.file(entry)).to be(true)
+
+      later = create(:budget_bank_transaction, account: chequing, description: "Internet Banking E-TRANSFER 999888777 James Graham-Hu", amount: 80).reload
+
+      expect(budget.filing_rules.sole.fits?(later)).to be(true)
+    end
+
+    it "is the same text when what's typed has a number or a symbol in it, so it's still the bank's own and part of its description" do
+      offer = offer(text: "LOBLAWS  #1234 /")
+
+      expect(offer.normalized_text).to eq("loblaws")
+      expect(offer).to be_valid_text
+      expect(offer).not_to be_needs_attention
+      expect(offer.file(entry)).to be(true)
+      expect(budget.filing_rules.sole.text).to eq("loblaws")
+    end
+
+    it "is offered for a description of at least 3 characters once its numbers and symbols are ignored, and not otherwise" do
+      only_an_id = create(:budget_bank_transaction, account: chequing, description: " 5551234567 / #12 ", amount: -5)
+      short = create(:budget_bank_transaction, account: chequing, description: "AB 123456", amount: -5)
+
+      expect(described_class.new(only_an_id, budget: budget)).not_to be_available
+      expect(described_class.new(short, budget: budget)).not_to be_available
+      expect(described_class.new(etransfer, budget: budget)).to be_available
+    end
+
+    it "is refused when it isn't part of the cleaned description, which says so, and when it's under 3 characters once cleaned" do
+      shell = offer(text: "shell #1")
+      expect(shell.file(entry)).to be(false)
+      expect(shell.errors[:text]).to include("must be part of the bank transaction's description, so that the rule fits it")
+
+      numbers = offer(text: "#1234")
+      expect(numbers.file(entry)).to be(false)
+      expect(numbers.errors[:text]).to include("needs at least 3 characters once numbers and symbols are ignored")
+      expect(budget.filing_rules.count).to eq(0)
+    end
+
+    it "updates the rule that has the same text without its numbers, and makes no other" do
+      existing = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws", account: chequing)
+
+      expect(offer(text: "loblaws #5678").existing_rule).to eq(existing)
+    end
+  end
+
   describe "#existing_rule" do
     it "is the rule with the same text and Account, and no amount" do
       pinned = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws", account: chequing)

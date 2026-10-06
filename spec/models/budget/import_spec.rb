@@ -549,12 +549,27 @@ RSpec.describe Budget::Import, type: :model do
       it "use the most specific rule that fits a row" do
         household = create(:budget_envelope, budget: budget, name: "Household")
         rule("loblaws")
-        specific = rule("loblaws #1234", envelope: household)
+        specific = rule("loblaws toronto", envelope: household)
 
         import_of("2026-09-02,LOBLAWS #1234 TORONTO,-82.45\n")
 
         expect(household.spends.sole.bank_transaction.filing_rule_id).to eq(specific.id)
         expect(groceries.spends).to be_empty
+      end
+
+      it "fit a row that differs from the rule's text only by its numbers and symbols, which a rule ignores (#117)" do
+        loblaws = rule("Loblaws #1234")
+        presto = rule("Presto Fare/Smzxv6Sckh", envelope: groceries)
+        household = create(:budget_envelope, budget: budget, name: "Household")
+        dollarama = rule("Dollarama #1595", envelope: household)
+
+        import_of("2026-09-02,LOBLAWS #1029 TORONTO,-82.45\n2026-09-03,Presto Fare/Shwqfxpddf,-3.35\n2026-09-04,Dollarama #1673,-12.00\n2026-09-05,Costco #1,-9.00\n")
+
+        rows = account.bank_transactions.index_by(&:description)
+        expect(rows["LOBLAWS #1029 TORONTO"].filing_rule_id).to eq(loblaws.id)
+        expect(rows["Presto Fare/Shwqfxpddf"].filing_rule_id).to eq(presto.id)
+        expect(rows["Dollarama #1673"].filing_rule_id).to eq(dollarama.id)
+        expect(rows["Costco #1"]).to be_unfiled
       end
 
       it "fit a Deposit and a Refund to money in, and a rule's sign has to suit the row" do
@@ -636,7 +651,7 @@ RSpec.describe Budget::Import, type: :model do
         many = count_queries { import_of(file_of.(1000), account: large_account) }
 
         # 98 more rules, half of them ignoring, and a row for each, so that every one of the 100 rules does something.
-        texts = Array.new(98) { |n| "gamma #{format("%03d", n)}" }
+        texts = Array.new(98) { |n| "gamma-#{format("%03d", n).tr("0-9", "a-j")}" }
         texts.each_with_index { |text, n| n.even? ? rule(text) : rule(text, :ignore) }
         gamma = texts.map { |text| "2026-09-01,#{text} x,-1.25\n" }.join
         with_many_rules = count_queries { import_of(gamma, account: many_rules_account) }

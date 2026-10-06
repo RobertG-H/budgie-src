@@ -437,7 +437,7 @@ RSpec.describe Budget::Filing do
 
     it "is written in the same number of queries however many rules there are" do
       few_rule = [ Budget::Filing::Entry.new(bank_transaction: bank_transaction(-100), filing_rule: rule, drafts: [ draft("spend", "100") ]) ]
-      rules = Array.new(20) { |n| create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco #{n}") }
+      rules = Array.new(20) { |n| create(:budget_filing_rule, budget: budget, envelope: groceries, text: "costco-#{n.to_s.tr("0-9", "a-j")}") }
       many_rules = rules.map { |each| Budget::Filing::Entry.new(bank_transaction: bank_transaction(-100), filing_rule: each, drafts: [ draft("spend", "100") ]) }
 
       few = count_queries { Budget::Filing.new(budget).file(few_rule) }

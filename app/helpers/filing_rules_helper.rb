@@ -28,8 +28,8 @@ module FilingRulesHelper
   # What "Always file like this" would do, in the muted line under it, which says which Account it's for: "Chequing bank transactions with 'loblaws' in their
   # description are filed the same way as they come in." or "Bank transactions in any account with 'loblaws' in their description are filed the same way
   # as they come in." Both are there and the one that doesn't apply is hidden, since the sweep-preview controller changes it when the other Account choice is
-  # made, and keeps the text, which is in a span of its own, in step with the Text field as it's edited, so the line says what the rule is whether or not
-  # "Edit rule" is open.
+  # made, and puts the text, which is in a span of its own, in step with the Text field once the server has answered for it (cleaned of its numbers and
+  # symbols, as the rule keeps it), so the line says what the rule is whether or not "Edit rule" is open.
   def filing_rule_sentence(offer)
     echo = -> { content_tag(:span, offer.normalized_text, data: { sweep_preview_target: "echo" }) }
     ending = "' in their description are filed the same way as they come in."

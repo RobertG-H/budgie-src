@@ -358,7 +358,7 @@ RSpec.describe "Accounts", type: :request do
 
           import = create(:budget_import, account: account)
           10.times do |n|
-            rule = create(:budget_filing_rule, budget: budget, envelope: create(:budget_envelope, budget: budget), text: "merchant #{n}")
+            rule = create(:budget_filing_rule, budget: budget, envelope: create(:budget_envelope, budget: budget), text: "merchant-#{n.to_s.tr("0-9", "a-j")}")
             bank_transaction = create(:budget_bank_transaction, account: account, import: import, description: "Merchant #{n}", amount: -10)
             create(:budget_spend_link, bank_transaction: bank_transaction, spend: create(:budget_spend, envelope: rule.envelope, amount: 10))
             bank_transaction.update_columns(filing_rule_id: rule.id)

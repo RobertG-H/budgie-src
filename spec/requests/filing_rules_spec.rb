@@ -142,12 +142,12 @@ RSpec.describe "Filing rules", type: :request do
     end
 
     it "escapes the text in the question and in the row, since it's whatever someone typed" do
-      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "<b>bold</b> 'quote'")
+      create(:budget_filing_rule, budget: budget, envelope: groceries, text: "x<b>bold</b>y 'quote'")
 
       get filing_rules_path
 
       assert_select "main b", count: 0
-      expect(css_select("main form[data-turbo-confirm]").first["data-turbo-confirm"]).to eq("Delete the Filing rule for '<b>bold</b> 'quote''?")
+      expect(css_select("main form[data-turbo-confirm]").first["data-turbo-confirm"]).to eq("Delete the Filing rule for 'x<b>bold b>y quote'?")
     end
 
     it "says how many bank transactions each rule filed or ignored in the Filed count, counting only the ones that still are" do
@@ -235,7 +235,7 @@ RSpec.describe "Filing rules", type: :request do
 
       10.times do |n|
         other = create(:budget_envelope, budget: budget, name: "Extra #{n}")
-        rule = create(:budget_filing_rule, budget: budget, envelope: other, text: "merchant #{n}", account: chequing)
+        rule = create(:budget_filing_rule, budget: budget, envelope: other, text: "merchant-#{n.to_s.tr("0-9", "a-j")}", account: chequing)
         create(:budget_bank_transaction, :filed, account: chequing).update_columns(filing_rule_id: rule.id)
       end
       create(:budget_filing_rule, :ignore, budget: budget, text: "interest")
@@ -345,7 +345,7 @@ RSpec.describe "Filing rules", type: :request do
       expect { post filing_rules_path, params: rule_params(text: "lo", outcome: "spend", envelope_id: "", amount: "5") }.not_to change(Budget::FilingRule, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
-      assert_select "[role=alert]", text: /Text is too short \(minimum is 3 characters\)/
+      assert_select "[role=alert]", text: /Text needs at least 3 characters once numbers and symbols are ignored/
       assert_select "[role=alert]", text: /Envelope can't be blank/
       assert_select "[role=alert]", text: /Amount must be negative, since a Spend is money out/
       assert_select "input[name='filing_rule[text]'][value=lo]"
@@ -561,7 +561,7 @@ RSpec.describe "Filing rules", type: :request do
       patch filing_rule_path(rule), params: rule_params(text: "lo")
 
       expect(response).to have_http_status(:unprocessable_content)
-      assert_select "[role=alert]", text: /Text is too short/
+      assert_select "[role=alert]", text: /Text needs at least 3 characters once numbers and symbols are ignored/
       assert_select "input[name='filing_rule[text]'][value=lo]"
       expect(rule.reload.text).to eq("loblaws")
     end
@@ -695,9 +695,10 @@ RSpec.describe "Filing rules", type: :request do
     end
 
     it "says when a bank transaction fits but a more specific rule files it, and doesn't count it" do
-      create(:budget_filing_rule, :ignore, budget: budget, text: "loblaws #1")
+      create(:budget_bank_transaction, account: account, description: "LOBLAWS TORONTO", amount: -20)
+      create(:budget_filing_rule, :ignore, budget: budget, text: "loblaws toronto")
 
-      sweep(text: "loblaws", outcome: "ignore")
+      sweep(text: "loblaws", outcome: "spend", envelope_id: groceries.id)
 
       expect(frame_text).to include("1 unfiled bank transaction fits.", "1 more fits, but a more specific Filing rule files it.")
     end

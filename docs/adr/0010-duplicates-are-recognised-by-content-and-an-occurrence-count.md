@@ -12,4 +12,6 @@ Bank sync adds a second identity, the bank's own `external_id`, unique per Accou
 
 ## Consequences
 
+The description in the key is only squished and case folded (`BankTransaction.normalize_description`), never cleaned of its numbers and symbols the way a Filing rule reads it (ADR 0015): `Loblaws #1029` and `Loblaws #1031` are different rows, and changing the key's reading would make every re-import see its old rows as new.
+
 If a bank edits a description between two exports, the row comes in a second time as a new unfiled bank transaction, and the user ignores it. The same is true at the seam when a sync's raw description differs from the CSV's. Importing with a wrong format, such as an inverted sign, and then again with the right one doesn't match, because the amounts differ: the first Import is undone first (ADR 0011).

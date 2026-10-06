@@ -25,33 +25,67 @@ RSpec.describe Budget::FilingRule::Matcher do
       row = bank_transaction("  LOBLAWS \t #1234   Toronto ")
 
       expect(winner(row, rule("loblaws"))).to be_present
-      expect(winner(row, rule("LOBLAWS  #1234"))).to be_present
-      expect(winner(row, rule("1234 toronto"))).to be_present
+      expect(winner(row, rule("LOBLAWS  TORONTO"))).to be_present
+      expect(winner(row, rule("toronto"))).to be_present
       expect(winner(row, rule("oblaw"))).to be_present
-      expect(winner(row, rule("loblaws #1234 toronto"))).to be_present
+      expect(winner(row, rule("blaws  toronto", account: account))).to be_present
     end
 
     it "has to be in the description, so another is no fit" do
       expect(winner(bank_transaction, rule("costco"))).to be_nil
-      expect(winner(bank_transaction, rule("loblaws toronto"))).to be_nil
+      expect(winner(bank_transaction, rule("loblaws ottawa"))).to be_nil
     end
 
     it "is read the same way as the description is, so an unusual space or case fold can't make them disagree" do
       row = bank_transaction("B\u00E4ckerei\u00A0Stra\u00DFe 12")
 
       expect(winner(row, rule("stra\u00DFe"))).to be_present
-      expect(winner(row, rule("STRASSE 12"))).to be_present
-      expect(winner(row, rule("b\u00E4ckerei strasse"))).to be_present
+      expect(winner(row, rule("B\u00C4CKEREI STRASSE"))).to be_present
+      expect(winner(row, rule("b\u00E4ckerei strasse", account: account))).to be_present
     end
 
     it "is only text, never a pattern, so a wildcard or a regular expression is read as what it says" do
       row = bank_transaction("LOBLAWS 100% ORGANIC (TORONTO)")
 
-      expect(winner(row, rule("loblaws.*"))).to be_nil
-      expect(winner(row, rule("%%%"))).to be_nil
-      expect(winner(row, rule("loblaws_100"))).to be_nil
-      expect(winner(row, rule("100% organic"))).to be_present
+      expect(winner(row, rule("lo.laws"))).to be_nil
+      expect(winner(row, rule("lob[a-z]+s"))).to be_nil
+      expect(winner(row, rule("loblaws organic"))).to be_present
       expect(winner(row, rule("(toronto)"))).to be_present
+    end
+  end
+
+  # What changes from one bank transaction to the next isn't part of what a rule looks for, on either side (#117).
+  describe "the numbers and symbols in the text and the description" do
+    it "don't matter, so a rule made from one bank transaction fits the next one's, with another number" do
+      made_from_one = rule("Internet Banking E-TRANSFER 106121984683 James Graham-Hu", :deposit)
+
+      expect(winner(bank_transaction("Internet Banking E-TRANSFER 999888777 James Graham-Hu", amount: 80), made_from_one)).to eq(made_from_one)
+      expect(winner(bank_transaction("Internet Banking E-TRANSFER 106121984683 Someone Else", amount: 80), made_from_one)).to be_nil
+    end
+
+    {
+      "Hopp/O/2609160957" => "hopp",
+      "Presto Fare/Smzxv6Sckh" => "presto fare",
+      "Presto Fare/Shwqfxpddf" => "presto fare",
+      "Pioneer #41051" => "pioneer",
+      "Usps Po 0555550115" => "usps po",
+      "Dollarama #1595" => "dollarama",
+      "Loblaws #1029" => "loblaws"
+    }.each do |description, text|
+      it "have a rule for #{text.inspect} fit #{description.inspect}" do
+        expect(winner(bank_transaction(description), rule(text))).to be_present
+      end
+    end
+
+    it "fit the same rule whichever number the description has" do
+      dollarama = rule("Dollarama #1595")
+
+      expect(winner(bank_transaction("Dollarama #1673"), dollarama)).to eq(dollarama)
+      expect(winner(bank_transaction("DOLLARAMA #1595 OTTAWA"), dollarama)).to eq(dollarama)
+    end
+
+    it "are not what a person can look for: a rule can't be told one store's number from another's" do
+      expect(rule("dollarama #1595").text).to eq(rule("dollarama #1673", account: account).text)
     end
   end
 
@@ -117,7 +151,7 @@ RSpec.describe Budget::FilingRule::Matcher do
 
     it "doesn't stop the rules that aren't archived from winning" do
       archived_envelope = create(:budget_envelope, budget: budget, name: "Old", archived_at: nil)
-      longer = rule("loblaws #1234", envelope: archived_envelope)
+      longer = rule("loblaws toronto", envelope: archived_envelope)
       shorter = rule("loblaws")
       archived_envelope.update!(archived_at: Time.current)
 
@@ -135,21 +169,21 @@ RSpec.describe Budget::FilingRule::Matcher do
 
     it "has an exact amount beat one without, whatever else they have" do
       with_amount = rule("lob", amount: "-50")
-      richer = rule("loblaws #1234 toronto", account: account)
+      richer = rule("loblaws toronto", account: account)
 
       expect(winner(row, richer, with_amount)).to eq(with_amount)
     end
 
     it "then has a pinned Account beat any Account, whatever the text" do
       pinned = rule("lob", account: account)
-      longer = rule("loblaws #1234 toronto")
+      longer = rule("loblaws toronto")
 
       expect(winner(row, longer, pinned)).to eq(pinned)
     end
 
     it "then has longer text win" do
       short = rule("loblaws")
-      long = rule("loblaws #1234")
+      long = rule("loblaws toronto")
 
       expect(winner(row, short, long)).to eq(long)
     end
@@ -177,11 +211,11 @@ RSpec.describe Budget::FilingRule::Matcher do
     end
 
     it "gives the same winner whichever order the rules come in" do
-      rules = [ rule("lob"), rule("loblaws"), rule("toronto", account: account), rule("#1234 t"), rule("1234", amount: "-50"), rule("loblaws #1234", :ignore) ]
+      rules = [ rule("lob"), rule("loblaws"), rule("toronto", account: account), rule("toronto ", :ignore), rule("lob", amount: "-50"), rule("loblaws toronto", :ignore) ]
 
       winners = rules.permutation.first(200).map { |order| winner(row, *order) }.uniq
 
-      expect(winners).to eq([ rules.find { |r| r.text == "1234" } ])
+      expect(winners).to eq([ rules.find { |r| r.text == "lob" && r.amount } ])
     end
   end
 

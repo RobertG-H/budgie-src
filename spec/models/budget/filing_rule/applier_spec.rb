@@ -90,7 +90,7 @@ RSpec.describe Budget::FilingRule::Applier do
       row = bank_transaction("LOBLAWS #1234 TORONTO")
       other = bank_transaction("COSTCO WHOLESALE")
       general = rule("loblaws")
-      specific = rule("loblaws #1234", envelope: household)
+      specific = rule("loblaws toronto", envelope: household)
       costco = rule("costco")
 
       expect(apply(row, other)).to have_attributes(filed: 2)
@@ -122,7 +122,7 @@ RSpec.describe Budget::FilingRule::Applier do
       row = bank_transaction("LOBLAWS #1234 TORONTO")
       other = bank_transaction("LOBLAWS ON KING")
       general = rule("loblaws")
-      rule("loblaws #1234", envelope: household)
+      rule("loblaws toronto", envelope: household)
 
       expect(apply(row, other, only: general)).to have_attributes(filed: 1)
 
@@ -236,7 +236,7 @@ RSpec.describe Budget::FilingRule::Applier do
       few = [ bank_transaction("alpha one"), bank_transaction("beta one") ]
       small = count_queries { described_class.new(budget).apply(few) }
 
-      many_rules = Array.new(50) { |n| rule("alpha #{n + 100}") } + Array.new(50) { |n| rule("beta #{n + 100}", :ignore) }
+      many_rules = Array.new(50) { |n| rule("alpha #{(n + 100).to_s.tr("0-9", "a-j")}") } + Array.new(50) { |n| rule("beta #{(n + 100).to_s.tr("0-9", "a-j")}", :ignore) }
       many = many_rules.map { |each| bank_transaction(each.text) }
       large = count_queries { described_class.new(budget).apply(many) }
 

@@ -312,7 +312,7 @@ Account, date, signed amount and description (trimmed, whitespace collapsed, cas
 the same key is in the Account. For each key an Import adds as many rows as the file has beyond those the Account already has, so
 two identical coffees on one day both come in, while the same file again, or one that overlaps, adds only what's new. The key and
 occurrence are written when the row is made and never recomputed, because they record how it first looked. The description as a
-Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place.
+Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place; the key never leaves out the numbers and symbols that a Filing rule's reading does.
 
 **Import from the header.** "Import" is in the header on every page, beside Sign out: one click and one file imports it when Budgie is certain which of the budget's CSV formats reads it and which
 Account it's for, and lands on the Import's summary, where Undo already is. It tries each CSV format over the file once, and a format is certain when it's the only one that reads it, or when every one that does reads the same
@@ -382,7 +382,7 @@ bank transaction that a rule fits, Budgie files it the way the rule says, or ign
 filing operation a person uses ([ADR 0012](adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md)). A wrong rule is caught by what's
 shown and what can be taken back, not by a prompt: the Import's summary says how many bank transactions rules filed and how many they ignored, Undo
 takes the whole Import back, and un-filing puts one bank transaction back. A rule fits by the description (its text is contained in the bank
-transaction's, whatever the case or spacing, and it's only ever text, never a pattern) and, if it has them, by Account and by an exact amount, and it sets one
+transaction's, whatever the case or spacing, and both are read without their numbers and symbols, so `Loblaws #1029` and `Loblaws #1031` are the same to it, and it's only ever text, never a pattern, [ADR 0015](adr/0015-a-filing-rule-reads-descriptions-without-their-numbers-and-symbols.md)) and, if it has them, by Account and by an exact amount, and it sets one
 outcome for the whole amount: a Spend from an envelope, a Refund to one, a Deposit, or Ignore, with the sign suiting it. When more than one fits, the most
 specific wins, in this order: an exact amount, then a pinned Account, then longer text, then the most recently edited, then the newer rule, so there's no ordering
 screen and the order is total. A rule for an archived envelope does nothing until it's unarchived, and archiving is never blocked by it.
@@ -397,7 +397,7 @@ or un-ignored; the filed records are ordinary ([ADR 0002](adr/0002-budget-record
 never changes what it already filed.
 
 **Always file like this.** Filing or ignoring a bank transaction by hand offers to make a rule from what was done, ticked by default: the text starts as the
-bank's whole description, and can be trimmed right there, before the wrong rule is made. It's for the bank transaction's own Account to start with, since a rule for "loblaws" in one Account usually shouldn't act on another's, and a person can choose any account instead; it's never for another Account, which wouldn't fit the bank transaction it's made from, and it has no amount condition. The sentence under the box says which Account it's for, and the count of other unfiled bank transactions it would file follows the choice. A rule with identical conditions (the same text and Account) is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
+bank's whole description without its numbers and symbols, and can be trimmed right there, before the wrong rule is made. It's for the bank transaction's own Account to start with, since a rule for "loblaws" in one Account usually shouldn't act on another's, and a person can choose any account instead; it's never for another Account, which wouldn't fit the bank transaction it's made from, and it has no amount condition. The sentence under the box says which Account it's for, and the count of other unfiled bank transactions it would file follows the choice. A rule with identical conditions (the same text and Account) is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
 filing as one record and when ignoring, and never for a split, since a split has no one outcome to repeat.
 
 **Sweeping what's already there.** A rule made after an Import has nothing to act on, so saving one can also file the unfiled bank transactions it already fits. Rules still never

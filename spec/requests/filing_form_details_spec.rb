@@ -76,7 +76,7 @@ RSpec.describe "The filing form's Edit details and Edit rule", type: :request do
     it "puts Always file like this before Edit details, with Edit rule closed under it and a sentence of what it would do" do
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Chequing bank transactions with 'costco #123' in their description are filed the same way as they come in.")
+      expect(visible_text).to include("Chequing bank transactions with 'costco' in their description are filed the same way as they come in.")
       expect(edit_rule).to be_present
       expect(open?(edit_rule)).to be(false)
       expect(edit_rule.css("input[type=text][name='filing[rule][text]']")).to be_present
@@ -222,10 +222,17 @@ RSpec.describe "The filing form's Edit details and Edit rule", type: :request do
     end
 
     it "is open when the text was changed, and the sentence says the text as it is" do
-      file records: [ record_params(envelope_id: "") ], rule: { make: "1", text: "costco" }
+      file records: [ record_params(envelope_id: "") ], rule: { make: "1", text: "cost" }
 
       expect(open?(edit_rule)).to be(true)
-      expect(visible_text).to include("Chequing bank transactions with 'costco' in their description", "Bank transactions in any account with 'costco' in their description")
+      expect(visible_text).to include("Chequing bank transactions with 'cost' in their description", "Bank transactions in any account with 'cost' in their description")
+    end
+
+    it "stays closed when the only change to the text is a number or a symbol, which a rule ignores" do
+      file records: [ record_params(envelope_id: "") ], rule: { make: "1", text: "COSTCO #4455 /" }
+
+      expect(open?(edit_rule)).to be(false)
+      expect(visible_text).to include("Chequing bank transactions with 'costco' in their description")
     end
 
     it "is open when the rule has an error, such as text that isn't part of the description" do
@@ -242,7 +249,7 @@ RSpec.describe "The filing form's Edit details and Edit rule", type: :request do
       get new_bank_transaction_filing_path(money_out)
 
       expect(open?(edit_rule)).to be(true)
-      expect(visible_text).to include("Updates the Filing rule for 'costco #123' in Chequing, which files them as Spend from Groceries now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco' in Chequing, which files them as Spend from Groceries now.")
     end
   end
 
