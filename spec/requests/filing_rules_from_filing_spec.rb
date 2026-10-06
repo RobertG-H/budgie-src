@@ -30,22 +30,22 @@ RSpec.describe "Filing rules from the filing form", type: :request do
   let(:bank_transactions_page) { bank_transactions_path(filter: filter) }
 
   describe "GET /bank_transactions/:bank_transaction_id/filing/new" do
-    it "offers 'Always file like this', ticked, with the bank's description as the text, normalised, to be edited right there" do
+    it "offers 'Always file like this', ticked, with the bank's description as the text, without its number and symbols, to be edited right there" do
       get new_bank_transaction_filing_path(money_out)
 
       assert_select "input[type=checkbox][name='filing[rule][make]'][value='1'][checked]"
       assert_select "input[type=hidden][name='filing[rule][make]'][value='0']"
       assert_select "label[for=filing_rule_make]", text: "Always file like this"
-      assert_select "input[type=text][name='filing[rule][text]'][value='costco wholesale #123']"
+      assert_select "input[type=text][name='filing[rule][text]'][value='costco wholesale']"
       assert_select "label[for=filing_rule_text]", text: "Text to look for"
-      expect(visible_text).to include("Capital letters and extra spaces don't matter. At least 3 characters.")
+      expect(visible_text).to include("Capital letters, extra spaces, numbers and symbols like # and / are ignored. At least 3 characters.")
     end
 
     it "starts with text that passes its own check, however unusual the description's spaces and letters, since both are read the same way" do
       unusual = create(:budget_bank_transaction, account: account, description: "B\u00E4ckerei\u00A0Stra\u00DFe 12", amount: -9)
 
       get new_bank_transaction_filing_path(unusual)
-      assert_select "input[name='filing[rule][text]'][value='b\u00E4ckerei strasse 12']"
+      assert_select "input[name='filing[rule][text]'][value='b\u00E4ckerei strasse']"
 
       expect { post bank_transaction_filing_path(unusual), params: file_params(rule: { make: "1", text: "b\u00E4ckerei strasse 12" }, amount: "9") }
         .to change(budget.filing_rules, :count).by(1)
@@ -71,7 +71,37 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       get new_bank_transaction_filing_path(short)
 
       assert_select "input[name^='filing[rule]']", count: 0
-      expect(visible_text).to include("A Filing rule needs at least 3 characters in the bank transaction's description, so Always file like this isn't offered for this one.")
+      expect(visible_text).to include("A Filing rule needs at least 3 characters in the bank transaction's description once numbers and symbols are ignored, so Always file like this isn't offered for this one.")
+    end
+
+    it "is left out too when the description is nothing but numbers and symbols, since there's no text to make a rule from" do
+      only_an_id = create(:budget_bank_transaction, account: account, description: " 5551234567 / #12 ", amount: -5)
+
+      get new_bank_transaction_filing_path(only_an_id)
+
+      assert_select "input[name^='filing[rule]']", count: 0
+      expect(visible_text).to include("once numbers and symbols are ignored, so Always file like this isn't offered for this one.")
+    end
+
+    it "starts without the numbers and symbols of the description, so the rule it makes fits the next one with another" do
+      etransfer = create(:budget_bank_transaction, account: account, description: "Internet Banking E-TRANSFER 106121984683 James Graham-Hu", amount: 80)
+
+      get new_bank_transaction_filing_path(etransfer)
+      assert_select "input[type=text][name='filing[rule][text]'][value='internet banking e-transfer james graham-hu']"
+
+      post bank_transaction_filing_path(etransfer), params: file_params(rule: { make: "1", text: "internet banking e-transfer james graham-hu" }, kind: "deposit", envelope_id: "", amount: "80")
+      later = create(:budget_bank_transaction, account: account, description: "Internet Banking E-TRANSFER 999888777 James Graham-Hu", amount: 80).reload
+
+      expect(budget.filing_rules.sole.text).to eq("internet banking e-transfer james graham-hu")
+      expect(budget.filing_rules.sole.fits?(later)).to be(true)
+    end
+
+    it "keeps what's typed with a number in it as the text without it, which is what the rule is made with" do
+      get new_bank_transaction_filing_path(money_out)
+
+      post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "Costco Wholesale #4455" })
+
+      expect(budget.filing_rules.sole.text).to eq("costco wholesale")
     end
 
     it "says when a Filing rule with that text exists for the Account, which it would update in place" do
@@ -79,7 +109,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123' in Chequing, which files them as Spend from Groceries now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale' in Chequing, which files them as Spend from Groceries now.")
     end
 
     it "says it of an Ignore rule in its own words" do
@@ -87,7 +117,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
 
       get new_bank_transaction_filing_path(money_out)
 
-      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale #123' in Chequing, which ignores them now.")
+      expect(visible_text).to include("Updates the Filing rule for 'costco wholesale' in Chequing, which ignores them now.")
     end
 
     it "says nothing of another budget's rule, or of one for any Account, another Account or an amount, which are other rules" do
@@ -115,7 +145,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect(response).to redirect_to(bank_transactions_page)
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction filed."
-      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "spend", envelope: groceries, account_id: account.id, amount: nil)
+      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale", outcome: "spend", envelope: groceries, account_id: account.id, amount: nil)
     end
 
     it "takes the text as it was edited, normalised" do
@@ -180,7 +210,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         .to not_change(Budget::Spend, :count).and not_change(Budget::FilingRule, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
-      assert_select "[role=alert]", text: /Text is too short \(minimum is 3 characters\)/
+      assert_select "[role=alert]", text: /Text needs at least 3 characters once numbers and symbols are ignored/
       assert_select "input[name='filing[rule][text]'][value=co]"
       assert_select "input[name='filing[records][0][description]'][value='Costco run']"
       expect(money_out.reload).to be_unfiled
@@ -257,7 +287,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect(response).to redirect_to(account_path(account))
       follow_redirect!
       assert_select "[role=status]", text: "Bank transaction ignored."
-      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", outcome: "ignore", envelope_id: nil, account_id: account.id, amount: nil)
+      expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale", outcome: "ignore", envelope_id: nil, account_id: account.id, amount: nil)
       expect(money_out.reload).to be_ignored
       expect(money_out.filing_rule_id).to be_nil
     end
@@ -291,7 +321,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       expect { post bank_transaction_ignore_path(money_out), params: file_params(rule: { make: "1", text: "co" }) }.not_to change(Budget::FilingRule, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
-      assert_select "[role=alert]", text: /Text is too short/
+      assert_select "[role=alert]", text: /Text needs at least 3 characters once numbers and symbols are ignored/
       assert_select "h1", text: "File bank transaction"
       assert_select "input[name='filing[records][0][description]'][value='Costco run']"
       expect(money_out.reload).to be_unfiled
@@ -405,6 +435,13 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         expect(response.body).to include("3 other unfiled bank transactions fit.")
       end
 
+      it "carries the text as the rule keeps it, hidden, for the sentence under Always file like this, so the server is the only one that cleans it" do
+        preview(text: "  COSTCO  WHOLESALE #4455 / ")
+
+        assert_select "turbo-frame#filing-rule-preview[data-action='turbo:frame-load->sweep-preview#showCleanedText']"
+        assert_select "turbo-frame#filing-rule-preview span[hidden][data-sweep-preview-target=cleaned]", text: "costco wholesale"
+      end
+
       it "keeps the box as it was ticked, or unticked" do
         preview(text: "costco", sweep: "0")
         assert_select "input[type=checkbox][name='filing[rule][sweep]']:not([checked])"
@@ -418,7 +455,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
           preview(text: text)
 
           expect(response.body).not_to include("unfiled bank transaction")
-          expect(response.body).to include("The text has to be at least 3 characters, and part of this bank transaction's description.")
+          expect(response.body).to include("The text has to be at least 3 characters once numbers and symbols are ignored, and part of this bank transaction's description.")
         end
       end
 
@@ -566,9 +603,9 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         get new_bank_transaction_filing_path(money_out)
 
         pinned, anywhere = css_select("[data-sweep-preview-target=variant]")
-        expect(pinned.text.squish).to eq("Chequing bank transactions with 'costco wholesale #123' in their description are filed the same way as they come in.")
+        expect(pinned.text.squish).to eq("Chequing bank transactions with 'costco wholesale' in their description are filed the same way as they come in.")
         expect(pinned.key?("hidden")).to be(false)
-        expect(anywhere.text.squish).to eq("Bank transactions in any account with 'costco wholesale #123' in their description are filed the same way as they come in.")
+        expect(anywhere.text.squish).to eq("Bank transactions in any account with 'costco wholesale' in their description are filed the same way as they come in.")
         expect(anywhere.key?("hidden")).to be(true)
       end
 
@@ -589,7 +626,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       it "makes a rule for the bank transaction's Account when it's chosen, and sweeps only that Account's bank transactions" do
         post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: account.id.to_s, sweep: "1" })
 
-        expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", account_id: account.id, amount: nil)
+        expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale", account_id: account.id, amount: nil)
         expect(here.reload).to be_filed
         expect(there.reload).to be_unfiled
         follow_redirect!
@@ -599,7 +636,7 @@ RSpec.describe "Filing rules from the filing form", type: :request do
       it "makes a rule for any Account when that's chosen, and sweeps every Account's" do
         post bank_transaction_filing_path(money_out), params: file_params(rule: { make: "1", text: "costco wholesale #123", account_id: "", sweep: "1" })
 
-        expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale #123", account_id: nil)
+        expect(budget.filing_rules.sole).to have_attributes(text: "costco wholesale", account_id: nil)
         expect([ here.reload, there.reload ]).to all(be_filed)
         follow_redirect!
         assert_select "[role=status]", text: "Bank transaction filed. The Filing rule also filed 2 other bank transactions."
@@ -667,10 +704,10 @@ RSpec.describe "Filing rules from the filing form", type: :request do
         create(:budget_filing_rule, budget: budget, envelope: household, text: "costco wholesale #123", account: account)
 
         preview(account_id: account.id.to_s)
-        expect(response.body).to include("Updates the Filing rule for 'costco wholesale #123' in Chequing, which files them as Spend from Household now.")
+        expect(response.body).to include("Updates the Filing rule for 'costco wholesale' in Chequing, which files them as Spend from Household now.")
 
         preview(account_id: "")
-        expect(response.body).to include("Updates the Filing rule for 'costco wholesale #123', which files them as Spend from Groceries now.")
+        expect(response.body).to include("Updates the Filing rule for 'costco wholesale', which files them as Spend from Groceries now.")
         expect(response.body).not_to include("in Chequing")
       end
     end

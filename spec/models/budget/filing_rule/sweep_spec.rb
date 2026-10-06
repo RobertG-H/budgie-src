@@ -34,6 +34,20 @@ RSpec.describe Budget::FilingRule::Sweep do
       expect(other.reload).to be_unfiled
     end
 
+    it "files the bank transactions that differ from what the rule was made from only by their numbers and symbols (#117)" do
+      rows = [ "Internet Banking E-TRANSFER 106121984683 James Graham-Hu", "INTERNET BANKING E-TRANSFER 7 JAMES GRAHAM-HU", "Hopp/O/2609160957" ]
+        .map { |description| bank_transaction(description, amount: 80) }
+      someone_else = bank_transaction("Internet Banking E-TRANSFER 106121984683 Someone Else", amount: 80)
+      etransfer = rule("Internet Banking E-TRANSFER 55 James Graham-Hu", :deposit)
+
+      sweep = described_class.new(etransfer)
+
+      expect(sweep.bank_transactions).to match_array(rows.first(2))
+      expect(sweep.run).to have_attributes(filed: 2)
+      expect(rows.map { |row| row.reload.state }).to eq([ :filed, :filed, :unfiled ])
+      expect(someone_else.reload).to be_unfiled
+    end
+
     it "notes the rule on each bank transaction it files, which is what filed it" do
       rows = Array.new(3) { |n| bank_transaction("LOBLAWS ##{n}") }
       loblaws = rule("loblaws")
@@ -74,7 +88,7 @@ RSpec.describe Budget::FilingRule::Sweep do
     end
 
     it "leaves a bank transaction that a more specific rule fits to that rule, so a sweep never undoes the order rules run in" do
-      rule("loblaws #1234", envelope: household)
+      rule("loblaws toronto", envelope: household)
       specific = bank_transaction("LOBLAWS #1234 TORONTO")
       general_only = bank_transaction("LOBLAWS ON KING")
       loblaws = rule("loblaws")
@@ -134,7 +148,7 @@ RSpec.describe Budget::FilingRule::Sweep do
     end
 
     it "have #left_to_other_rules, which the rule fits but a more specific rule files, so a form can say why they aren't counted" do
-      rule("loblaws #1234", envelope: household)
+      rule("loblaws toronto", envelope: household)
       specific = bank_transaction("LOBLAWS #1234 TORONTO")
       mine = bank_transaction("LOBLAWS ON KING")
       bank_transaction("COSTCO")

@@ -12,20 +12,85 @@ RSpec.describe Budget::FilingRule do
 
   describe "its text" do
     it "is stored trimmed, with its whitespace collapsed and its case folded, as a bank transaction's description is for matching" do
-      saved = create(:budget_filing_rule, budget: budget, text: "  LOBLAWS \t #1234\nToronto ")
+      saved = create(:budget_filing_rule, budget: budget, text: "  LOBLAWS \t  Toronto\n")
 
-      expect(saved.reload.text).to eq("loblaws #1234 toronto")
+      expect(saved.reload.text).to eq("loblaws toronto")
     end
 
-    it "is at least 3 characters" do
+    it "is stored without its numbers and symbols, which a description is read without too (#117)" do
+      expect(create(:budget_filing_rule, budget: budget, text: "LOBLAWS #1234 Toronto").reload.text).to eq("loblaws toronto")
+      expect(create(:budget_filing_rule, budget: budget, text: "Presto Fare/Shwqfxpddf").reload.text).to eq("presto fare")
+      expect(create(:budget_filing_rule, budget: budget, text: "Internet Banking E-TRANSFER 106121984683 James Graham-Hu").reload.text).to eq("internet banking e-transfer james graham-hu")
+    end
+
+    it "is at least 3 characters once its numbers and symbols are ignored" do
       expect(rule(text: "lo")).not_to be_valid
-      expect(rule(text: "lo").tap(&:valid?).errors[:text]).to eq([ "is too short (minimum is 3 characters)" ])
+      expect(rule(text: "lo").tap(&:valid?).errors[:text]).to eq([ "needs at least 3 characters once numbers and symbols are ignored" ])
       expect(rule(text: "   ab ")).not_to be_valid
+      expect(rule(text: "#1234").tap(&:valid?).errors[:text]).to eq([ "needs at least 3 characters once numbers and symbols are ignored" ])
+      expect(rule(text: "lo #1234")).not_to be_valid
       expect(rule(text: "abc")).to be_valid
     end
 
     it "is required" do
-      expect(rule(text: nil).tap(&:valid?).errors[:text]).to include("can't be blank")
+      expect(rule(text: nil).tap(&:valid?).errors[:text]).to eq([ "can't be blank" ])
+      expect(rule(text: "  ").tap(&:valid?).errors[:text]).to eq([ "can't be blank" ])
+    end
+
+    it "is the same text as another rule's when only the numbers and symbols differ, which is refused" do
+      create(:budget_filing_rule, budget: budget, text: "loblaws #1", envelope: groceries)
+
+      duplicate = rule(text: "LOBLAWS #2")
+
+      expect(duplicate).not_to be_valid
+      expect(duplicate.errors[:base].sole).to include("already has the same text, Account and amount")
+    end
+  end
+
+  # What a rule saved before numbers were ignored has in its text, which the model would clean now, so it's written past it.
+  def stored_before_numbers_were_ignored(rule, text)
+    described_class.where(id: rule.id).update_all([ "text = ?", text ])
+  end
+
+  describe "#fits?" do
+    let(:account) { create(:budget_account, budget: budget) }
+
+    def bank_transaction(description, amount: -50)
+      create(:budget_bank_transaction, account: account, description: description, amount: amount).reload
+    end
+
+    it "fits a description that differs from the one the rule was made from only by its number" do
+      loblaws = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "LOBLAWS #1234")
+
+      expect(loblaws.text).to eq("loblaws")
+      expect(loblaws.fits?(bank_transaction("Loblaws #1029"))).to be(true)
+      expect(loblaws.fits?(bank_transaction("LOBLAWS 77 TORONTO ON"))).to be(true)
+      expect(loblaws.fits?(bank_transaction("Costco #1029"))).to be(false)
+    end
+
+    it "fits every e-transfer from one person whatever its number, and not another person's" do
+      etransfer = create(:budget_filing_rule, budget: budget, outcome: "deposit", envelope: nil, text: "Internet Banking E-TRANSFER 106121984683 James Graham-Hu")
+
+      expect(etransfer.fits?(bank_transaction("Internet Banking E-TRANSFER 999 James Graham-Hu", amount: 80))).to be(true)
+      expect(etransfer.fits?(bank_transaction("Internet Banking E-TRANSFER 106121984683 Someone Else", amount: 80))).to be(false)
+    end
+
+    it "reads the text it matches the way it's saved, so a rule saved before the numbers were ignored still fits" do
+      old = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+      stored_before_numbers_were_ignored(old, "loblaws #1234")
+
+      expect(old.reload.text).to eq("loblaws #1234")
+      expect(old.fits?(bank_transaction("Loblaws #1029"))).to be(true)
+      expect(old.fits?(bank_transaction("Costco #1029"))).to be(false)
+    end
+  end
+
+  describe "#specificity" do
+    it "goes by the text without its numbers and symbols" do
+      old = create(:budget_filing_rule, budget: budget, envelope: groceries, text: "loblaws")
+      stored_before_numbers_were_ignored(old, "loblaws #1234 #5678")
+
+      expect(old.reload.specificity.third).to eq("loblaws".length)
     end
   end
 

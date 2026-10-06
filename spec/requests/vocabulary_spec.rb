@@ -419,7 +419,7 @@ RSpec.describe "The words on the pages", type: :request do
         post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "lo" } } }
 
         expect(response).to have_http_status(:unprocessable_content)
-        expect(visible_text).to include("Text is too short (minimum is 3 characters)")
+        expect(visible_text).to include("Text needs at least 3 characters once numbers and symbols are ignored")
         expect(visible_text).not_to match(retired_terms)
 
         post bank_transaction_filing_path(loblaws_row), params: { filing: { records: file_params[:filing][:records], rule: { make: "1", text: "costco" } } }

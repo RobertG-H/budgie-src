@@ -1,4 +1,4 @@
-<%# "Always file like this", on the filing form: a Filing rule made from what's done to this bank transaction, whether that's filing it or ignoring it, which files or ignores the bank transactions that come in with the same text in their description, the same way. It's the box and one muted sentence of what it would do, and the rest is under "Edit rule", closed to start with: the text, which starts as the bank's whole description, normalised, and can be trimmed right there, and what saving it would do to the bank transactions that are already there. It opens itself when the rule has an error, when the text was changed from the bank's, and when it would update a rule that's there, so nothing that needs attention is hidden. It's for the bank transaction's own Account to start with, and "Any account" is the other choice, never another Account, since the rule has to fit the bank transaction it's made from. It has no amount condition, which is for the Filing rules page, and it's never offered for a split, which the filing-split controller turns off by disabling this fieldset. A description too short to make a rule from says so instead. %>
+<%# "Always file like this", on the filing form: a Filing rule made from what's done to this bank transaction, whether that's filing it or ignoring it, which files or ignores the bank transactions that come in with the same text in their description, the same way. It's the box and one muted sentence of what it would do, and the rest is under "Edit rule", closed to start with: the text, which starts as the bank's whole description without its numbers and symbols, and can be trimmed right there, and what saving it would do to the bank transactions that are already there. It opens itself when the rule has an error, when the text was changed from the bank's, and when it would update a rule that's there, so nothing that needs attention is hidden. It's for the bank transaction's own Account to start with, and "Any account" is the other choice, never another Account, since the rule has to fit the bank transaction it's made from. It has no amount condition, which is for the Filing rules page, and it's never offered for a split, which the filing-split controller turns off by disabling this fieldset. A description too short to make a rule from, once its numbers and symbols are ignored, says so instead. %>
 <% if offer.available? %>
   <%= render "components/panel", tag: :fieldset, class: "space-y-4",
         data: { filing_split_target: "rule", controller: "sweep-preview", sweep_preview_url_value: bank_transaction_rule_preview_path(offer.bank_transaction),
@@ -13,7 +13,7 @@
         <summary class="cursor-pointer font-medium">Edit rule</summary>
         <div class="space-y-4 pt-4">
           <%= render "components/field", form: rule_form, attribute: :text, label: "Text to look for",
-                hint: "Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
+                hint: "Capital letters, extra spaces, numbers and symbols like # and / are ignored. At least 3 characters." do |field| %>
             <%= rule_form.text_field :text, data: { action: "input->sweep-preview#update" }, **field %>
           <% end %>
 
@@ -35,5 +35,5 @@
     <% end %>
   <% end %>
 <% else %>
-  <p class="text-base-content/70">A Filing rule needs at least 3 characters in the bank transaction's description, so Always file like this isn't offered for this one.</p>
+  <p class="text-base-content/70">A Filing rule needs at least 3 characters in the bank transaction's description once numbers and symbols are ignored, so Always file like this isn't offered for this one.</p>
 <% end %>

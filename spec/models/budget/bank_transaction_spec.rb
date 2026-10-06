@@ -152,6 +152,102 @@ RSpec.describe Budget::BankTransaction, type: :model do
     end
   end
 
+  # What a Filing rule compares: the description and the rule's text both cleaned of what changes from one bank transaction to the next, so
+  # that "Loblaws #1029" and "Loblaws #1031" are the same to it (#117). It's a function of its own, since `normalize_description` makes the content key.
+  describe ".normalize_for_matching" do
+    {
+      "Internet Banking E-TRANSFER 106121984683 James Graham-Hu" => "internet banking e-transfer james graham-hu",
+      "Hopp/O/2609160957" => "hopp",
+      "Presto Fare/Smzxv6Sckh" => "presto fare",
+      "Presto Fare/Shwqfxpddf" => "presto fare",
+      "Pioneer #41051" => "pioneer",
+      "Usps Po 0555550115" => "usps po",
+      "Dollarama #1595" => "dollarama",
+      "Dollarama #1673" => "dollarama",
+      "Loblaws #1029" => "loblaws"
+    }.each do |description, cleaned|
+      it "reads #{description.inspect} as #{cleaned.inspect}" do
+        expect(described_class.normalize_for_matching(description)).to eq(cleaned)
+      end
+    end
+
+    it "still trims, collapses whitespace and folds case, as normalize_description does" do
+      expect(described_class.normalize_for_matching("  LOBLAWS \t Straße Toronto ")).to eq("loblaws strasse toronto")
+    end
+
+    it "drops a word of 3 or more digits, or with no letters, and keeps a name with one or two digits in it" do
+      expect(described_class.normalize_for_matching("7-Eleven Store 34567")).to eq("7-eleven store")
+      expect(described_class.normalize_for_matching("3M Canada A1 Taxi")).to eq("3m canada a1 taxi")
+      expect(described_class.normalize_for_matching("Spotify 10.99 $12.50 - ref 4ab12")).to eq("spotify ref")
+      expect(described_class.normalize_for_matching("24/7 Fitness 2nd Floor")).to eq("fitness 2nd floor")
+    end
+
+    it "turns # / * \\ _ and , into spaces and keeps - ' & @ and . inside a word" do
+      expect(described_class.normalize_for_matching("PAYPAL *SPOTIFY_CA,ON")).to eq("paypal spotify ca on")
+      expect(described_class.normalize_for_matching("Back\\slash")).to eq("back slash")
+      expect(described_class.normalize_for_matching("McDonald's H&M apple.com bob@example.com")).to eq("mcdonald's h&m apple.com bob@example.com")
+    end
+
+    it "trims punctuation at a word's ends" do
+      expect(described_class.normalize_for_matching("(Toronto) Costco. -Wholesale- \"Gas\"")).to eq("toronto costco wholesale gas")
+    end
+
+    it "drops one-letter words" do
+      expect(described_class.normalize_for_matching("J Graham-Hu e transfer a&w")).to eq("graham-hu transfer a&w")
+    end
+
+    it "drops a single final word after a /, once, and only when it is the last word" do
+      expect(described_class.normalize_for_matching("Apple.com/Bill")).to eq("apple.com")
+      expect(described_class.normalize_for_matching("Pay/Bob")).to eq("pay")
+      expect(described_class.normalize_for_matching("Foo/Bar/Baz")).to eq("foo bar")
+      expect(described_class.normalize_for_matching("E-Transfer/James Graham-Hu")).to eq("e-transfer james graham-hu")
+      expect(described_class.normalize_for_matching("Presto Fare/")).to eq("presto fare")
+    end
+
+    it "is nothing for a description that is nothing but noise" do
+      expect(described_class.normalize_for_matching("5551234567")).to eq("")
+      expect(described_class.normalize_for_matching("#12 / 34 *")).to eq("")
+      expect(described_class.normalize_for_matching("   ")).to eq("")
+    end
+
+    it "changes nothing when it's cleaned again, which a rule's text and its own bank transaction's description depend on" do
+      [ "Internet Banking E-TRANSFER 106121984683 James Graham-Hu", "Hopp/O/2609160957", "Foo/Bar/Baz", "7-Eleven #123 / Store 9", "PAYPAL *SPOTIFY_CA,ON",
+        "Back\\slash x", "Bäckerei Straße 12", "Presto Fare/", "((a)) -b- c.d.", "", "12 34" ].each do |description|
+        once = described_class.normalize_for_matching(description)
+
+        expect(described_class.normalize_for_matching(once)).to eq(once), "#{description.inspect} read as #{once.inspect}, which reads as something else"
+      end
+    end
+  end
+
+  describe "#description_for_matching" do
+    it "is the description as a Filing rule reads it, without its numbers and symbols" do
+      transaction = build(:budget_bank_transaction, description: "  LOBLAWS \t #1234   Toronto ")
+
+      expect(transaction.description_for_matching).to eq("loblaws toronto")
+    end
+
+    it "follows the description when it changes" do
+      transaction = build(:budget_bank_transaction, description: "Loblaws #1")
+      expect(transaction.description_for_matching).to eq("loblaws")
+
+      transaction.description = "Costco #2"
+
+      expect(transaction.description_for_matching).to eq("costco")
+    end
+
+    it "leaves the content key alone, so a row that differs only by its number is still another row and a re-import still finds its own" do
+      account = create(:budget_account)
+      first = create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 15), amount: -5, description: "Loblaws #1029")
+      second = create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 15), amount: -5, description: "Loblaws #1031")
+
+      expect(first.description_for_matching).to eq(second.description_for_matching)
+      expect(first.content_key).not_to eq(second.content_key)
+      expect(first.occurrence).to eq(1)
+      expect(second.occurrence).to eq(1)
+    end
+  end
+
   describe ".newest_first" do
     it "orders by date, and by the order they were made in within a day" do
       account = create(:budget_account)

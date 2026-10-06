@@ -1,5 +1,5 @@
 # The Filing rule that filing or ignoring a bank transaction by hand offers to make: "Always file like this". The text it would look for
-# starts as the bank's whole description, normalised, and can be trimmed right there. It's for the bank transaction's own Account to start
+# starts as the bank's whole description as a rule reads it, which is without its numbers and symbols (#117), and can be trimmed right there. It's for the bank transaction's own Account to start
 # with, which is what a rule usually should be, and a person can choose any Account instead; it's never for another Account, since the rule
 # has to fit the bank transaction it's made from. There's no amount condition, which is for the Filing rules page. What it sets is what the person does: a Spend from an envelope, a Refund to one, a Deposit, or Ignore.
 #
@@ -48,12 +48,13 @@ class Budget::FilingRule::Offer
   end
 
   # A rule needs text of at least 3 characters, and the text is the bank's description until it's edited, so a shorter description has
-  # none to offer.
+  # none to offer, which includes one that's nothing but numbers and symbols: there's no fallback to the raw description, since a rule
+  # for one bank transaction's number would never fit another.
   def available?
     default_text.length >= Budget::FilingRule::MIN_TEXT_LENGTH
   end
 
-  # The bank's whole description, as it's matched.
+  # The bank's whole description, as it's matched: without its numbers and symbols.
   def default_text
     bank_transaction.description_for_matching
   end
@@ -64,7 +65,8 @@ class Budget::FilingRule::Offer
     errors.any? || normalized_text != default_text || existing_rule.present?
   end
 
-  # The text as a rule keeps it, which is how the bank's description is read for matching.
+  # The text as a rule keeps it, which is how the bank's description is read for matching, so what's typed with a number in it is the
+  # same text without it.
   def normalized_text
     Budget::FilingRule.normalize_value_for(:text, text.to_s)
   end
@@ -141,9 +143,10 @@ class Budget::FilingRule::Offer
       false
     end
 
-    # The rule that already has these conditions, changed to what's been done, or a new one.
+    # The rule that already has these conditions, changed to what's been done, or a new one. It's given the text as it was typed, which it keeps
+    # as `normalized_text` says, so that a text that's nothing but numbers and symbols is told apart from none.
     def build_rule(outcome:, envelope_id:)
-      (existing_rule || Budget::FilingRule.new(budget: budget, text: normalized_text, account_id: account_id)).tap { |rule| rule.assign_attributes(outcome: outcome, envelope_id: envelope_id) }
+      (existing_rule || Budget::FilingRule.new(budget: budget, text: text.to_s, account_id: account_id)).tap { |rule| rule.assign_attributes(outcome: outcome, envelope_id: envelope_id) }
     end
 
     # Its text has to be one a rule can have, and part of the bank's description, or it wouldn't fit the bank transaction it's made from.

@@ -129,7 +129,8 @@ FactoryBot.define do
   # unless it says otherwise, with no Account or amount condition. The traits are the other outcomes.
   factory :budget_filing_rule, class: "Budget::FilingRule" do
     budget
-    sequence(:text) { |n| "merchant #{n}" }
+    # Letters and not a number, since a rule's text is read without its numbers (#117) and two rules can't have the same text.
+    sequence(:text) { |n| "merchant-#{n.to_s.tr("0-9", "a-j")}" }
     outcome { "spend" }
     envelope { association :budget_envelope, budget: budget }
 

@@ -2,8 +2,8 @@
 # Budgie files it the way the rule says, straight away and through the same filing operation a person uses, or ignores it
 # (ADR 0012). It never changes what is already filed or ignored.
 #
-# It fits a bank transaction by the description (the rule's text is contained in it) and, if it has them, by Account and by an
-# exact amount. It sets one outcome for the whole amount: a Spend from an envelope, a Refund to one, a Deposit, or Ignore. There are
+# It fits a bank transaction by the description (the rule's text is contained in it, both read without their numbers and symbols, #117)
+# and, if it has them, by Account and by an exact amount. It sets one outcome for the whole amount: a Spend from an envelope, a Refund to one, a Deposit, or Ignore. There are
 # no splits, and nothing else is set: the record's description is the bank's, and a Deposit's month is its date's.
 #
 # It belongs to its budget and never to a user. It has no stored "active" flag: it's inactive while its envelope is archived, and
@@ -13,6 +13,8 @@ class Budget::FilingRule < ApplicationRecord
   OUTCOMES = %w[ spend refund deposit ignore ].freeze
   # A shorter text would fit nearly everything.
   MIN_TEXT_LENGTH = 3
+  # What's said of a text that's too short, which is counted once its numbers and symbols are ignored, since "#1234" is nothing.
+  TEXT_TOO_SHORT = "needs at least #{MIN_TEXT_LENGTH} characters once numbers and symbols are ignored".freeze
   # What's said when two saves of the same conditions race: the validation looks for the other rule before it's saved, so only the unique index
   # sees it.
   SAVED_A_MOMENT_AGO = "Another Filing rule with the same text, Account and amount was saved a moment ago. Try again.".freeze
@@ -24,12 +26,13 @@ class Budget::FilingRule < ApplicationRecord
   # What it filed or ignored. Deleting the rule leaves them as they are, only with no rule to say which one did it.
   has_many :bank_transactions, dependent: :nullify
 
-  # The way a bank transaction's description is for matching (ADR 0010), so that "LOBLAWS  #1234" is text a description has.
-  normalizes :text, with: ->(text) { Budget::BankTransaction.normalize_description(text) }
+  # The way a bank transaction's description is for matching, without its numbers and symbols (#117), so that "LOBLAWS  #1234" is saved as
+  # "loblaws", which is text a description has.
+  normalizes :text, with: ->(text) { Budget::BankTransaction.normalize_for_matching(text) }
 
   before_validation :leave_out_envelope_that_the_outcome_has_none_of
 
-  validates :text, presence: true, length: { minimum: MIN_TEXT_LENGTH }
+  validate :text_is_long_enough
   validates :outcome, presence: true
   validates :outcome, inclusion: { in: OUTCOMES }, allow_blank: true
   # The money rule is for an amount that's there: a rule without one fits any amount.
@@ -96,14 +99,23 @@ class Budget::FilingRule < ApplicationRecord
     suits_money?(bank_transaction.amount) &&
       (account_id.nil? || account_id == bank_transaction.account_id) &&
       (amount.nil? || amount == bank_transaction.amount) &&
-      bank_transaction.description_for_matching.include?(text)
+      bank_transaction.description_for_matching.include?(text_for_matching)
+  end
+
+  # The text as it's matched. A rule saved with the numbers in its text, before they were ignored (#117), is read without them too, so that it
+  # keeps fitting until it's edited; for any other it's the text itself, since cleaning it again changes nothing. It's kept for as long as
+  # the text is the same, since an Import matches every row against every rule.
+  def text_for_matching
+    @text_for_matching = nil unless @text_matched == text
+    @text_matched = text
+    @text_for_matching ||= Budget::BankTransaction.normalize_for_matching(text.to_s)
   end
 
   # How specific it is, to compare with another's: an exact amount beats none, then a pinned Account beats any Account, then longer
   # text, then the most recently edited, and the newer rule last, so that the order is total. Greater is more specific. A rule
   # that's changed and not yet saved counts as edited now, which is what saving it will make it.
   def specificity
-    [ amount.nil? ? 0 : 1, account_id.nil? ? 0 : 1, text.length, (changed? ? Time.current : updated_at), id || Float::INFINITY ]
+    [ amount.nil? ? 0 : 1, account_id.nil? ? 0 : 1, text_for_matching.length, (changed? ? Time.current : updated_at), id || Float::INFINITY ]
   end
 
   private
@@ -119,6 +131,13 @@ class Budget::FilingRule < ApplicationRecord
     # A Deposit and Ignore have no envelope, which the table says too, so one that a form sends along with them is left out.
     def leave_out_envelope_that_the_outcome_has_none_of
       self.envelope = nil unless needs_envelope?
+    end
+
+    # Nothing typed is blank, and what's too short is counted once its numbers and symbols are left out, which is what the text was saved as.
+    def text_is_long_enough
+      return if text.to_s.length >= MIN_TEXT_LENGTH
+
+      errors.add(:text, text_before_type_cast.to_s.strip.empty? ? :blank : TEXT_TOO_SHORT)
     end
 
     def amount_is_not_zero

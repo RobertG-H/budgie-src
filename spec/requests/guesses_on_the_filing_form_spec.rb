@@ -67,7 +67,7 @@ RSpec.describe "A Guess on the filing form", type: :request do
       assert_select "input[type=date][name='filing[records][0][date]'][value='2026-10-02']"
       assert_select "input[type=number][name='filing[records][0][amount]'][value='100.00']"
       assert_select "input[type=checkbox][name='filing[rule][make]'][checked]"
-      assert_select "input[type=text][name='filing[rule][text]'][value='costco #123']"
+      assert_select "input[type=text][name='filing[rule][text]'][value='costco']"
     end
 
     it "has no Guess, and starts as it always has, for a bank transaction nothing is like" do

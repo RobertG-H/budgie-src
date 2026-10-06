@@ -118,14 +118,40 @@ class Budget::BankTransaction < ApplicationRecord
     description.squish.downcase(:fold)
   end
 
-  # The description as a Filing rule reads it: trimmed, whitespace collapsed and case folded, here in Ruby as the rule's own text is, so
-  # the two can't disagree over an unusual space or case fold the way the database's `normalized_description` could, which is only
-  # SQL's idea of the same thing. It's kept for as long as the description is the same, since an Import matches every row against
-  # every rule.
+  # What a bank puts between a merchant and a reference to it, which are spaces to a Filing rule: "Pioneer #41051", "Presto Fare/Smzxv6Sckh".
+  NOISE_SEPARATORS = %r{[#/*\\_,]}
+  # The last word after a "/", with no other "/" or space in it: a reference to this one bank transaction ("Presto Fare/Shwqfxpddf").
+  TRAILING_REFERENCE = %r{/[^\s/]+\z}
+  # Punctuation at either end of a word, which is no part of it ("(toronto)", "costco.").
+  WORD_EDGES = /\A[^\p{L}\p{N}]+|[^\p{L}\p{N}]+\z/
+  # A word with this many digits is a number: an id, a store number or a reference ("41051"), where one or two are part of a name ("7-eleven", "3m").
+  NUMBER_DIGITS = 3
+
+  # A description, or a rule's text, as a Filing rule compares them, which is without what changes from one bank transaction to the next
+  # (#117): "Loblaws #1029" and "Loblaws #1031" are both "loblaws", and "Internet Banking E-TRANSFER 106121984683 James Graham-Hu" is
+  # "internet banking e-transfer james graham-hu". Squished and case folded as `normalize_description` does, then a single last word after
+  # a "/" is dropped, `# / * \ _ ,` are spaces, punctuation at a word's ends is trimmed, and a word is dropped when it has no letter, has
+  # three or more digits, or is one character. What's left keeps its hyphens, apostrophes, ampersands, at signs and dots inside a word. It
+  # changes nothing when it's applied again, which the text of a rule needs, as does a form's default text fitting its own bank transaction.
+  #
+  # It's a function of its own, and `normalize_description` is not changed, since the content key is made from that one and a key is never
+  # recomputed (ADR 0010).
+  def self.normalize_for_matching(text)
+    words = normalize_description(text).sub(TRAILING_REFERENCE, "").gsub(NOISE_SEPARATORS, " ").split.filter_map do |word|
+      word = word.gsub(WORD_EDGES, "")
+      word unless word.length < 2 || !word.match?(/\p{L}/) || word.scan(/\p{N}/).size >= NUMBER_DIGITS
+    end
+
+    words.join(" ")
+  end
+
+  # The description as a Filing rule reads it (`normalize_for_matching`), here in Ruby as the rule's own text is, so the two can't disagree
+  # over an unusual space or case fold the way the database's `normalized_description` could, which is only SQL's idea of the same thing.
+  # It's kept for as long as the description is the same, since an Import matches every row against every rule.
   def description_for_matching
     @description_for_matching = nil unless @description_matched == description
     @description_matched = description
-    @description_for_matching ||= self.class.normalize_description(description)
+    @description_for_matching ||= self.class.normalize_for_matching(description)
   end
 
   def ignored?

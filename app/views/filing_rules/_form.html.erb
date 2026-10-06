@@ -12,7 +12,7 @@
   <%= render "form_errors", record: filing_rule %>
 
   <%= render "components/field", form: form, attribute: :text, label: "Text to look for",
-        hint: "Bank transactions with this text in their description. Capital letters and extra spaces don't matter. At least 3 characters." do |field| %>
+        hint: "Bank transactions with this text in their description. Capital letters, extra spaces, numbers and symbols like # and / are ignored. At least 3 characters." do |field| %>
     <%= form.text_field :text, required: true, autofocus: filing_rule.new_record?, **field %>
   <% end %>
 
