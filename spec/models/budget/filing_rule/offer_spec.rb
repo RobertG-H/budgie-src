@@ -57,6 +57,24 @@ RSpec.describe Budget::FilingRule::Offer do
     end
   end
 
+  describe "in an Account that has Filing rules off" do
+    before { chequing.update!(files_with_rules: false) }
+
+    it "isn't made, whether the box is ticked or not, so a rule never comes from a bank transaction nothing would file by rule" do
+      expect(offer(make: true)).not_to be_make
+      expect(offer).not_to be_make
+      expect(offer).not_to be_account_files_with_rules
+    end
+
+    it "is made as ever in an Account that has them on" do
+      chequing.update!(files_with_rules: true)
+
+      expect(offer(make: true)).to be_make
+      expect(offer).to be_account_files_with_rules
+      expect(offer(make: false)).not_to be_make
+    end
+  end
+
   # What changes from one bank transaction to the next isn't part of the rule it offers (#117).
   describe "its text" do
     let!(:etransfer) { create(:budget_bank_transaction, account: chequing, description: "Internet Banking E-TRANSFER 106121984683 James Graham-Hu", amount: 80) }

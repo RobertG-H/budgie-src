@@ -6,7 +6,7 @@
 #
 # It's for the bank transactions that have just come in, which an Import creates, and for a sweep when a rule is saved. It never
 # acts on one that's already filed or ignored: that's judged once their rows are locked, so one that was filed since it was looked at
-# is left alone. Un-filing and un-ignoring never come here, or un-filing a row that a rule filed would file it again at once.
+# is left alone. Nor does it act on one in an Account that has Filing rules off (`files_with_rules`), which is left for a person to file or ignore. Un-filing and un-ignoring never come here, or un-filing a row that a rule filed would file it again at once.
 #
 # The rules are loaded once, matching is in Ruby, and the records, the links, the note of which rule did it and the ignoring are each
 # a statement for however many there are, so it makes the same number of queries for 10 bank transactions as for 1,000 and for 1
@@ -28,11 +28,10 @@ class Budget::FilingRule::Applier
     end
   end
 
-  # `rules` are the budget's active rules, with their envelopes, which is all of them unless it's given others.
+  # `rules` are the budget's active rules, with their envelopes and Accounts, which is all of them unless it's given others.
   def initialize(budget, rules: nil)
     @budget = budget
     @rules = rules || budget.filing_rules.active.to_a
-    @matcher = Budget::FilingRule::Matcher.new(@rules)
   end
 
   attr_reader :rules
@@ -41,7 +40,7 @@ class Budget::FilingRule::Applier
   # that rule wins, such as when it's a rule that was only just saved.
   def claims(bank_transactions, only: nil)
     bank_transactions.filter_map do |bank_transaction|
-      rule = @matcher.rule_for(bank_transaction)
+      rule = matcher.rule_for(bank_transaction)
       Claim.new(bank_transaction: bank_transaction, rule: rule) if rule && (only.nil? || rule == only)
     end
   end
@@ -60,6 +59,11 @@ class Budget::FilingRule::Applier
   end
 
   private
+    # Matched in Ruby, and made when it's first needed: a budget with no rules is never asked which of its Accounts have Filing rules off.
+    def matcher
+      @matcher ||= Budget::FilingRule::Matcher.for(@budget, rules: @rules)
+    end
+
     # The claims whose bank transactions are still unfiled, which is only known once their rows are locked: the locks are held until
     # the database transaction ends, so nothing can file or ignore them in between.
     def still_unfiled(claims)

@@ -84,9 +84,9 @@ A bank transaction Budgie won't file, such as a card payment between the user's 
 _Avoid_: Hidden, skipped
 
 **Filing rule**:
-A standing instruction, such as "anything from Loblaws goes to Groceries", that files the bank transactions it fits the same way each time, or ignores them. It acts on bank transactions as they come in, and on the unfiled ones when it's saved, never on ones already filed or ignored. It ignores numbers and symbols in a description, so "Loblaws #1029" and "Loblaws #1031" are the same to it.
+A standing instruction, such as "anything from Loblaws goes to Groceries", that files the bank transactions it fits the same way each time, or ignores them. It acts on bank transactions as they come in, and on the unfiled ones when it's saved, never on ones already filed or ignored, and never on those in an Account that has Filing rules off. It ignores numbers and symbols in a description, so "Loblaws #1029" and "Loblaws #1031" are the same to it.
 _Avoid_: Category rule, mapping, auto-categorisation
 
 **Guess**:
-The envelope and kind Budgie proposes for an unfiled bank transaction that no filing rule fits, from how similar ones were filed. It only suggests, and filing stays the user's.
+The envelope and kind Budgie proposes for an unfiled bank transaction that no filing rule that can act on it fits, from how similar ones were filed. It only suggests, and filing stays the user's.
 _Avoid_: Suggestion, prediction

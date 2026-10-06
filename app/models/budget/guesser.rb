@@ -9,7 +9,8 @@
 #
 # It's for bank transactions that are unfiled, and read back from the database, which works out their normalised description. A Filing rule
 # beats a Guess: a bank transaction that an active rule fits has none, since the rule files it, and a rule for an archived envelope is
-# inactive, so a Guess can still show for what it would fit. Nothing is stored or created, so there's nothing to go stale when a record is
+# inactive, so a Guess can still show for what it would fit. Only the rules that can act on a bank transaction count: none can on one in an Account that has
+# Filing rules off, so it keeps its Guess whatever fits it, since nothing but a person will file it. Nothing is stored or created, so there's nothing to go stale when a record is
 # edited or a rule changes, and it makes the same number of queries however many bank transactions it's asked about and however many the
 # Budget has filed.
 class Budget::Guesser
@@ -25,7 +26,7 @@ class Budget::Guesser
     return {} if bank_transactions.empty?
 
     # The rules are loaded once, for all of them.
-    matcher = Budget::FilingRule::Matcher.new(@budget.filing_rules.active)
+    matcher = Budget::FilingRule::Matcher.for(@budget)
     unclaimed = bank_transactions.reject { |bank_transaction| matcher.rule_for(bank_transaction) }
     return {} if unclaimed.empty?
 

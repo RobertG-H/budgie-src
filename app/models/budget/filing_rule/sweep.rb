@@ -11,6 +11,9 @@
 # transaction that a more specific rule fits is that rule's, as it would have been in an Import. The rule can be new, or changed and not yet
 # saved, which is how a form counts what saving it would do: it replaces its saved self, and counts as edited now.
 #
+# An Account that has Filing rules off (`files_with_rules`) has every bank transaction wait for a person, so a sweep leaves its bank transactions out of what it
+# files, what it counts and what it says a more specific rule files, whichever rule is being saved. A rule pinned to one is inactive, so it sweeps nothing.
+#
 # `made_from` is the bank transaction a rule is being made from by hand: it's left out, being the one that's just been done, and only bank
 # transactions that went the same way (money in, or money out) are swept, so that an Ignore rule that fits either doesn't act on the other
 # way's bank transactions, which the person wasn't looking at.
@@ -54,7 +57,7 @@ class Budget::FilingRule::Sweep
 
     def candidates
       @candidates ||= begin
-        unfiled = budget.bank_transactions.unfiled
+        unfiled = budget.bank_transactions.unfiled.merge(Budget::Account.with_filing_rules)
         if @made_from
           same_way = @made_from.amount.positive? ? Budget::BankTransaction.money_in : Budget::BankTransaction.money_out
           unfiled = unfiled.where.not(id: @made_from.id).merge(same_way)

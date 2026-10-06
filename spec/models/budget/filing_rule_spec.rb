@@ -217,6 +217,62 @@ RSpec.describe Budget::FilingRule do
     end
   end
 
+  describe "being inactive" do
+    let(:off) { create(:budget_account, budget: budget, files_with_rules: false) }
+    let(:on) { create(:budget_account, budget: budget) }
+
+    it "is for a rule pinned to an Account that has Filing rules off, until they're turned on again" do
+      pinned = rule(account: off).tap(&:save!)
+
+      expect(pinned).to be_inactive
+      expect(pinned).to be_account_without_filing_rules
+      expect(Budget::FilingRule.active).to be_empty
+
+      off.update!(files_with_rules: true)
+
+      expect(pinned.reload).not_to be_inactive
+      expect(pinned).not_to be_account_without_filing_rules
+      expect(Budget::FilingRule.active).to contain_exactly(pinned)
+    end
+
+    it "isn't for a rule pinned to an Account that has them on, or for any Account, which only skips an Account that has them off" do
+      pinned = rule(account: on, text: "costco").tap(&:save!)
+      anywhere = rule.tap(&:save!)
+      off
+
+      expect(pinned).not_to be_inactive
+      expect(anywhere).not_to be_inactive
+      expect(anywhere).not_to be_account_without_filing_rules
+      expect(Budget::FilingRule.active).to contain_exactly(pinned, anywhere)
+    end
+
+    it "is for either reason, an archived envelope or an Account that has them off, and a rule with both is still one rule" do
+      both = rule(account: off).tap(&:save!)
+      groceries.update!(archived_at: Time.current)
+      anywhere = rule(text: "costco", envelope: create(:budget_envelope, budget: budget, name: "Household")).tap(&:save!)
+
+      expect(both.reload).to be_inactive
+      expect(Budget::FilingRule.active).to contain_exactly(anywhere)
+    end
+
+    it "can still be made, edited and deleted while its Account has them off, which an archived envelope also allows for a rule that's already there" do
+      pinned = rule(account: off)
+
+      expect(pinned.save).to be(true)
+      expect(pinned.update(text: "costco")).to be(true)
+      expect(pinned.destroy).to be_truthy
+    end
+
+    it "costs no query to ask of the rules of the active scope, which come with their Accounts" do
+      rule(account: off).tap(&:save!)
+      rule(account: on, text: "costco").tap(&:save!)
+
+      rules = Budget::FilingRule.active.to_a
+
+      expect(count_queries { rules.map(&:inactive?) }).to eq(0)
+    end
+  end
+
   describe "what it says it does" do
     it "is a phrase to follow 'it': what it files them as, or that it ignores them" do
       expect(rule(outcome: "spend").effect).to eq("files them as Spend from Groceries")

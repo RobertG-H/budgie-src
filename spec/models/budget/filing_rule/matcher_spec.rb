@@ -17,7 +17,7 @@ RSpec.describe Budget::FilingRule::Matcher do
   end
 
   def winner(bank_transaction, *rules)
-    described_class.new(rules).rule_for(bank_transaction)
+    described_class.new(rules, accounts_without_filing_rules: []).rule_for(bank_transaction)
   end
 
   describe "the text" do
@@ -161,6 +161,72 @@ RSpec.describe Budget::FilingRule::Matcher do
     it "is only a rule that sets an envelope: a Deposit and Ignore have none to be archived" do
       expect(rule("loblaws", :deposit)).not_to be_inactive
       expect(rule("costco", :ignore)).not_to be_inactive
+    end
+  end
+
+  # A person turns an Account's Filing rules off to review every bank transaction in it themselves, such as the ones a Splitwise expense becomes.
+  describe "an Account that has Filing rules off" do
+    let(:splitwise) { create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false) }
+
+    it "has no rule win for its bank transactions, whatever fits them, and leaves the other Accounts' alone" do
+      anywhere = rule("loblaws")
+      mine = bank_transaction
+      theirs = bank_transaction(account: splitwise)
+
+      matcher = described_class.new([ anywhere ], accounts_without_filing_rules: [ splitwise.id ])
+
+      expect(matcher.rule_for(mine)).to eq(anywhere)
+      expect(matcher.rule_for(theirs)).to be_nil
+    end
+
+    it "makes a rule pinned to it inactive, as one for an archived envelope is, and active again once its Filing rules are on" do
+      pinned = rule("loblaws", account: splitwise)
+      row = bank_transaction(account: splitwise)
+
+      expect(pinned.reload).to be_inactive
+      expect(winner(row, pinned)).to be_nil
+
+      splitwise.update!(files_with_rules: true)
+
+      expect(pinned.reload).not_to be_inactive
+      expect(winner(row, pinned)).to eq(pinned)
+    end
+
+    it "doesn't stop another Account's rules from winning, so a rule pinned to it doesn't hide a shorter one that's pinned elsewhere" do
+      elsewhere = rule("loblaws", account: account)
+      pinned = rule("loblaws toronto", account: splitwise)
+
+      expect(winner(bank_transaction, pinned.reload, elsewhere)).to eq(elsewhere)
+    end
+
+    describe ".for" do
+      it "asks the budget which of its Accounts have Filing rules off, and uses the budget's active rules" do
+        anywhere = rule("loblaws")
+        splitwise
+        matcher = described_class.for(budget)
+
+        expect(matcher.rule_for(bank_transaction)).to eq(anywhere)
+        expect(matcher.rule_for(bank_transaction(account: splitwise))).to be_nil
+        expect(described_class.for(create(:budget)).rule_for(bank_transaction)).to be_nil
+      end
+
+      it "uses the rules it's given instead, and leaves another budget's Accounts out of it" do
+        given = rule("loblaws")
+        other_budget_off = create(:budget_account, files_with_rules: false)
+
+        matcher = described_class.for(budget, rules: [ given ])
+
+        expect(matcher.rule_for(bank_transaction)).to eq(given)
+        expect(matcher.rule_for(bank_transaction(account: other_budget_off))).to eq(given)
+      end
+
+      it "asks one question about the Accounts, whatever the rules, so what uses it makes the same number of queries for any" do
+        splitwise
+        given = rule("loblaws")
+
+        expect(count_queries { described_class.for(budget, rules: []) }).to eq(1)
+        expect(count_queries { described_class.for(budget, rules: [ given ]) }).to eq(1)
+      end
     end
   end
 

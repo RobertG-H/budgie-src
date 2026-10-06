@@ -593,6 +593,105 @@ RSpec.describe Budget::Import, type: :model do
         expect(account.bank_transactions.sole).to be_unfiled
       end
 
+      describe "in an Account whose Filing rules are off" do
+        let(:file) { "2026-09-01,Paycheck,2800.00\n2026-09-02,LOBLAWS #1234,-82.45\n2026-09-03,PAYMENT THANK YOU,-250.00\n" }
+
+        before { account.update!(files_with_rules: false) }
+
+        it "leave every row unfiled, even the ones a rule fits, and say that none were filed or ignored" do
+          rule("loblaws")
+          rule("payment thank you", :ignore)
+          rule("paycheck", :deposit)
+
+          import = import_of(file)
+
+          expect(import).to have_attributes(filed_by_rules: 0, ignored_by_rules: 0, duplicates_skipped: 0)
+          expect(import.reload).to have_attributes(filed_by_rules: 0, ignored_by_rules: 0)
+          expect(account.bank_transactions.count).to eq(3)
+          expect(account.bank_transactions).to all(be_unfiled.and(have_attributes(filing_rule_id: nil)))
+          expect(Budget::Spend.count + Budget::Deposit.count).to eq(0)
+        end
+
+        it "leave out a rule pinned to the Account too, which is inactive, and one for any Account" do
+          rule("loblaws", account: account)
+          rule("payment thank you", :ignore)
+
+          import_of(file)
+
+          expect(account.bank_transactions).to all(be_unfiled)
+        end
+
+        it "still act in the budget's other Accounts, which is only the Account's own setting" do
+          other = create(:budget_account, budget: budget)
+          rule("loblaws")
+
+          import = import_of(file, account: other)
+
+          expect(import).to have_attributes(filed_by_rules: 1)
+          expect(other.bank_transactions.find_by(description: "LOBLAWS #1234")).to be_filed
+          expect(account.bank_transactions.count).to eq(0)
+        end
+
+        it "are still read as an Import, which is undone with the rest, and its rows counted as added" do
+          rule("loblaws")
+
+          import = import_of(file)
+
+          expect(import.added_count).to eq(3)
+          expect { import.undo }.to change(Budget::BankTransaction, :count).by(-3)
+        end
+
+        it "file nothing that's already there when they're turned on again, only what comes in from then on" do
+          rule("loblaws")
+          import_of(file)
+
+          account.update!(files_with_rules: true)
+          expect(account.bank_transactions).to all(be_unfiled)
+
+          later = import_of("2026-09-10,Loblaws,-12.00\n", file_name: "later.csv")
+
+          expect(later).to have_attributes(filed_by_rules: 1)
+          expect(account.bank_transactions.find_by(description: "Loblaws")).to be_filed
+          expect(account.bank_transactions.find_by(description: "LOBLAWS #1234")).to be_unfiled
+        end
+
+        it "leave what they filed as it is when they're turned off" do
+          account.update!(files_with_rules: true)
+          rule("loblaws")
+          import_of("2026-09-02,Loblaws,-82.45\n")
+
+          account.update!(files_with_rules: false)
+
+          expect(account.bank_transactions.sole).to be_filed
+        end
+
+        it "make the same number of queries for 10 rows as for 1,000" do
+          rule("alpha")
+          file_of = ->(count) { (1..count).map { |n| "2026-09-#{format("%02d", (n % 28) + 1)},alpha #{n},-#{n}.25\n" }.join }
+          warm_up, large_account = Array.new(2) { create(:budget_account, budget: budget, files_with_rules: false) }
+          import_of(file_of.(4), account: warm_up)
+
+          few = count_queries { import_of(file_of.(10)) }
+          many = count_queries { import_of(file_of.(1000), account: large_account) }
+
+          expect(many).to eq(few)
+        end
+      end
+
+      it "make the same number of queries when other Accounts of the budget have Filing rules off" do
+        rule("alpha")
+        file_of = ->(count) { (1..count).map { |n| "2026-09-#{format("%02d", (n % 28) + 1)},alpha #{n},-#{n}.25\n" }.join }
+        warm_up, small_account, large_account = Array.new(3) { create(:budget_account, budget: budget) }
+        3.times { create(:budget_account, budget: budget, files_with_rules: false) }
+        import_of(file_of.(4), account: warm_up)
+
+        few = count_queries { import_of(file_of.(10), account: small_account) }
+        many = count_queries { import_of(file_of.(1000), account: large_account) }
+
+        expect(many).to eq(few)
+        expect(large_account.bank_transactions.where.not(filing_rule_id: nil).count).to eq(1000)
+      end
+
       it "are only the budget's own" do
         create(:budget_filing_rule, text: "loblaws")
 

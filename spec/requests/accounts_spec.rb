@@ -86,9 +86,20 @@ RSpec.describe "Accounts", type: :request do
         assert_select "input[type=text][name='account[name]'][required]"
         assert_select "p", text: /Such as Chequing/
         assert_select "input[type=submit][value='Create Account']"
-        assert_select "input:not([type=hidden]):not([type=submit])", count: 1
+        assert_select "input:not([type=hidden]):not([type=submit]):not([type=checkbox])", count: 1
       end
       assert_select "a.btn[href='#{accounts_path}']", text: "Cancel"
+    end
+
+    it "has a box for filing its bank transactions with Filing rules, ticked to start with, that says what turning it off does" do
+      get new_account_path
+
+      assert_select "form" do
+        assert_select "label[for=account_files_with_rules]", text: "File its bank transactions with Filing rules"
+        assert_select "input[type=hidden][name='account[files_with_rules]'][value='0']"
+        assert_select "input[type=checkbox][name='account[files_with_rules]'][value='1'][checked][aria-describedby=account_files_with_rules_hint]"
+        assert_select "p#account_files_with_rules_hint", text: "Off: every bank transaction waits for you to file it or ignore it."
+      end
     end
   end
 
@@ -117,6 +128,21 @@ RSpec.describe "Accounts", type: :request do
   end
 
   describe "POST /accounts" do
+    it "files its bank transactions with Filing rules unless the box is cleared, which the form sends as 0" do
+      post accounts_path, params: { account: { name: "Chequing" } }
+      post accounts_path, params: { account: { name: "Visa", files_with_rules: "1" } }
+      post accounts_path, params: { account: { name: "Splitwise", files_with_rules: "0" } }
+
+      expect(budget.accounts.order(:name).pluck(:name, :files_with_rules)).to eq([ [ "Chequing", true ], [ "Splitwise", false ], [ "Visa", true ] ])
+    end
+
+    it "keeps the box as it was when the Account is refused" do
+      post accounts_path, params: { account: { name: "", files_with_rules: "0" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_select "input[type=checkbox][name='account[files_with_rules]']:not([checked])"
+    end
+
     it "adds an Account to the budget, and goes back to the list" do
       expect { post accounts_path, params: { account: { name: "Chequing" } } }.to change(budget.accounts, :count).by(1)
 
@@ -555,6 +581,18 @@ RSpec.describe "Accounts", type: :request do
       assert_select "form[data-turbo-confirm='Delete the Chequing account? Its 1 Filing rule is deleted with it.']"
     end
 
+    it "shows the box for Filing rules ticked, and not ticked for an Account that has them off" do
+      get edit_account_path(account)
+
+      assert_select "input[type=checkbox][name='account[files_with_rules]'][checked]"
+
+      account.update!(files_with_rules: false)
+      get edit_account_path(account)
+
+      assert_select "input[type=checkbox][name='account[files_with_rules]']"
+      assert_select "input[type=checkbox][name='account[files_with_rules]'][checked]", count: 0
+    end
+
     it "shows the default CSV format the Account has, chosen, and None when it has none" do
       cibc = create(:budget_csv_format, budget: budget, name: "CIBC")
 
@@ -584,6 +622,30 @@ RSpec.describe "Accounts", type: :request do
       expect(response).to redirect_to(account_path(account))
       follow_redirect!
       assert_select "[role=status]", text: "Account updated."
+    end
+
+    it "turns Filing rules off and on, and leaves the setting as it is when the form doesn't send it" do
+      patch account_path(account), params: { account: { name: "Chequing", files_with_rules: "0" } }
+      expect(account.reload.files_with_rules).to be(false)
+
+      patch account_path(account), params: { account: { name: "Joint chequing" } }
+      expect(account.reload).to have_attributes(files_with_rules: false, name: "Joint chequing")
+
+      patch account_path(account), params: { account: { name: "Joint chequing", files_with_rules: "1" } }
+      expect(account.reload.files_with_rules).to be(true)
+    end
+
+    it "changes nothing that already happened: turning Filing rules on files nothing, and turning them off leaves what a rule filed" do
+      account.update!(files_with_rules: false)
+      waiting = create(:budget_bank_transaction, account: account, description: "LOBLAWS #1", amount: -10)
+      create(:budget_filing_rule, budget: budget, text: "loblaws")
+      filed = create(:budget_bank_transaction, :filed, account: create(:budget_account, budget: budget), description: "LOBLAWS #2")
+
+      patch account_path(account), params: { account: { name: "Chequing", files_with_rules: "1" } }
+      patch account_path(filed.account), params: { account: { name: filed.account.name, files_with_rules: "0" } }
+
+      expect(waiting.reload).to be_unfiled
+      expect(filed.reload).to be_filed
     end
 
     it "refuses what's wrong with it, and changes nothing" do

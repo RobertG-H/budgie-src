@@ -9,7 +9,7 @@ RSpec.describe Budget::FilingRule::Applier do
   let!(:household) { create(:budget_envelope, budget: budget, name: "Household") }
 
   # As it's read back, which is what a rule is matched against: the database works out the normalised description.
-  def bank_transaction(description = "LOBLAWS #1234 TORONTO", amount: -82.45, date: Date.new(2026, 9, 12))
+  def bank_transaction(description = "LOBLAWS #1234 TORONTO", amount: -82.45, date: Date.new(2026, 9, 12), account: self.account)
     create(:budget_bank_transaction, account: account, description: description, amount: amount, date: date).reload
   end
 
@@ -211,6 +211,51 @@ RSpec.describe Budget::FilingRule::Applier do
     expect(Budget::Spend.count).to eq(0)
   end
 
+  # An Account whose Filing rules are off has every bank transaction wait for a person (`files_with_rules`), whichever rule fits it.
+  describe "an Account that has Filing rules off" do
+    let(:splitwise) { create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false) }
+
+    it "has its bank transactions left unfiled and unclaimed, even by a rule for any Account and one that ignores, while the other Accounts' are filed" do
+      loblaws = rule("loblaws")
+      payment = rule("payment thank you", :ignore)
+      mine = [ bank_transaction("LOBLAWS #1"), bank_transaction("PAYMENT THANK YOU") ]
+      theirs = [ bank_transaction("LOBLAWS #2", account: splitwise), bank_transaction("PAYMENT THANK YOU", account: splitwise) ]
+
+      expect(described_class.new(budget).claims(mine + theirs).map { |claim| [ claim.bank_transaction, claim.rule ] }).to eq([ [ mine.first, loblaws ], [ mine.last, payment ] ])
+      expect(apply(*(mine + theirs))).to have_attributes(filed: 1, ignored: 1)
+
+      expect(theirs.map { |row| row.reload.state }).to eq(%i[ unfiled unfiled ])
+      expect(theirs.map(&:filing_rule_id)).to all(be_nil)
+      expect(groceries.spends.pluck(:description)).to eq([ "LOBLAWS #1" ])
+    end
+
+    it "isn't acted on by a rule pinned to it, which is inactive" do
+      pinned = rule("loblaws", account: splitwise)
+      row = bank_transaction(account: splitwise)
+
+      expect(described_class.new(budget).rules).to be_empty
+      expect(described_class.new(budget).claims([ row ])).to be_empty
+      expect(apply(row)).to have_attributes(filed: 0, ignored: 0)
+      expect(pinned.reload).to be_inactive
+    end
+
+    it "is acted on again from the next bank transaction once it's turned on, and not for the ones that are already there" do
+      rule("loblaws")
+      before = bank_transaction("LOBLAWS #1", account: splitwise)
+      expect(apply(before)).to have_attributes(filed: 0)
+
+      splitwise.update!(files_with_rules: true)
+
+      expect(before.reload).to be_unfiled
+      expect(apply(bank_transaction("LOBLAWS #2", account: splitwise))).to have_attributes(filed: 1)
+    end
+
+    it "isn't asked about until there's a bank transaction to match, so a budget with no rules costs only the query that finds out" do
+      expect(count_queries { described_class.new(budget) }).to eq(1)
+      expect(count_queries { described_class.new(budget, rules: []) }).to eq(0)
+    end
+  end
+
   describe "the number of queries" do
     def rows(count, description)
       Array.new(count) { |n| bank_transaction("#{description} #{n}") }
@@ -228,6 +273,19 @@ RSpec.describe Budget::FilingRule::Applier do
       expect(large).to eq(small)
       expect(Budget::Spend.count).to eq(55)
       expect(Budget::BankTransaction.where.not(ignored_at: nil).count).to eq(55)
+    end
+
+    it "is the same with the budget's other Accounts having Filing rules off, and for bank transactions in them" do
+      rule("alpha")
+      off = create(:budget_account, budget: budget, files_with_rules: false)
+      few = rows(5, "alpha") + Array.new(5) { |n| bank_transaction("alpha off #{n}", account: off) }
+      many = rows(50, "alpha") + Array.new(50) { |n| bank_transaction("alpha off #{n}", account: off) }
+
+      small = count_queries { described_class.new(budget).apply(few) }
+      large = count_queries { described_class.new(budget).apply(many) }
+
+      expect(large).to eq(small)
+      expect(Budget::Spend.count).to eq(55)
     end
 
     it "is the same for 1 rule as for 100" do

@@ -16,5 +16,11 @@
     <% end %>
   <% end %>
 
+  <%# Whether the budget's Filing rules file or ignore this Account's bank transactions as they come in. Off, each waits for a person, and a rule pinned to the Account does nothing: for an Account whose bank transactions are all to be looked at, such as a Splitwise one. It changes nothing that's already filed, and turning it on files nothing that's already there. %>
+  <%= render "components/field", form: form, attribute: :files_with_rules, control: :checkbox, label: "File its bank transactions with Filing rules",
+        hint: "Off: every bank transaction waits for you to file it or ignore it." do |field| %>
+    <%= form.check_box :files_with_rules, **field %>
+  <% end %>
+
   <%= render "components/form_actions", form: form, cancel_path: cancel_path %>
 <% end %>

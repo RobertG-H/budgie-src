@@ -56,8 +56,9 @@ class AccountsController < ApplicationController
     end
 
     # `budget_id` is never one of them. The default CSV format comes as the id the form's select sends, which the model checks is one of this
-    # budget's, so another budget's is a validation error on the field and not another budget's format on this Account.
+    # budget's, so another budget's is a validation error on the field and not another budget's format on this Account. Whether Filing rules act on its
+    # bank transactions is the form's box, which sends 0 when it's cleared.
     def account_params
-      params.expect(account: [ :name, :default_csv_format_id ])
+      params.expect(account: [ :name, :default_csv_format_id, :files_with_rules ])
     end
 end

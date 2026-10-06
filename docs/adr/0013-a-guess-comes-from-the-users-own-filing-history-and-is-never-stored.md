@@ -1,6 +1,6 @@
 # A guess comes from the user's own filing history and is never stored
 
-When no Filing rule fits, a Guess for an unfiled bank transaction is worked out, when it is shown, from how that Budget's similar bank transactions were filed. Nothing leaves the server, the result is deterministic and can say why ("like LOBLAWS #1234 → Groceries"), and there is no Guess table to go stale when a record is edited or a rule changes, as no table stores a balance either.
+When no Filing rule that can act on it fits, a Guess for an unfiled bank transaction is worked out, when it is shown, from how that Budget's similar bank transactions were filed. Nothing leaves the server, the result is deterministic and can say why ("like LOBLAWS #1234 → Groceries"), and there is no Guess table to go stale when a record is edited or a rule changes, as no table stores a balance either.
 
 ## Considered Options
 

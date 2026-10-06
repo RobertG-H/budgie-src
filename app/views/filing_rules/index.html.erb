@@ -37,7 +37,17 @@
                   <%= link_to rule.text, edit_filing_rule_path(rule), class: "link" %><% if rule.inactive? %> <%= render "components/label_badge", text: "Inactive" %><% end %>
                 </th>
                 <td><%= rule.outcome.capitalize %></td>
-                <td class="whitespace-nowrap"><% if rule.account %><%= rule.account.name %><% else %><span class="text-base-content/70">Any account</span><% end %></td>
+                <td class="whitespace-nowrap">
+                  <% if rule.account %>
+                    <%= rule.account.name %>
+                    <%# Said in the row, since it's about this rule's own Account and the section's other rules may be active, and in the Account's cell, which it's about, so the row's name stays short for a screen reader to say with every cell. %>
+                    <% if rule.account_without_filing_rules? %>
+                      <span class="block min-w-40 max-w-56 whitespace-normal text-base-content/70">Inactive while its Account's Filing rules are off.</span>
+                    <% end %>
+                  <% else %>
+                    <span class="text-base-content/70">Any account</span>
+                  <% end %>
+                </td>
                 <td class="whitespace-nowrap text-right tabular-nums">
                   <% if rule.amount %><%= render "components/money", amount: rule.amount, budget: budget %><% else %><span class="text-base-content/70">Any amount</span><% end %>
                 </td>

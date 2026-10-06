@@ -5,6 +5,11 @@
 # It can remember which CSV format its bank's files use (`default_csv_format`), which an Import from the header uses to tell which Account
 # a file is for, and which its own Import form starts on. It's optional, set by hand on the Account's form or by the first Import into it
 # (Budget::Import#run), and an Import never changes one that's there.
+#
+# `files_with_rules` is on for every Account to start with, and means its bank transactions are filed or ignored by the Budget's Filing rules as they
+# come in (ADR 0012). Turned off, no rule acts on them, so each waits unfiled for a person, while a Guess can still help. It's only ever read when a
+# rule would act, which is when a bank transaction arrives and when a rule is saved: turning it on again files nothing that's already there, and turning it
+# off leaves what rules already filed as it is.
 class Budget::Account < ApplicationRecord
   belongs_to :budget
   belongs_to :default_csv_format, class_name: "Budget::CsvFormat", optional: true
@@ -23,6 +28,9 @@ class Budget::Account < ApplicationRecord
   validate :default_csv_format_is_in_this_budget
 
   scope :alphabetical, -> { order(Arel.sql("lower(name)"), :id) }
+  # Whether Filing rules act on their bank transactions (`files_with_rules`, see the top). One that's off has every bank transaction wait for a person.
+  scope :with_filing_rules, -> { where(files_with_rules: true) }
+  scope :without_filing_rules, -> { where(files_with_rules: false) }
 
   # The Import that ran last, which is the only one that can be undone, and the one whose CSV format the next Import
   # starts with. Imports made at the same moment go by the order they were made in.

@@ -403,6 +403,13 @@ ago, it's left unfiled for a person. A bank transaction remembers which rule fil
 or un-ignored; the filed records are ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), with no rule columns, and editing or deleting a rule
 never changes what it already filed.
 
+**An Account can keep Filing rules off.** For an Account where a person wants to look at every bank transaction themselves, such as a Splitwise Account, where each share of an expense should be
+reviewed before it becomes a record, the Account form has a "File its bank transactions with Filing rules" checkbox, on by default so every Account behaves as it did. While it's off, no rule acts on that
+Account's bank transactions, wherever rules act: an Import into it files and ignores none (its summary says 0), a sweep leaves them out of what it files and counts, and a rule pinned to it is inactive, in words, on the Filing rules page, as one for an archived envelope is. "Any account" rules stay
+active and only skip that Account's bank transactions. The filing form doesn't offer "Always file like this" for one of them, and says why, and a Guess still shows even when a rule fits it, since that rule won't file it, so "File N as guessed" still
+helps. It's one setting on the Account and not a flag on each rule, so an "Any account" rule doesn't have to know which Accounts to skip. Because rules only act when a bank transaction arrives and when a rule is saved, turning it on again files nothing that's already there, and turning
+it off leaves what rules already filed as it is ([ADR 0012](adr/0012-a-filing-rule-files-immediately-only-a-guess-suggests.md)).
+
 **Always file like this.** Filing or ignoring a bank transaction by hand offers to make a rule from what was done, ticked by default: the text starts as the
 bank's whole description without its numbers and symbols, and can be trimmed right there, before the wrong rule is made. It's for the bank transaction's own Account to start with, since a rule for "loblaws" in one Account usually shouldn't act on another's, and a person can choose any account instead; it's never for another Account, which wouldn't fit the bank transaction it's made from, and it has no amount condition. The sentence under the box says which Account it's for, and the count of other unfiled bank transactions it would file follows the choice. A rule with identical conditions (the same text and Account) is updated in place, and the form says so, and the rule is made in the same database transaction as the filing, so neither happens without the other. It's offered when
 filing as one record and when ignoring, and never for a split, since a split has no one outcome to repeat.
@@ -417,10 +424,10 @@ bank transactions fit" would be untrue.
 **Seeing and changing every rule.** The Filing rules page lists them all in one place, grouped by what they set, so "everything that goes to Groceries" is the Groceries section, and each section is a table of what its rules match and do: the text,
 what it does (Spend, Refund, Deposit or Ignore), its Account and amount (or "Any"), and how many bank transactions it filed or ignored, counting only those that still are. A rule can be edited or deleted from its row, and deleting asks first, names the rule and says that what it filed stays as it is; the page keeps its place after a delete. A rule can be made there from scratch, such as one that ignores a card's "PAYMENT THANK YOU" before the first Import, with an Account and an exact
 amount if it needs them, and edited or deleted. Because a filed record is ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), changing or deleting a rule only
-affects what comes in from then on; fixing what it already did means un-filing and filing again. A rule for an archived envelope is flagged inactive, in words, and does nothing until the envelope is
+affects what comes in from then on; fixing what it already did means un-filing and filing again. A rule for an archived envelope, or pinned to an Account that has Filing rules off, is flagged inactive, in words, and does nothing until the envelope is
 unarchived. Two rules with the same conditions aren't allowed, and the page says what the other one does.
 
-**Guesses.** When no Filing rule fits an unfiled bank transaction, Budgie can still guess: the filing form starts on the kind and envelope that the Budget's most similar bank
+**Guesses.** When no Filing rule that can act on an unfiled bank transaction fits it (none can in an Account that has Filing rules off), Budgie can still guess: the filing form starts on the kind and envelope that the Budget's most similar bank
 transactions were filed as, and says why, such as "Guess: like LOBLAWS #1234 → Groceries" ([ADR 0013](adr/0013-a-guess-comes-from-the-users-own-filing-history-and-is-never-stored.md)).
 It comes from the Budget's own filing history, so no bank description leaves the server, it gives the same answer for the same history, and it can name the bank transaction it was
 like. It's worked out when it's shown and stored nowhere, so there's no table of Guesses to go stale: edit or move a filed record and the next Guess follows. A Guess only suggests

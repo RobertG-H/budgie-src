@@ -105,6 +105,34 @@ RSpec.describe "A Guess on the filing form", type: :request do
       expect(visible_text).to include("Guess: like COSTCO #12 → Groceries")
     end
 
+    it "still has one when the Filing rule that fits is for any Account but the bank transaction's Account has Filing rules off, since that rule won't file it" do
+      filed("COSTCO #12", groceries)
+      create(:budget_filing_rule, budget: budget, envelope: household, text: "costco")
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      share = unfiled("COSTCO #123", amount: -100, account: splitwise)
+
+      get new_bank_transaction_filing_path(share)
+
+      expect(selected_envelope).to eq([ "Groceries" ])
+      expect(visible_text).to include("Guess: like COSTCO #12 → Groceries")
+      expect(visible_text).to include("Filing rules are off for Splitwise.")
+    end
+
+    it "still has one when the Filing rule that fits is pinned to the Account, which is inactive while its Filing rules are off, and not once they're on" do
+      filed("COSTCO #12", groceries)
+      splitwise = create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false)
+      create(:budget_filing_rule, budget: budget, envelope: household, text: "costco", account: splitwise)
+      share = unfiled("COSTCO #123", amount: -100, account: splitwise)
+
+      get new_bank_transaction_filing_path(share)
+      expect(visible_text).to include("Guess: like COSTCO #12 → Groceries")
+
+      splitwise.update!(files_with_rules: true)
+      get new_bank_transaction_filing_path(share)
+
+      expect(visible_text).not_to include("Guess")
+    end
+
     it "never proposes an archived envelope, so history in one gives no Guess" do
       old = create(:budget_envelope, budget: budget, name: "Old groceries")
       filed("COSTCO #12", old)

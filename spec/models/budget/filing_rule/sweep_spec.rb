@@ -134,6 +134,80 @@ RSpec.describe Budget::FilingRule::Sweep do
     end
   end
 
+  # An Account whose Filing rules are off has every bank transaction wait for a person, which a sweep leaves alone too, from the filing form
+  # (`made_from`) and from the Filing rules page.
+  describe "an Account that has Filing rules off" do
+    let(:splitwise) { create(:budget_account, budget: budget, name: "Splitwise", files_with_rules: false) }
+
+    it "has its bank transactions left out of what a rule files, counts and says it leaves to a more specific rule" do
+      mine = bank_transaction("LOBLAWS #1")
+      theirs = [ bank_transaction("LOBLAWS #2", account: splitwise), bank_transaction("LOBLAWS #3", account: splitwise) ]
+      loblaws = rule("loblaws")
+      rule("loblaws toronto", envelope: household)
+      specific_for_theirs = bank_transaction("LOBLAWS TORONTO", account: splitwise)
+
+      sweep = described_class.new(loblaws)
+
+      expect(sweep.bank_transactions).to eq([ mine ])
+      expect(sweep.count).to eq(1)
+      expect(sweep.left_to_other_rules).to be_empty
+      expect(sweep.run).to have_attributes(filed: 1, ignored: 0)
+      expect((theirs + [ specific_for_theirs ]).map { |row| row.reload.state }).to all(eq(:unfiled))
+      expect(groceries.spends.pluck(:description)).to eq([ "LOBLAWS #1" ])
+    end
+
+    it "has nothing to say about a rule pinned to it, which is inactive, and so fits nothing in effect" do
+      bank_transaction("LOBLAWS #1", account: splitwise)
+      pinned = rule("loblaws", account: splitwise)
+
+      sweep = described_class.new(pinned)
+
+      expect(sweep.count).to eq(0)
+      expect(sweep.left_to_other_rules).to be_empty
+      expect(sweep.run).to have_attributes(filed: 0, ignored: 0)
+    end
+
+    it "has the same left out for a rule being made from a bank transaction, and for an Ignore rule that fits either way" do
+      this_one = bank_transaction("PAYMENT THANK YOU")
+      same_way = bank_transaction("PAYMENT THANK YOU")
+      bank_transaction("PAYMENT THANK YOU", account: splitwise)
+      payment = rule("payment thank you", :ignore)
+
+      sweep = described_class.new(payment, made_from: this_one)
+
+      expect(sweep.bank_transactions).to eq([ same_way ])
+      expect(sweep.run).to have_attributes(ignored: 1)
+      expect(Budget::BankTransaction.ignored.pluck(:account_id)).to eq([ account.id ])
+    end
+
+    it "files what's there when its Filing rules are turned on and the rule is saved again, and not before" do
+      row = bank_transaction("LOBLAWS #1", account: splitwise)
+      loblaws = rule("loblaws")
+      expect(described_class.new(loblaws).run).to have_attributes(filed: 0)
+
+      splitwise.update!(files_with_rules: true)
+      expect(row.reload).to be_unfiled
+
+      expect(described_class.new(loblaws).run).to have_attributes(filed: 1)
+      expect(row.reload).to be_filed
+    end
+
+    it "makes the same number of queries with its bank transactions among the rest" do
+      few_rule = rule("alpha")
+      many_rule = rule("beta")
+      bank_transaction("ALPHA 1")
+      bank_transaction("ALPHA off", account: splitwise)
+      Array.new(50) { |n| bank_transaction("BETA #{n}") }
+      Array.new(50) { |n| bank_transaction("BETA off #{n}", account: splitwise) }
+
+      few = count_queries { described_class.new(few_rule).run }
+      many = count_queries { described_class.new(many_rule).run }
+
+      expect(many).to eq(few)
+      expect(groceries.spends.count).to eq(51)
+    end
+  end
+
   describe "#bank_transactions and #count" do
     it "are what #run would file or ignore, and don't change anything" do
       rows = Array.new(3) { |n| bank_transaction("LOBLAWS ##{n}") }

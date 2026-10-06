@@ -239,6 +239,38 @@ RSpec.describe Budget::Guesser do
         expect(guess(unfiled("LOBLAWS #5678"))).to have_attributes(envelope_id: groceries.id)
       end
 
+      # A rule beats a Guess because it files the bank transaction, which none does in an Account that has Filing rules off, so there's nothing to hide it.
+      it "is still worked out for a bank transaction in an Account that has Filing rules off, even when a rule for any Account fits it" do
+        filed("LOBLAWS #1234", groceries)
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "loblaws")
+        splitwise = create(:budget_account, budget: budget, files_with_rules: false)
+        in_splitwise = unfiled("LOBLAWS #5678", account: splitwise)
+
+        expect(guess(unfiled("LOBLAWS #5678"))).to be_nil
+        expect(guess(in_splitwise)).to have_attributes(kind: "spend", envelope_id: groceries.id, like: "LOBLAWS #1234")
+      end
+
+      it "is still worked out for a bank transaction a rule pinned to its Account fits, since that rule is inactive" do
+        filed("LOBLAWS #1234", groceries)
+        splitwise = create(:budget_account, budget: budget, files_with_rules: false)
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "loblaws", account: splitwise)
+        in_splitwise = unfiled("LOBLAWS #5678", account: splitwise)
+
+        expect(guess(in_splitwise)).to have_attributes(envelope_id: groceries.id)
+      end
+
+      it "is stopped by a rule again once the Account's Filing rules are turned on" do
+        filed("LOBLAWS #1234", groceries)
+        create(:budget_filing_rule, budget: budget, envelope: household, text: "loblaws")
+        splitwise = create(:budget_account, budget: budget, files_with_rules: false)
+        in_splitwise = unfiled("LOBLAWS #5678", account: splitwise)
+        expect(guess(in_splitwise)).to be_present
+
+        splitwise.update!(files_with_rules: true)
+
+        expect(guess(in_splitwise)).to be_nil
+      end
+
       it "is still worked out when a rule that doesn't fit exists, such as for the other way, another Account or another amount" do
         filed("LOBLAWS #1234", groceries)
         create(:budget_filing_rule, :refund, budget: budget, text: "loblaws")
@@ -293,6 +325,31 @@ RSpec.describe Budget::Guesser do
       guesses = described_class.new(budget).guesses([ unfiled("LOBLAWS #5678"), unfiled("COSTCO #99") ])
 
       expect(guesses.values.map(&:envelope_id)).to eq([ groceries.id ])
+    end
+
+    it "keeps the ones in an Account that has Filing rules off, whatever rule fits them, and leaves out the ones a rule files elsewhere" do
+      filed("LOBLAWS #1234", groceries)
+      create(:budget_filing_rule, budget: budget, envelope: household, text: "loblaws")
+      splitwise = create(:budget_account, budget: budget, files_with_rules: false)
+      claimed = unfiled("LOBLAWS #5678")
+      waiting = unfiled("LOBLAWS #9", account: splitwise)
+
+      guesses = described_class.new(budget).guesses([ claimed, waiting ])
+
+      expect(guesses.keys).to eq([ waiting.id ])
+    end
+
+    it "makes the same number of queries for 5 bank transactions as for 100, with some in Accounts that have Filing rules off" do
+      filed("LOBLAWS #1234", groceries)
+      create(:budget_filing_rule, budget: budget, envelope: household, text: "costco")
+      splitwise = create(:budget_account, budget: budget, files_with_rules: false)
+      few_rows = Array.new(5) { |n| unfiled("LOBLAWS ##{n}") }
+      many_rows = Array.new(100) { |n| n.even? ? unfiled("LOBLAWS ##{n}") : unfiled("COSTCO ##{n}", account: splitwise) }
+
+      few = count_queries { described_class.new(budget).guesses(few_rows) }
+      many = count_queries { described_class.new(budget).guesses(many_rows) }
+
+      expect(many).to eq(few)
     end
 
     it "makes the same number of queries for 5 bank transactions as for 100" do
