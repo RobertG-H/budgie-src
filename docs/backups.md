@@ -228,9 +228,23 @@ Fill each value in from 1Password in your editor: the **read-only** token's, for
 
 ## 4. Installing the host job
 
-Do this once per host, testing first, and only after `kamal setup` has created its `budgie-db`.
+Do this once per host: **testing first, then production.** The steps below are written for testing; for production, swap `testing` for `production` everywhere, and use production's own token.
+It installs the nightly job on the host, so it needs everything before it in this page, and a host that's already been through `kamal setup`, because the job dumps the `budgie-db` container that `setup` creates.
 
-**1. Write the host's token to a file on your laptop, outside the checkout**, so the repo, which is public, can never pick it up. Use `~/budgie-r2.env`, from the `…-write` token for that host, with the endpoint from its page:
+### 4a. Check you have what it needs
+
+| You need | From |
+| --- | --- |
+| The host's **write** token: its Access Key ID, Secret Access Key and endpoint | [Section 1d](#1d-the-four-tokens): `budgie-backup-testing-write` for testing, `budgie-backup-production-write` for production. In 1Password |
+| The two **public** keys, each starting `age1` | The table in [section 2](#the-two-recipients). The primary key's, then the recovery key's. Not the `AGE-SECRET-KEY-1...` lines: those never leave 1Password and the offline copy |
+| SSH access as `deploy` | `ssh budgie-testing true` works, as in [Provisioning the hosts](provisioning.md) |
+| `budgie-db` running on the host | `ssh budgie-testing 'docker ps --filter name=budgie-db --format "{{.Names}}: {{.Status}}"'` prints `budgie-db: Up ...` |
+
+Use the **write** token here, not the read-only one: the host has to upload. The read-only tokens are for GitHub and your laptop.
+
+### 4b. Put the host's token in a file outside the checkout
+
+On your laptop, in a new file at `~/budgie-r2.env`, outside the repo so that a public repo can never pick it up. Open it in your editor and type these three lines, replacing each `...` with the value from 1Password, with no quotes and no spaces around the `=`:
 
 ```
 R2_ACCESS_KEY_ID=...
@@ -238,21 +252,65 @@ R2_SECRET_ACCESS_KEY=...
 R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
 ```
 
-Then `chmod 600 ~/budgie-r2.env`.
+- `R2_ACCESS_KEY_ID` is 32 characters and `R2_SECRET_ACCESS_KEY` is 64. Both are hexadecimal. The script refuses anything else, and says which line it didn't like.
+- `R2_ENDPOINT` is the token's **endpoint**, with the account ID in it. It ends in `.r2.cloudflarestorage.com`, with no bucket name after it and no trailing slash.
 
-**2. Run the script**, with both public keys, passing the token on stdin:
+Then make it readable only by you:
+
+```sh
+chmod 600 ~/budgie-r2.env
+```
+
+### 4c. Copy the script to the host and run it
+
+From the repo root on your laptop. Replace the two `age1...` placeholders with the two public keys from 4a, **primary first, then recovery**:
 
 ```sh
 scp script/backup-setup.sh budgie-testing:
-ssh budgie-testing 'sudo bash backup-setup.sh testing --recipient age1<primary> --recipient age1<recovery>' < ~/budgie-r2.env
+ssh budgie-testing 'sudo bash backup-setup.sh testing --recipient age1<primary public key> --recipient age1<recovery public key>' < ~/budgie-r2.env
+```
+
+Each part:
+
+- `scp …` puts the script in `deploy`'s home directory on the host. `budgie-testing` is the name from your `~/.ssh/config`.
+- `sudo bash backup-setup.sh testing` runs it as root. The word after the script's name says which destination this host is, and so which bucket it uploads to: `testing` means `budgie-backups-testing`. **It has to match the host:** a testing host given `production` would write into production's bucket, though its token can't, and the script would stop at the bucket check.
+- Each `--recipient` is one `age` public key. There have to be exactly two, and different.
+- `< ~/budgie-r2.env` feeds the file to the script on stdin. That keeps the token out of your shell history, out of `ps` on the host and out of any file left behind on it: the only copy on the host is `/etc/budgie-backup.env`, which only root can read. That's different from `cloudflared`, whose token ends up in a world-readable unit.
+
+The script runs for under a minute, mostly installing `age` and `rclone`, and every section ends with what it did. A good run ends like this:
+
+```
+== Summary
+   <n> change(s) applied
+   testing backs up to budgie-backups-testing, encrypted to two age recipients
+
+== Next
+   Take the first dump now rather than waiting for 08:00 UTC:
+...
+```
+
+If it stops, the last line says why, and nothing on the host has changed unless it says `changed:` above it:
+
+| It says | Do this |
+| --- | --- |
+| `there's no running budgie-db container` | Run `kamal setup` for this destination first, see [Deploying](deployment.md#first-deploy-of-a-destination) |
+| `that token can't list budgie-backups-testing` | The token or the endpoint is wrong, or it's the wrong bucket's token. Check 4a and 4b |
+| `give exactly two --recipient arguments` or `doesn't look like an age public key` | The keys in the command. Each is `age1` followed by 58 characters, from the table in section 2 |
+| `R2_ACCESS_KEY_ID doesn't look like…` | A typo or a stray quote in `~/budgie-r2.env`, or the secret and the ID swapped |
+
+Fix it and run the same `ssh` line again: the script is safe to re-run, which is also how a token or a recipient is replaced later. On a host already set up this way it changes nothing and exits 0.
+
+### 4d. Delete the token file
+
+```sh
 rm ~/budgie-r2.env
 ```
 
-Reading the token from stdin keeps it out of your shell history, out of `ps` on the host and out of any file left behind on it: the only copy on the host is `/etc/budgie-backup.env`, which only root can read. That's different from `cloudflared`, whose token ends up in a world-readable unit.
+The master copy is in 1Password. Do this even if the script failed: a leftover file is a token on your disk.
 
-The script refuses to run on a host that hasn't been provisioned or that has no running `budgie-db`, installs `age` and `rclone` from Ubuntu's apt so that `unattended-upgrades` keeps them current, checks that the token can list the bucket before it changes anything, then writes the job, its two units and the env file, and enables the timer.
-It's safe to re-run, which is also how a token or a recipient is replaced: on a host already set up this way it changes nothing and exits 0.
-It ends with `Take the first dump now`:
+### 4e. Take the first dump now
+
+Rather than waiting for 08:00 UTC:
 
 ```sh
 ssh budgie-testing 'sudo systemctl start budgie-backup@nightly; sudo journalctl -u budgie-backup@nightly -n 6 --no-pager'
@@ -264,7 +322,9 @@ budgie-backup: uploading budgie_production-20261006T141502Z-nightly.dump.age (41
 budgie-backup: done: budgie_production-20261006T141502Z-nightly.dump.age is in budgie-backups-testing
 ```
 
-Then do production the same way, with `production` and its own token.
+It ends with `done:` and the dump's name. In the Cloudflare dashboard, `budgie-backups-testing`'s **Objects** now lists that file. If it ends any other way, the lines above say which step failed, and [Verify](#7-verify) has the same commands.
+
+Then do **production** the same way: 4a to 4e, with `production` in place of `testing` and its own token.
 
 **What a run does,** under `set -euo pipefail`: dump with the `postgres:18` image's own `pg_dump` into a `0700` temporary directory that's removed afterwards; check that `pg_restore --list` can read the archive; encrypt to both recipients; refuse to upload anything under 10 KB; upload with `rclone`; and check that R2 reports the size that was sent. Any failure leaves the unit failed and uploads nothing, and [the freshness check](#5-github-the-freshness-check) notices the missing dump.
 The unit is templated, `budgie-backup@.service`, and its instance is the reason for the dump: the timer starts `@nightly` at 08:00 UTC, which is after the 04:00 UTC reboot and after Eastern midnight has rolled the month, and `Persistent=true` makes a host that was down at 08:00 take it when it boots.
