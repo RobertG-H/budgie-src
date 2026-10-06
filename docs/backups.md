@@ -244,38 +244,65 @@ Use the **write** token here, not the read-only one: the host has to upload. The
 
 ### 4b. Put the host's token in a file outside the checkout
 
-On your laptop, in a new file at `~/budgie-r2.env`, outside the repo so that a public repo can never pick it up. Open it in your editor and type these three lines, replacing each `...` with the value from 1Password, with no quotes and no spaces around the `=`:
+The script reads the token from a small file that you make now and delete afterwards. It's three `NAME=value` lines, which are the three values from the token's page in Cloudflare (saved in 1Password in [section 1d](#1d-the-four-tokens)):
+
+| Line | The value to paste after the `=` | Looks like |
+| --- | --- | --- |
+| `R2_ACCESS_KEY_ID=` | The token's **Access Key ID** | 32 characters |
+| `R2_SECRET_ACCESS_KEY=` | The token's **Secret Access Key** | 64 characters |
+| `R2_ENDPOINT=` | The token's **endpoint**, the S3 URL with the account ID in it | `https://` then 32 characters, then `.r2.cloudflarestorage.com` |
+
+So the finished file looks like this, with made-up values (yours are different, and it has no quotes, no spaces around the `=` and no other lines):
 
 ```
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=0123456789abcdef0123456789abcdef
+R2_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+R2_ENDPOINT=https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com
 ```
 
-- `R2_ACCESS_KEY_ID` is 32 characters and `R2_SECRET_ACCESS_KEY` is 64. Both are hexadecimal. The script refuses anything else, and says which line it didn't like.
-- `R2_ENDPOINT` is the token's **endpoint**, with the account ID in it. It ends in `.r2.cloudflarestorage.com`, with no bucket name after it and no trailing slash.
+**It goes outside the repo,** so a public repo can never pick it up. Make it in your home directory, in any editor, for example:
 
-Then make it readable only by you:
+```sh
+nano ~/budgie-r2.env
+```
+
+Paste the three lines, save, and then make it readable only by you:
 
 ```sh
 chmod 600 ~/budgie-r2.env
 ```
 
+Make sure it's the **write** token's values for the host you're setting up: `budgie-backup-testing-write` for testing. The script checks that the token can reach `budgie-backups-testing` before it changes anything, so a wrong one is refused with nothing changed.
+
 ### 4c. Copy the script to the host and run it
 
-From the repo root on your laptop. Replace the two `age1...` placeholders with the two public keys from 4a, **primary first, then recovery**:
+There are two things to hand the script: **the two public keys**, which go on the command line, and **the token**, which goes in on stdin.
+
+**1. Put the two public keys in shell variables.** Run these in your terminal, replacing each value with the key from the table in [section 2](#the-two-recipients), primary first. They are the `age1...` lines, about 62 characters, and nothing else:
+
+```sh
+PRIMARY=age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+RECOVERY=age1yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+```
+
+If you haven't kept them, print a public key from its private one, as in section 2: `pbpaste | docker compose run --rm --no-deps -T --entrypoint age-keygen restore -y`, with the private key on the clipboard.
+Don't leave the `<` and `>` from the examples in your values, and don't paste the `AGE-SECRET-KEY-1...` line anywhere here. A `<` in a command is a redirect to the shell, which is the `syntax error near unexpected token` you get if you do.
+
+**2. Copy the script over, and run it:**
 
 ```sh
 scp script/backup-setup.sh budgie-testing:
-ssh budgie-testing 'sudo bash backup-setup.sh testing --recipient age1<primary public key> --recipient age1<recovery public key>' < ~/budgie-r2.env
+ssh budgie-testing "sudo bash backup-setup.sh testing --recipient $PRIMARY --recipient $RECOVERY" < ~/budgie-r2.env
 ```
 
-Each part:
+Use the double quotes exactly as written, so that your laptop fills in `$PRIMARY` and `$RECOVERY` before the command is sent.
+
+What each part means:
 
 - `scp …` puts the script in `deploy`'s home directory on the host. `budgie-testing` is the name from your `~/.ssh/config`.
-- `sudo bash backup-setup.sh testing` runs it as root. The word after the script's name says which destination this host is, and so which bucket it uploads to: `testing` means `budgie-backups-testing`. **It has to match the host:** a testing host given `production` would write into production's bucket, though its token can't, and the script would stop at the bucket check.
-- Each `--recipient` is one `age` public key. There have to be exactly two, and different.
-- `< ~/budgie-r2.env` feeds the file to the script on stdin. That keeps the token out of your shell history, out of `ps` on the host and out of any file left behind on it: the only copy on the host is `/etc/budgie-backup.env`, which only root can read. That's different from `cloudflared`, whose token ends up in a world-readable unit.
+- `sudo bash backup-setup.sh testing` runs it as root on the host. The word after the script's name says which destination this host is, and so which bucket it uploads to: `testing` means `budgie-backups-testing`. **It has to match the host.**
+- `--recipient $PRIMARY --recipient $RECOVERY` are the two `age` public keys the script will encrypt every dump to. There have to be exactly two, and different. "Running it with both public keys" is just that: both are on the command line.
+- `< ~/budgie-r2.env` at the end is how **the token is passed on stdin**. It feeds the file's contents to the script as its input, so the token never appears in the command line, your shell history, or `ps` on the host, and no file is left behind: the only copy on the host is `/etc/budgie-backup.env`, which only root can read. That's different from `cloudflared`, whose token ends up in a world-readable unit.
 
 The script runs for under a minute, mostly installing `age` and `rclone`, and every section ends with what it did. A good run ends like this:
 
