@@ -345,7 +345,7 @@ protects the rows its file skipped. It's offered on the Import's summary and bes
 it can't be, the page says why.
 
 **Filing and ignoring.** A bank transaction is unfiled, filed or ignored, and which is never stored: it's ignored if it has an ignore
-time, filed if it has a link to a record, and otherwise unfiled. Filing turns it into the Deposits, Spends and Refunds it was, which
+time, filed if it has a link to a record, and otherwise unfiled, except that one a sync found gone from Splitwise that was neither is none of the three (it's removed, and can't be filed). Filing turns it into the Deposits, Spends and Refunds it was, which
 must add up to its amount exactly ([ADR 0009](adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md)):
 money in is a Deposit or a Refund and money out is a Spend, and never a Reallocation, which moves money inside the budget. The records
 are made together with their links in one database transaction, so there's no partly filed state, and a record that's wrong creates
@@ -357,7 +357,8 @@ un-filing deletes the records, and un-ignoring makes the bank transaction unfile
 deleted like one typed in. What says where it came from is a link table for each kind, so the core tables have no import columns and a
 record can come from at most one bank transaction. Deleting a record deletes its link, which leaves the bank transaction unfiled when it
 was the last. Editing one so that the records no longer add up to the bank transaction doesn't block anything; the bank transaction
-shows a "Doesn't add up" flag, in words as well as colour, because a typo fixed on an imported record shouldn't be refused.
+shows a "Doesn't add up" flag, in words as well as colour, because a typo fixed on an imported record shouldn't be refused. So does a filed bank transaction whose amount, or
+sign, a sync changed afterwards, since a Refund can't stand for money out.
 
 **Splits.** A Costco charge of $100 can be filed as $60 from Groceries and $40 from Household, and a paycheck of $3,000 as a $2,800
 Deposit and a $200 Refund. The filing form can add records and remove them, and says what they add up to and what's left as it goes,

@@ -230,6 +230,21 @@ RSpec.describe "An Account's connection", type: :request do
       expect(account.bank_transactions).to be_empty
     end
 
+    it "says nothing was synced when something goes wrong that isn't Splitwise's, and logs it with the connection's id" do
+      allow(SyncSplitwise).to receive(:call).and_raise(ActiveRecord::StatementInvalid, "the database said no")
+      logged = StringIO.new
+      logger = ActiveSupport::Logger.new(logged)
+      Rails.logger.broadcast_to(logger)
+
+      post account_connection_sync_path(account)
+
+      expect(response).to redirect_to(account_path(account))
+      expect(flash[:alert]).to eq("Something went wrong, so nothing was synced. Try again later.")
+      expect(logged.string).to include("connection #{connection.id}", "the database said no")
+    ensure
+      Rails.logger.stop_broadcasting_to(logger)
+    end
+
     it "is turned away for a connection that's disconnected or needs reconnecting, without asking Splitwise" do
       connection.update_columns(needs_reconnect: true)
       post account_connection_sync_path(account)

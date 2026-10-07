@@ -11,20 +11,18 @@
 <% records = bank_transaction.filed_records %>
 <% rule = bank_transaction.filed_by_rule %>
 <% removed = bank_transaction.removed? %>
+<%# A removed one that was neither filed nor ignored has no state to say, which `state` says as :removed, so it has only its badge. A filed one has the badge below, beside Un-file. %>
+<% state_label = state.to_s.capitalize unless state == :removed %>
+<% flag_in_state_line = removed && state != :filed %>
 <% action_class = "btn btn-ghost btn-sm -ml-3" %>
 
 <%= render "components/record_row", href: (new_bank_transaction_filing_path(bank_transaction, **origin_params) if state == :unfiled),
       date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount, budget: budget, with_year: true,
       counterpart: (bank_transaction.account.name if show_account) do %>
-  <%# A filed one has its badge beside Un-file below. One that's neither filed nor ignored has it and no state, since it isn't one of the three. %>
-  <% if show_state || (removed && state != :filed) %>
+  <% if (show_state && state_label) || flag_in_state_line %>
     <span class="mt-1 flex flex-wrap items-center gap-2">
-      <% if show_state && state != :removed %>
-        <%= render "components/label_badge", text: state.to_s.capitalize %>
-      <% end %>
-      <% if removed && state != :filed %>
-        <%= render "components/warning_badge", text: "Deleted in Splitwise" %>
-      <% end %>
+      <%= render "components/label_badge", text: state_label if show_state && state_label %>
+      <%= render "components/warning_badge", text: "Deleted in Splitwise" if flag_in_state_line %>
     </span>
   <% end %>
 

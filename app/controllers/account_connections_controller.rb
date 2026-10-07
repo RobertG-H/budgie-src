@@ -4,8 +4,8 @@
 # It's found through the budget's Accounts, so another user's Account is a 404, and so is an Account that isn't synced.
 class AccountConnectionsController < ApplicationController
   include SplitwiseSignIn
+  include SyncedAccountScoped
 
-  before_action :set_account
   before_action :require_splitwise, only: :create
 
   def create
@@ -25,10 +25,4 @@ class AccountConnectionsController < ApplicationController
     @connection.disconnect!
     redirect_to account_path(@account), status: :see_other, notice: "Disconnected from #{@connection.provider_name}."
   end
-
-  private
-    def set_account
-      @account = Current.budget.accounts.find(params[:account_id])
-      @connection = @account.bank_connection or raise ActiveRecord::RecordNotFound
-    end
 end

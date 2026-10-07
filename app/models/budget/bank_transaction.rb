@@ -44,6 +44,8 @@ class Budget::BankTransaction < ApplicationRecord
   has_many :refund_links, class_name: "Budget::RefundLink", dependent: :restrict_with_error
 
   normalizes :description, with: ->(description) { description.strip }
+  # A blank id is no id, so a row with only that is refused for having neither it nor an Import, in the model as the database's check says.
+  normalizes :external_id, with: ->(external_id) { external_id.strip.presence }
 
   before_validation :set_content_key_and_occurrence, on: :create
 
@@ -59,13 +61,10 @@ class Budget::BankTransaction < ApplicationRecord
   # Neither ignored, filed as anything nor removed (gone from the provider it was synced from, so there's nothing to file). Left joins, so a bank
   # transaction with several links is still found once.
   scope :unfiled, -> { where(ignored_at: nil, removed_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
-  # Gone from the provider it was synced from, such as a Splitwise expense that was deleted, and not.
-  scope :removed, -> { where.not(removed_at: nil) }
-  scope :not_removed, -> { where(removed_at: nil) }
 
   # Filed as at least one record, and not ignored, whichever kind of record: found by what its links are, so one with several is
-  # still found once. With `unfiled` and `ignored`, every bank transaction is in exactly one of the three, and nothing is both
-  # ignored and filed, which the model refuses.
+  # still found once. With `unfiled` and `ignored`, every bank transaction is in exactly one of the three, except one that's removed
+  # and was neither filed nor ignored, which is in none, and nothing is both ignored and filed, which the model refuses.
   scope :filed, -> {
     where(ignored_at: nil).where(id: Budget::DepositLink.select(:bank_transaction_id))
       .or(where(ignored_at: nil).where(id: Budget::SpendLink.select(:bank_transaction_id)))
@@ -236,7 +235,12 @@ class Budget::BankTransaction < ApplicationRecord
   # Whether what it was filed as is the kind its money calls for: money out is Spends, and money in Deposits and Refunds (Budget::Filing). They are when it's
   # filed, and stop being if a sync turns money in into money out, or the other way. One that isn't filed has none to suit.
   def records_suit_the_sign?
-    amount.positive? ? spend_links.none? : (deposit_links.none? && refund_links.none?)
+    records_unsuited_to_the_sign.empty?
+  end
+
+  # The records that no longer suit its sign: Spends when it's money in, and Deposits and Refunds when it's money out.
+  def records_unsuited_to_the_sign
+    filed_records.select { |record| record.is_a?(Budget::Spend) == amount.positive? }
   end
 
   # The next unfiled bank transaction in `scope`, which is what working through a list one at a time goes to: the first unfiled one older than this

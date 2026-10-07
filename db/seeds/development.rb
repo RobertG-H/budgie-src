@@ -163,7 +163,7 @@ if splitwise_account.bank_transactions.none?
     Budget::Filing.new(budget).file([ entry ]) or raise "The Splitwise sample wasn't filed: #{entry.full_messages.to_sentence}"
   end
   # An envelope of its own, so what's filed from them doesn't change the figures of the envelopes above.
-  shared = budget.envelopes.find_or_create_by!(name: "Shared expenses") { |envelope| envelope.starting_balance = 200 }
+  shared = budget.envelopes.find_or_create_by!(name: "Shared") { |envelope| envelope.starting_balance = 200 }
 
   expense.(1, "Dinner at Nonna's", 50, 2)
   expense.(2, "Cottage groceries", -45, 3)

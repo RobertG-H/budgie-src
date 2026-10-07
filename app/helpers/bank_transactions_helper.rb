@@ -21,8 +21,7 @@ module BankTransactionsHelper
   def adds_up_note(bank_transaction, budget)
     return "Its records add up to #{money(bank_transaction.filed_total, budget: budget)}, not #{money(bank_transaction.amount.abs, budget: budget)}." if bank_transaction.records_suit_the_sign?
 
-    unsuited = bank_transaction.filed_records.select { |record| record.is_a?(Budget::Spend) == bank_transaction.amount.positive? }
-    kinds = unsuited.map { |record| record.model_name.human }.uniq.map { |kind| "a #{kind}" }.to_sentence
+    kinds = bank_transaction.records_unsuited_to_the_sign.map { |record| record.model_name.human }.uniq.map { |kind| "a #{kind}" }.to_sentence
 
     "It's now #{money_direction(bank_transaction.amount).downcase}, but it was filed as #{kinds}."
   end

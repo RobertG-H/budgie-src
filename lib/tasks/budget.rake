@@ -10,6 +10,8 @@ namespace :budget do
 
   desc "Sync every connected Splitwise Account that can be synced, as the hourly job does"
   task sync_connections: :environment do
+    next puts("Splitwise isn't set up here, so nothing can be synced.") unless Splitwise.configured?
+
     connections = Budget::BankConnection.syncable.count
     next puts("No connection can be synced.") if connections.zero?
 

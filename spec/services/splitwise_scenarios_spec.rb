@@ -99,6 +99,36 @@ RSpec.describe "Splitwise scenarios (ADR 0016)" do
     end
   end
 
+  describe "the date, at a month end" do
+    # Splitwise stamps a day with midnight UTC, which is the day it shows, so that's the day a share counts in: in Eastern time it would be the evening before,
+    # which puts an expense dated the 1st of a month in the month before it.
+    def shared_dinner(id, date)
+      splitwise.raw_expense({ "id" => id, "description" => "Dinner #{id}", "date" => date, "updated_at" => "2026-10-05T12:00:00Z", "currency_code" => "CAD", "payment" => false,
+                              "users" => [ { "user_id" => 4321, "net_balance" => "50.00" } ] }, user_id: "4321")
+    end
+
+    it "counts an expense dated the last day of a month in that month, and one dated the 1st in the next, in the month's figures" do
+      shared_dinner(1, "2026-10-31T00:00:00Z")
+      shared_dinner(2, "2026-11-01T00:00:00Z")
+      travel_to(Time.utc(2026, 11, 3, 12)) { sync }
+      file(transaction(1), dining_out)
+      file(transaction(2), dining_out)
+
+      expect(transaction(1).date).to eq(Date.new(2026, 10, 31))
+      expect(transaction(2).date).to eq(Date.new(2026, 11, 1))
+      expect(figures(dining_out, october)).to include(refunded: 50)
+      expect(figures(dining_out, Date.new(2026, 11, 1))).to include(refunded: 50)
+    end
+
+    it "reads a day the same at the end of it, whatever the time of day Splitwise stamped" do
+      shared_dinner(1, "2026-10-31T23:59:59Z")
+
+      sync
+
+      expect(transaction(1).date).to eq(Date.new(2026, 10, 31))
+    end
+  end
+
   describe "2. Someone else paid" do
     it "is a $40 Spend from Groceries in the month of the expense, and the e-transfer months later and the settle-up are ignored" do
       splitwise.expense(2001, "Groceries for the cottage", net_balance: "-40.00", date: "2026-10-05")

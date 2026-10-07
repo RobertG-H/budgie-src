@@ -150,7 +150,7 @@ RSpec.describe "db/seeds.rb" do
       refund = budget.refunds.merge(Budget::Envelope.where(name: "Groceries")).sole
       expect(refund).to have_attributes(description: "Loblaws return", date: Date.new(2026, 10, 6), amount: BigDecimal("18.75"))
       expect(refund.envelope.name).to eq("Groceries")
-      expect(budget.refunds.where.not(envelope: refund.envelope).map { |other| other.envelope.name }.uniq).to eq([ "Shared expenses" ])
+      expect(budget.refunds.where.not(envelope: refund.envelope).map { |other| other.envelope.name }.uniq).to eq([ "Shared" ])
     end
 
     it "raises Groceries' Available by the Refund this month, and not last month's" do

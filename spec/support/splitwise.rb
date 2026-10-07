@@ -61,6 +61,13 @@ class SplitwiseFake
     )
   end
 
+  # An expense as Splitwise's JSON has it (string keys, the timestamps and decimal strings it sends), read as the real client reads it, for what depends on how it
+  # reads them, such as the date.
+  def raw_expense(json, user_id:)
+    expense = Splitwise::Expense.from_api(json, user_id: user_id)
+    @expenses[expense.id] = expense
+  end
+
   # Changes an expense in place, as an edit at Splitwise does: it keeps its id and its `updated_at` moves on.
   def edit(id, **changes)
     current = @expenses.fetch(id.to_s)

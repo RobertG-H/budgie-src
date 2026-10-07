@@ -25,9 +25,9 @@ class Budget::Filing::Draft
   # friends paying back a share (ADR 0016). Any of it can be told otherwise, which is how a Guess and a Filing rule take precedence.
   def self.for(bank_transaction, **attributes)
     # Its Account is only asked when the kind isn't told, so filing a lot with a rule's own kind makes no query for each.
-    kind = attributes[:kind] || (bank_transaction.amount.positive? ? bank_transaction.account.money_in_kind : "spend")
+    kind = attributes.fetch(:kind) { bank_transaction.amount.positive? ? bank_transaction.account.money_in_kind : "spend" }
 
-    new({ description: bank_transaction.description, date: bank_transaction.date, amount: bank_transaction.amount.abs, notes: "" }.merge(attributes).merge(kind: kind))
+    new({ kind: kind, description: bank_transaction.description, date: bank_transaction.date, amount: bank_transaction.amount.abs, notes: "" }.merge(attributes))
   end
 
   # Whether anything the filing form keeps under "Edit details" differs from how the bank transaction starts: its description, date or amount isn't

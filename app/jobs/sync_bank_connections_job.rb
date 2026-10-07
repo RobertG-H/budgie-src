@@ -16,16 +16,19 @@ class SyncBankConnectionsJob < ApplicationJob
 
     Budget::BankConnection.syncable.find_each do |connection|
       # Splitwise is the only provider there is. A second one adds its own service here, chosen by `connection.provider`.
-      result = SyncSplitwise.call(connection)
-      next unless result.error
-
-      Rails.logger.error "Couldn't sync connection #{connection.id}: #{result.error.class}: #{result.error.message}"
-      failures << result.error
+      error = SyncSplitwise.call(connection).error
+      failures << failed(connection, error) if error
     rescue => error
-      Rails.logger.error "Couldn't sync connection #{connection.id}: #{error.class}: #{error.message}"
-      failures << error
+      failures << failed(connection, error)
     end
 
     raise failures.first if failures.any?
   end
+
+  private
+    # Logged with the connection's id, and kept to be raised once the rest are done.
+    def failed(connection, error)
+      Rails.logger.error "Couldn't sync connection #{connection.id}: #{error.class}: #{error.message}"
+      error
+    end
 end

@@ -654,6 +654,22 @@ RSpec.describe Budget::BankTransaction, type: :model do
       expect(duplicate.errors[:external_id]).to eq([ "is already in this Account" ])
     end
 
+    it "reads a blank external id as none, so a row with only that is refused for having neither it nor an Import, as the database's check would" do
+      expect(build(:budget_bank_transaction, account: account, import: nil, external_id: "  ").external_id).to be_nil
+      expect(build(:budget_bank_transaction, account: account, import: nil, external_id: "  ")).not_to be_valid
+      expect(build(:budget_bank_transaction, account: account, external_id: " 9001 ").external_id).to eq("9001")
+    end
+
+    it "lists the unsuited records, which a changed sign leaves, so what's said about them comes from the model" do
+      transaction = create(:budget_bank_transaction, account: account, amount: 100)
+      refund = create(:budget_refund_link, bank_transaction: transaction, refund: create(:budget_refund, envelope: create(:budget_envelope, budget: account.budget), amount: 100, date: transaction.date)).refund
+      expect(transaction.reload.records_unsuited_to_the_sign).to be_empty
+
+      transaction.update!(amount: -100)
+
+      expect(transaction.reload.records_unsuited_to_the_sign).to eq([ refund ])
+    end
+
     it "can share an external id with a bank transaction in another Account" do
       create(:budget_bank_transaction, account: account, external_id: "9001")
 
@@ -677,8 +693,7 @@ RSpec.describe Budget::BankTransaction, type: :model do
         transaction.update!(removed_at: Time.current)
 
         expect(transaction).to be_removed
-        expect(Budget::BankTransaction.removed).to contain_exactly(transaction)
-        expect(Budget::BankTransaction.not_removed).to be_empty
+        expect(Budget::BankTransaction.find(transaction.id)).to be_persisted
       end
 
       it "is neither unfiled, filed nor ignored when it was never filed or ignored, so it leaves the Unfiled state" do
@@ -689,6 +704,7 @@ RSpec.describe Budget::BankTransaction, type: :model do
         expect(Budget::BankTransaction.unfiled).to be_empty
         expect(Budget::BankTransaction.filed).to be_empty
         expect(Budget::BankTransaction.ignored).to be_empty
+        expect(Budget::BankTransaction.where.not(removed_at: nil)).to contain_exactly(transaction)
       end
 
       it "stays filed when it was filed, which its records still say, and ignored when it was ignored" do
