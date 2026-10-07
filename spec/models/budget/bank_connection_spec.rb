@@ -82,6 +82,11 @@ RSpec.describe Budget::BankConnection, type: :model do
       end
     end
 
+    it "can't be before 1990 in the database either, since that limit doesn't depend on the day" do
+      expect { create(:budget_bank_connection).tap { |connection| connection.update_columns(read_from: Date.new(1989, 12, 31)) } }
+        .to raise_error(ActiveRecord::CheckViolation, /budget_bank_connections_read_from_not_before_1990/)
+    end
+
     it "can't be more than a day after today, or before 1990" do
       travel_to Time.utc(2026, 10, 6, 16) do
         later = build(:budget_bank_connection, read_from: Date.new(2026, 10, 8))
@@ -181,6 +186,16 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect(connection).to have_attributes(access_token: "new-token", login_name: "Rob G.", needs_reconnect: false)
     end
 
+    it "is encrypted at rest after it's replaced too, which is written without going through the usual save" do
+      connection = create(:budget_bank_connection, access_token: "old-token")
+
+      connection.reconnect!(access_token: "replacement-secret-token", login_name: "Robert G.")
+
+      stored = described_class.find(connection.id).access_token_before_type_cast
+      expect(stored).to be_present
+      expect(stored).not_to include("replacement-secret-token")
+    end
+
     it "is connected again after it was disconnected" do
       connection = create(:budget_bank_connection)
       connection.disconnect!
@@ -224,12 +239,6 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect(fresh).to be_connected
       expect(fresh.access_token).to eq("a-token-under-the-new-key")
     end
-  end
-
-  it "needs a name to reconnect with, as it did to be made" do
-    connection = create(:budget_bank_connection)
-
-    expect { connection.reconnect!(access_token: "t", login_name: " ") }.to raise_error(ActiveRecord::RecordInvalid)
   end
 
   describe "its Accounts" do

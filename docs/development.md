@@ -62,7 +62,7 @@ your budget's currency, and then you land on the month view.
 
 **6. Optionally, connect Splitwise.** Register a development app with the callback `http://localhost:3000/splitwise/callback`, put its Consumer Key and Consumer
 Secret in `.env` as `SPLITWISE_CLIENT_ID` and `SPLITWISE_CLIENT_SECRET`, restart the app, and open http://localhost:3000 (not `127.0.0.1`, which isn't the registered address). The Accounts page then has "Connect Splitwise". Follow
-[Splitwise setup](splitwise.md). The token is encrypted under fixed throwaway keys in development, so nothing else needs setting up; set the `ACTIVE_RECORD_ENCRYPTION_…` variables in `.env` only to use keys of your own. The sample data
+[Splitwise setup](splitwise.md). The token is encrypted under fixed throwaway keys in development, which are in the repo and protect nothing, so nothing else needs setting up to try it out; set the `ACTIVE_RECORD_ENCRYPTION_…` variables in `.env` as well (see [Splitwise setup](splitwise.md#2-generate-the-encryption-keys)) if you connect your real Splitwise account. The sample data
 below already has a Splitwise Account with a made-up token, for looking at its page without signing in to Splitwise.
 
 **7. Optionally, load the sample data.**

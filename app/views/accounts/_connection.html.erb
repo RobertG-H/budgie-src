@@ -19,10 +19,10 @@
   <div class="flex flex-wrap items-center gap-2">
     <%# Turbo is off: it ends in a redirect to Splitwise's own sign-in, which a fetch can't follow to another site. %>
     <% if Splitwise.configured? %>
-      <%= button_to "Reconnect", account_connection_path(account), form: { data: { turbo: false } }, class: "btn btn-sm" %>
+      <%= button_to "Reconnect", account_connection_path(account), form: { data: { turbo: false } }, class: "btn" %>
     <% end %>
     <% unless connection.disconnected? %>
-      <%= render "components/delete_button", path: account_connection_path(account), label: "Disconnect", size: :sm, confirm: disconnect_question(connection) %>
+      <%= render "components/delete_button", path: account_connection_path(account), label: "Disconnect", confirm: disconnect_question(connection) %>
     <% end %>
   </div>
 </div>

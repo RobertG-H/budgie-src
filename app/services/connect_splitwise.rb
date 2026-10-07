@@ -39,11 +39,14 @@ class ConnectSplitwise
     failure(error.message)
   rescue ActiveRecord::RecordInvalid => error
     failure(error.record.errors.full_messages.to_sentence + ".")
+  rescue ActiveRecord::RecordNotUnique
+    # Another request made the same Account, or the same connection, between the check and the insert, which only the unique indexes see.
+    failure("Another request made it a moment ago.")
   end
 
   private
     def connect(token, person)
-      connection = @budget.bank_connections.find_by(provider: "splitwise", login_id: person.id)
+      connection = @budget.bank_connections.find_by(provider: Budget::BankConnection::SPLITWISE, login_id: person.id)
 
       if @account && connection&.id != @account.bank_connection_id
         failure("#{@account.name} is synced from Splitwise as #{@account.bank_connection.login_name}, and that isn't who signed in. " \
@@ -61,7 +64,7 @@ class ConnectSplitwise
     end
 
     def create(token, person)
-      connection = @budget.bank_connections.create!(provider: "splitwise", login_id: person.id, login_name: person.name, access_token: token, read_from: @read_from)
+      connection = @budget.bank_connections.create!(provider: Budget::BankConnection::SPLITWISE, login_id: person.id, login_name: person.name, access_token: token, read_from: @read_from)
       account = @budget.accounts.create!(name: @name, bank_connection: connection, external_account_id: person.id, files_with_rules: false)
       Result.new(connection: connection, account: account, reconnected: false, failure: nil)
     end

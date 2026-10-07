@@ -57,7 +57,7 @@ class ImportsController < ApplicationController
     def refuse_synced_account
       return unless @account&.synced?
 
-      redirect_to account_path(@account), alert: "#{@account.name} is synced from #{@account.bank_connection.provider_name}, so it takes no Import."
+      redirect_to account_path(@account), alert: "#{@account.name} #{@account.import_refusal}."
     end
 
     # What the whole form sends as the Account, which is only ever an id of the budget's own, and nothing at all for a form that isn't sent.

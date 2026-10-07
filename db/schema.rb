@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_06_140100) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_06_140200) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -57,6 +57,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_140100) do
     t.check_constraint "NOT needs_reconnect OR access_token IS NOT NULL", name: "budget_bank_connections_needs_reconnect_has_token"
     t.check_constraint "btrim(login_id::text) <> ''::text AND btrim(login_name::text) <> ''::text", name: "budget_bank_connections_login_not_blank"
     t.check_constraint "provider::text = 'splitwise'::text", name: "budget_bank_connections_provider_known"
+    t.check_constraint "read_from >= '1990-01-01'::date", name: "budget_bank_connections_read_from_not_before_1990"
   end
 
   create_table "budget_bank_transactions", force: :cascade do |t|

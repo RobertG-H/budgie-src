@@ -72,7 +72,7 @@ class Budget < ApplicationRecord
   end
 
   # Whether there's something to guess an Import with: at least one CSV format and one Account that a CSV file can be imported into, which leaves out the
-  # ones synced from a connection. The header's Import button asks on every page, so it's one query whatever the answer.
+  # ones synced from a connection. The header's Import button asks on every page, so it's one query whatever the answer, which is why this is SQL of its own and not `Budget::Account.importable`.
   def importable?
     return @importable if defined?(@importable)
 

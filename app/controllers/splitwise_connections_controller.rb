@@ -9,14 +9,14 @@ class SplitwiseConnectionsController < ApplicationController
   # for, whose card charge is already there, gets its share back.
   def new
     @account = Current.budget.accounts.new(name: "Splitwise")
-    @connection = Current.budget.bank_connections.new(provider: "splitwise", read_from: Budget::BankConnection.default_read_from(Current.budget))
+    @connection = Current.budget.bank_connections.new(provider: Budget::BankConnection::SPLITWISE, read_from: Budget::BankConnection.default_read_from(Current.budget))
   end
 
   # The name and the date are checked as they'd be when the Account and the connection are made, so a mistake is found before the person is sent to
   # sign in to Splitwise and not after. Both models are only built, and never saved: what's left of the connection (the login) isn't known yet.
   def create
     @account = Current.budget.accounts.new(params.expect(account: [ :name ]))
-    @connection = Current.budget.bank_connections.new(provider: "splitwise", read_from: params.expect(bank_connection: [ :read_from ])[:read_from])
+    @connection = Current.budget.bank_connections.new(provider: Budget::BankConnection::SPLITWISE, read_from: params.expect(bank_connection: [ :read_from ])[:read_from])
     @account.validate
     @connection.validate
 

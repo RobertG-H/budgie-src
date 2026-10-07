@@ -19,24 +19,40 @@ class SplitwiseCallbacksController < ApplicationController
       name: intent["name"], read_from: intent["read_from"])
 
     if result.success?
-      redirect_to account_path(result.account), notice: "#{result.reconnected ? "Reconnected" : "Connected"} Splitwise as #{result.connection.login_name}"
+      redirect_to account_path(result.account), notice: connected_notice(result, account: account)
     else
       refuse(message: result.failure, account: account, to: back)
     end
   end
 
   private
-    # Whether what the session kept is what was sent to Splitwise: the state is the one that came back, and the sign-in was started for this budget.
+    # Whether what the session kept is what was sent to Splitwise: the state is the one that came back, the sign-in was started for this budget, and not too
+    # long ago.
     def sent_by_us?(intent)
       intent.is_a?(Hash) && params[:state].is_a?(String) && params[:state].present? && intent["budget_id"] == Current.budget.id &&
-        ActiveSupport::SecurityUtils.secure_compare(intent["state"].to_s, params[:state])
+        intent["at"].to_i > SplitwiseSignIn::VALID_FOR.ago.to_i && ActiveSupport::SecurityUtils.secure_compare(intent["state"].to_s, params[:state])
+    end
+
+    # "Connected Splitwise as Robert G." Reconnecting says so, and when the person only asked to connect and that login already was, it says its Account and the
+    # date it reads from are as they were, since what they typed wasn't used.
+    def connected_notice(result, account:)
+      name = result.connection.login_name
+      return sentence("Connected Splitwise as #{name}") unless result.reconnected
+
+      reconnected = sentence("Reconnected Splitwise as #{name}")
+      account ? reconnected : "#{reconnected} It was already connected, so its Account and the date it reads from stay as they are."
+    end
+
+    # Splitwise's own initial already ends a name in a full stop, and a name that has none needs one.
+    def sentence(text)
+      text.end_with?(".") ? text : "#{text}."
     end
 
     # Says why nothing was done, in words, as `since` ("since the sign-in was declined") or as `message` (what Splitwise or the model said). A reconnect
     # changes nothing and a connect keeps nothing. None of it is anything Splitwise answered with, a code or a token.
     def refuse(to:, account: nil, since: nil, message: nil, try_again: true)
-      wasnt = "Splitwise wasn't #{account ? "reconnected" : "connected"}"
-      reason = since ? "#{wasnt}, since #{since}." : "#{wasnt}. #{message}"
+      refusal = "Splitwise wasn't #{account ? "reconnected" : "connected"}"
+      reason = since ? "#{refusal}, since #{since}." : "#{refusal}. #{message}"
       outcome = account ? "Nothing was changed." : "Nothing was kept."
 
       redirect_to to, alert: [ reason, outcome, ("Try again." if try_again) ].compact.join(" ")

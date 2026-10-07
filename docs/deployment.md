@@ -252,9 +252,9 @@ Every file is loaded into every run, which is why each destination's names carry
 )
 ```
 
-If you created the files before Splitwise was added, add those four lines to each yourself: `set -C` refuses to overwrite them.
 It fills in the values that are only random: each destination's `SECRET_KEY_BASE`, the same kind of value `bin/rails secret` prints, and its database password. Everything else starts empty, and only you can read the files.
 `set -C` makes it refuse to overwrite a file that already exists. That matters once a destination is running: a new `SECRET_KEY_BASE` signs everyone out, and a new database password locks the app out of its database.
+If you created the files before Splitwise was added, add its four lines to each yourself: `set -C` means the commands above refuse to overwrite them.
 
 **2. Fill in the rest** in your editor, as each one becomes available:
 

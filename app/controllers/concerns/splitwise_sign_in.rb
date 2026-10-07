@@ -7,6 +7,10 @@ module SplitwiseSignIn
 
   SESSION_KEY = "splitwise_sign_in".freeze
 
+  # How long a person has at Splitwise before the callback stops accepting what was kept. Splitwise's own code expires in minutes, so this is a ceiling and
+  # not a deadline, and it keeps an abandoned sign-in from lingering in the session.
+  VALID_FOR = 1.hour
+
   private
     # Connecting needs Splitwise's client id and secret, and a key to keep the token under, which only some hosts have: without them nothing is
     # offered, and a request for it is turned away, rather than sending a person to Splitwise to be told afterwards.
@@ -19,7 +23,7 @@ module SplitwiseSignIn
     # that lead here have Turbo off.
     def send_to_splitwise(**intent)
       state = SecureRandom.hex(24)
-      session[SESSION_KEY] = intent.merge(state: state, budget_id: Current.budget.id).stringify_keys
+      session[SESSION_KEY] = intent.merge(state: state, budget_id: Current.budget.id, at: Time.current.to_i).stringify_keys
 
       redirect_to Splitwise.client.authorization_url(redirect_uri: splitwise_callback_url, state: state), allow_other_host: true
     end

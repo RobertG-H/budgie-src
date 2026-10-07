@@ -11,7 +11,8 @@
 # ConnectSplitwise); a different login is a different connection, with an Account of its own.
 class Budget::BankConnection < ApplicationRecord
   # The providers a connection can be to, which a check constraint says too, and what each is called.
-  PROVIDER_NAMES = { "splitwise" => "Splitwise" }.freeze
+  SPLITWISE = "splitwise".freeze
+  PROVIDER_NAMES = { SPLITWISE => "Splitwise" }.freeze
   PROVIDERS = PROVIDER_NAMES.keys.freeze
 
   belongs_to :budget
@@ -33,6 +34,12 @@ class Budget::BankConnection < ApplicationRecord
   # card charge is already there, gets its share back, or the 1st of this month when there are none.
   def self.default_read_from(budget)
     budget.bank_transactions.minimum(:date) || Budget.current_month
+  end
+
+  # Whether the provider's login is itself the one external account, as a Splitwise user is: their Account holds their share of every expense, so its external id is the
+  # login's id, and a connection has one Account. A provider with several accounts to a login, such as a bank's, isn't.
+  def login_is_the_account?
+    provider == SPLITWISE
   end
 
   # The provider's name for display, such as "Splitwise".
@@ -60,8 +67,6 @@ class Budget::BankConnection < ApplicationRecord
   # Gives the connection a new token, for the same login, and says it works again. The login's name is refreshed, since it's what the provider
   # calls them now.
   def reconnect!(access_token:, login_name:)
-    raise ActiveRecord::RecordInvalid, self if login_name.blank?
-
     replace_token(access_token, login_name: login_name.squish, needs_reconnect: false)
   end
 

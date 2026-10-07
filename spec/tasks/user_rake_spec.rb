@@ -29,7 +29,8 @@ RSpec.describe "user rake tasks", type: :task do
       create(:budget_import, account: accounts.first, csv_format: csv_formats.last)
       create(:budget_import, account: accounts.last, csv_format: csv_formats.first, zero_rows_skipped: 1)
       # That Account is synced from a Splitwise connection, which it's made so after its Import, since a synced Account takes none.
-      accounts.last.update!(bank_connection: create(:budget_bank_connection, budget: budget), external_account_id: "4321")
+      connection = create(:budget_bank_connection, budget: budget)
+      accounts.last.update!(bank_connection: connection, external_account_id: connection.login_id)
       # Three Filing rules: one for an Account, one for a Deposit and one that ignores.
       create(:budget_filing_rule, :ignore, budget: budget, account: accounts.first, text: "payment thank you")
       create(:budget_filing_rule, :deposit, budget: budget, text: "payroll")

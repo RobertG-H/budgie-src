@@ -133,15 +133,37 @@ RSpec.describe Budget::Account, type: :model do
       expect(account.errors[:bank_connection]).to eq([ "isn't one of this budget's" ])
     end
 
-    it "has one Account for each external id of a connection, and the same id may be another connection's" do
+    it "has one Account for each external id of a connection" do
       create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
 
       same = build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
-      other = build(:budget_account, budget: budget, bank_connection: create(:budget_bank_connection, budget: budget), external_account_id: "4321")
 
       expect(same).not_to be_valid
       expect(same.errors[:external_account_id]).to eq([ "is already synced" ])
-      expect(other).to be_valid
+    end
+
+    it "has the Splitwise user's id as its external id when it's synced from Splitwise, which is why a Splitwise connection has one Account" do
+      other_id = build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "8765")
+
+      expect(other_id).not_to be_valid
+      expect(other_id.errors[:external_account_id]).to eq([ "must be the Splitwise user's id" ])
+      expect(build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")).to be_valid
+    end
+
+    it "can't have a second Account made on a Splitwise connection, since the only id it can have is the one that's taken" do
+      create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+
+      second = build(:budget_account, budget: budget, name: "Another", bank_connection: connection, external_account_id: "8765")
+
+      expect(second).not_to be_valid
+    end
+
+    it "has no default CSV format, since it has no files, which is refused from any way in and not only by its form" do
+      account = create(:budget_account, :synced, budget: budget)
+      account.default_csv_format = create(:budget_csv_format, budget: budget)
+
+      expect(account).not_to be_valid
+      expect(account.errors[:default_csv_format]).to eq([ "isn't used by an Account that's synced" ])
     end
 
     it "is found among the Accounts a CSV file can be imported into only when it isn't synced" do
@@ -174,7 +196,8 @@ RSpec.describe Budget::Account, type: :model do
 
     it "leaves a connection that another Account is synced from, as a provider with several accounts to a connection would" do
       account = create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
-      other = create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "8765")
+      # Splitwise's connection has only the one, so this is made past the validation that says so, which is what a provider with several would be.
+      other = build(:budget_account, budget: budget, name: "Another", bank_connection: connection, external_account_id: "8765").tap { |another| another.save!(validate: false) }
 
       expect { account.destroy! }.not_to change(Budget::BankConnection, :count)
       expect { other.destroy! }.to change(Budget::BankConnection, :count).by(-1)

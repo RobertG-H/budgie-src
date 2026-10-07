@@ -106,7 +106,7 @@ old_gym.archive! if old_gym.previously_new_record?
 
 # A CSV format that reads spec/fixtures/files/signed-sample.csv, so a developer can build a format from that file to see
 # the builder's grid and preview, and import it. It's the bank's header row to skip, then the date, the description and one
-# signed amount. It's only made when there isn't one for its connection, so a developer's changes to it stay.
+# signed amount. It's only made when there isn't one by its name, so a developer's changes to it stay.
 sample_bank = budget.csv_formats.find_or_create_by!(name: "Sample bank") do |csv_format|
   csv_format.assign_attributes(rows_to_skip: 1, column_count: 3, date_column: 1, date_format: "YYYY-MM-DD", description_columns: [ 2 ],
     amount_style: "signed", amount_column: 3)
@@ -142,7 +142,7 @@ end
 # An Account synced from Splitwise, with a connection whose token isn't real: nothing signs in to Splitwise in development unless the app is registered there,
 # and nothing syncs yet, but it gives the Accounts page and an Account's page a synced Account to show. It's only made when there isn't one for its connection, so a
 # developer's changes to it stay, and it has no bank transactions. Its name can't clash with an Account a developer made by hand.
-splitwise = budget.bank_connections.find_or_create_by!(provider: "splitwise", login_id: "1000000") do |connection|
+splitwise = budget.bank_connections.find_or_create_by!(provider: Budget::BankConnection::SPLITWISE, login_id: "1000000") do |connection|
   connection.assign_attributes(login_name: "Dev B.", access_token: "development-token-not-real", read_from: this_month)
 end
 budget.accounts.find_or_create_by!(bank_connection: splitwise) do |account|

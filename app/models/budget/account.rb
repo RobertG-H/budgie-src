@@ -30,7 +30,9 @@ class Budget::Account < ApplicationRecord
 
   validates :name, presence: true, uniqueness: { scope: :budget_id, case_sensitive: false }
   validate :default_csv_format_is_in_this_budget
+  validate :no_default_csv_format_when_synced
   validate :bank_connection_is_in_this_budget
+  validate :external_account_id_is_the_login
   validates :external_account_id, presence: true, if: :bank_connection_id
   validates :external_account_id, absence: { message: "needs a connection" }, unless: :bank_connection_id
   validates :external_account_id, uniqueness: { scope: :bank_connection_id, message: "is already synced" }, if: :bank_connection_id
@@ -52,6 +54,16 @@ class Budget::Account < ApplicationRecord
     bank_connection_id.present?
   end
 
+  # What it's synced from, as the provider's name ("Splitwise"), or nothing for an Account known only from CSV files.
+  def synced_from
+    bank_connection&.provider_name
+  end
+
+  # Why it takes no Import, which is what a synced Account says when one is asked of it, or nothing for an Account that does.
+  def import_refusal
+    "is synced from #{synced_from}, so it takes no Import" if synced?
+  end
+
   # The Import that ran last, which is the only one that can be undone, and the one whose CSV format the next Import
   # starts with. Imports made at the same moment go by the order they were made in.
   def latest_import
@@ -59,12 +71,25 @@ class Budget::Account < ApplicationRecord
   end
 
   private
+    # A synced Account has no files, so no CSV format to read them with. Its form doesn't offer one, and this refuses it from any other way in.
+    def no_default_csv_format_when_synced
+      errors.add(:default_csv_format, "isn't used by an Account that's synced") if synced? && default_csv_format_id.present?
+    end
+
     # Which budget a connection is in is up to the model too, and a connection that doesn't exist at all is refused the same way. Only the code that makes
     # a connection's Account sets it, and never a param.
     def bank_connection_is_in_this_budget
       return if bank_connection_id.blank?
 
       errors.add(:bank_connection, "isn't one of this budget's") unless bank_connection&.budget_id == budget_id
+    end
+
+    # For a Splitwise connection the external account is the Splitwise user themselves, so its id is the login's. That's what makes a Splitwise connection have
+    # one Account: the unique index on the connection and the external id can't be satisfied twice.
+    def external_account_id_is_the_login
+      return unless bank_connection&.login_is_the_account? && external_account_id.present?
+
+      errors.add(:external_account_id, "must be the #{bank_connection.provider_name} user's id") unless external_account_id == bank_connection.login_id
     end
 
     def delete_connection_nothing_uses

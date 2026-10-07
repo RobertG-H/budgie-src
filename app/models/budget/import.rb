@@ -184,7 +184,7 @@ class Budget::Import < ApplicationRecord
     # An Account that's synced from a connection, such as Splitwise's, gets its bank transactions from there, and a CSV file read into it would count some of
     # them twice (ADR 0016). The UI doesn't offer one, and this refuses it from any other way in.
     def account_takes_csv_imports
-      errors.add(:account, "is synced from #{account.bank_connection.provider_name}, so it takes no Import") if account&.synced?
+      errors.add(:account, account.import_refusal) if account&.synced?
     end
 
     # Which budget an Account is in, and so which CSV formats it can be read with, is up to the model: no foreign key can say.

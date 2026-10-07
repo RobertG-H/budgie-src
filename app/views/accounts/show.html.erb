@@ -51,7 +51,7 @@
       <%= link_to "Back to the first page", account_path(@account), class: "btn" %>
     <% end %>
   <% elsif @account.synced? %>
-    <%= render "components/empty_state", message: "No bank transactions yet. Expenses from #{@account.bank_connection.provider_name} appear here once they're synced." %>
+    <%= render "components/empty_state", message: "No bank transactions yet. Expenses from #{@account.synced_from} appear here once they're synced." %>
   <% else %>
     <%= render "components/empty_state", message: "No bank transactions yet." do %>
       <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>
