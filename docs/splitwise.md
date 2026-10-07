@@ -8,12 +8,13 @@ Connecting isn't signing in to Budgie. That's still [Google](google-oauth.md).
 Splitwise's API is for non-commercial use, which an invite-only personal budget is, and it may come to ask for a Splitwise Pro subscription.
 
 This page is for the operator: Claude edits the config and these docs, and never generates, reads or handles a client secret, an encryption key or a token.
-Only the connection exists so far. The sync that brings the expenses in is the next ticket, so a connected Account has no bank transactions yet.
+Once connected, **Sync now** on the Account's page and a job every hour bring each expense you're part of in as a bank transaction of your share ([Syncing](#5-check-syncing)); there's nothing more to set up for it.
 
 - [1. Register a Splitwise app for each environment](#1-register-a-splitwise-app-for-each-environment)
 - [2. Generate the encryption keys](#2-generate-the-encryption-keys)
 - [3. Give the values to the app](#3-give-the-values-to-the-app)
 - [4. Check it](#4-check-it)
+- [5. Check syncing](#5-check-syncing)
 - [Rotating and losing things](#rotating-and-losing-things)
 
 ## 1. Register a Splitwise app for each environment
@@ -106,10 +107,26 @@ Do this on each environment once its values are deployed. Claude can't: it can't
 - [ ] The token is ciphertext in the database. On the host, `docker exec budgie-db psql -U budgie budgie_production -c "select left(access_token, 12) from budget_bank_connections"` shows something that starts `{"p":"`, not a token
 - [ ] The token isn't in the logs: `docker compose logs web` in development, or the app's logs on the host, show `code` as `[FILTERED]` in the callback's request
 
+## 5. Check syncing
+
+Do this on each environment once a Splitwise Account is connected, with a real Splitwise account that has a few expenses in it, some of them yours alone and some shared. Claude can't: it never signs in to Splitwise, and it never syncs with a real token.
+**Sync now** says what it did ("Synced from Splitwise: 9 new, 2 changed, 1 deleted. 3 settle-ups ignored, 4 skipped."), and the same sync runs every hour, at twenty past, on testing and production alike.
+
+- [ ] **The date.** In Splitwise, enter an expense dated the **1st** of a month (the web app, and the phone app too), and one dated the last day of a month. After **Sync now**, their bank transactions are dated the 1st and the last day, not the day before. Budgie reads the date as the UTC date of the timestamp Splitwise sends, which is right when Splitwise stamps a day with midnight UTC. If an expense comes in a day early or late, tell Claude which, and which app entered it: it's a one-line change in `Splitwise::Expense`
+- [ ] **Your share.** An expense you paid for, split evenly, comes in as money in of the other person's half (your net share, positive); one someone else paid for comes in as money out of your half
+- [ ] **Settle-ups.** A payment recorded in Splitwise (a settle-up) comes in already ignored, and is counted in the notice as `settle-ups ignored`; **Un-ignore** brings it back to Unfiled
+- [ ] **Skipped.** An expense between two other people, one where you paid exactly your share, and one in a currency other than the budget's are not brought in, and the notice counts them as `skipped`
+- [ ] **Edits.** Change an expense's amount in Splitwise, and **Sync now** changes the bank transaction's amount in place. If you had filed it, it shows **Doesn't add up** and its records are untouched
+- [ ] **Deletes.** Delete an expense in Splitwise, and **Sync now** shows **Deleted in Splitwise** on its bank transaction: beside **Un-file** if you had filed it, and out of the Unfiled state (and the header's count) if you hadn't. Restore it in Splitwise, and the next sync clears that
+- [ ] **Filing.** Money in from Splitwise starts as a **Refund** on the filing form. **File and next** and **File N as guessed** work on the Account's Unfiled state, which is its review queue
+- [ ] **The hourly job.** An hour or so later, the Account says `Last synced` a time within the last hour, without anyone pressing anything
+- [ ] **The date to read from.** Under **Date to read from** on the Account's page, move it earlier and press **Change date**: the next **Sync now** brings in the older expenses and nothing is duplicated. Moving it later leaves what's already there as it is
+- [ ] **A token that stopped working.** Remove Budgie from your Splitwise apps, then **Sync now**: it says Splitwise stopped accepting the sign-in, the Account says it needs reconnecting, and **Reconnect** puts it right
+
 ## Rotating and losing things
 
 - **A leaked or rotated client secret.** Generate a new one on the app's page at Splitwise, put it in the environment's `…_SPLITWISE_CLIENT_SECRET` (the laptop file, the GitHub environment secret and your password manager) and redeploy.
-- **Someone removes Budgie from their Splitwise apps.** The token stops working. Once something syncs, the Account says it needs reconnecting, and **Reconnect** puts it right.
+- **Someone removes Budgie from their Splitwise apps.** The token stops working. The next sync, **Sync now** or the hourly one, finds out: the Account says it needs reconnecting, the hourly job skips it, and **Reconnect** puts it right.
 - **A person leaves.** `user:delete` deletes their connections with everything else ([Operating Budgie](operations.md)). A connection that's disconnected holds no token, but it keeps the Splitwise user's id and name until the Account is deleted.
 - **Losing an encryption key.** The tokens under it can't be read. Nothing else is affected: the Account page still says what it's synced from, and **Reconnect** and **Disconnect** both still work, because replacing a token never reads the old one. Put the new keys in the environment, deploy, and have each person reconnect.
 - **Changing an encryption key on purpose** is the same thing: every connection under the old key has to be reconnected. There's no migration, since a token is cheap to get again.

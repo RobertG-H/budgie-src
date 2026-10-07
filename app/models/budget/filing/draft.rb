@@ -21,10 +21,13 @@ class Budget::Filing::Draft
   attr_accessor :record
 
   # How a bank transaction would be filed to start with: its date and description, and the whole of its amount as a positive
-  # figure. Money out is a Spend and money in a Deposit. Any of it can be told otherwise.
+  # figure. Money out is a Spend and money in a Deposit, except money in from Splitwise, which is a Refund, since it's almost always
+  # friends paying back a share (ADR 0016). Any of it can be told otherwise, which is how a Guess and a Filing rule take precedence.
   def self.for(bank_transaction, **attributes)
-    new({ kind: (bank_transaction.amount.positive? ? "deposit" : "spend"), description: bank_transaction.description, date: bank_transaction.date,
-          amount: bank_transaction.amount.abs, notes: "" }.merge(attributes))
+    # Its Account is only asked when the kind isn't told, so filing a lot with a rule's own kind makes no query for each.
+    kind = attributes[:kind] || (bank_transaction.amount.positive? ? bank_transaction.account.money_in_kind : "spend")
+
+    new({ description: bank_transaction.description, date: bank_transaction.date, amount: bank_transaction.amount.abs, notes: "" }.merge(attributes).merge(kind: kind))
   end
 
   # Whether anything the filing form keeps under "Edit details" differs from how the bank transaction starts: its description, date or amount isn't

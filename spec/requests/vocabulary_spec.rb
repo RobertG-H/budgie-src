@@ -960,6 +960,57 @@ RSpec.describe "The words on the pages", type: :request do
       expect(splitwise_text).not_to match(/\w+_\w+/)
     end
 
+    it "uses only these words for syncing: Sync now, when it last synced, and the date to read from, and what a sync says it did or why it couldn't" do
+      splitwise.signs_in("code", as: Splitwise::Person.new(id: roommates.bank_connection.login_id, name: "Robert G."), token: "splitwise-access-token")
+      splitwise.expense(1, "Dinner", net_balance: "50.00", date: "2026-10-03")
+      splitwise.expense(2, "Jane paid me back", net_balance: "50.00", date: "2026-10-04", payment: true)
+      splitwise.expense(3, "Between others", net_balance: nil, date: "2026-10-04")
+
+      get account_path(roommates)
+      expect(visible_text).to include("Sync now", "Not synced yet.", "Date to read from", "Read expenses dated from")
+      expect(visible_text).to include("Changing it makes the next sync read every expense dated from it again. What's already here stays as it is.")
+
+      post account_connection_sync_path(roommates)
+      follow_redirect!
+      expect(visible_text).to include("Synced from Splitwise: 1 new. 1 settle-up ignored, 1 skipped.", "Last synced")
+      expect(splitwise_text).not_to match(retired_terms)
+      expect(splitwise_text).not_to match(/\w+_\w+/)
+
+      patch account_connection_path(roommates), params: { bank_connection: { read_from: "2026-09-01" } }
+      follow_redirect!
+      expect(visible_text).to include("Now reading expenses dated from Sep 1, 2026. The next sync reads them again.")
+      expect(splitwise_text).not_to match(retired_terms)
+
+      splitwise.fails_at_offset(0, Splitwise::RateLimited.new("Splitwise is limiting how often Budgie can ask."))
+      post account_connection_sync_path(roommates)
+      follow_redirect!
+      expect(visible_text).to include("Splitwise is limiting how often Budgie can ask, so nothing was synced. Try again later.")
+      expect(splitwise_text).not_to match(retired_terms)
+
+      splitwise.revoke("splitwise-access-token")
+      post account_connection_sync_path(roommates)
+      follow_redirect!
+      expect(visible_text).to include("Splitwise stopped accepting the sign-in as Robert G., so nothing was synced. Reconnect to start again.")
+      expect(splitwise_text).not_to match(retired_terms)
+    end
+
+    it "uses only these words for what a sync left in a bank transaction: deleted in Splitwise, and what no longer adds up" do
+      group = create(:budget_envelope, budget: budget, name: "Shared")
+      filed = create(:budget_bank_transaction, account: roommates, description: "Dinner", amount: 50, date: Date.new(2026, 10, 3))
+      entry = Budget::Filing::Entry.new(bank_transaction: filed, drafts: [ Budget::Filing::Draft.for(filed, envelope_id: group.id) ])
+      expect(Budget::Filing.new(budget).file([ entry ])).to be(true)
+      filed.update!(amount: -50, removed_at: Time.current)
+      create(:budget_bank_transaction, :removed, account: roommates, description: "Deleted lunch", amount: -12)
+
+      [ account_path(roommates), bank_transactions_path(filter: { date_from: "2026-01-01", date_to: "2026-12-31" }) ].each do |path|
+        get path
+
+        expect(visible_text).to include("Deleted in Splitwise", "Doesn't add up", "It's now money out, but it was filed as a Refund.", "Un-file it, or keep its records.")
+        expect(splitwise_text).not_to match(retired_terms)
+        expect(splitwise_text).not_to match(/\w+_\w+/)
+      end
+    end
+
     it "says what the form's fields are, and what the date means, in words" do
       get new_splitwise_connection_path
 

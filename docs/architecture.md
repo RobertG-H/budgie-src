@@ -451,10 +451,10 @@ never filed without that click, at any likeness.
 amount is their net share, what they paid less what they owe. A friend owing them is money in, filed as a Refund or a Deposit, and owing a friend is money out, filed as a Spend, so the shared dinner's $100
 card charge is a $100 Spend from the bank's Account and Splitwise's $50 share is a $50 Refund, and the two are never paired. A share counts in the month of its expense, not when it's settled, and a settle-up,
 Splitwise's own payment and the e-transfer that settles it, is ignored as a transfer between the person's own accounts, so what friends owe sits in the Splitwise Account, whose balance Budgie doesn't track. A
-Splitwise Account has its Filing rules off, so every share waits in the Unfiled state for the person. The sync that brings the shares in is a ticket of its own; what's built is the connection.
+Splitwise Account has its Filing rules off, so every share waits in the Unfiled state for the person, which is its review queue.
 
 A connection (`budget_bank_connections`) is a sign-in to a provider that Accounts are synced through: Splitwise first, and a bank-sync provider fits it later. It belongs to its budget, holds the provider's id for the login
-(the Splitwise user's id) and its name for display, the access token, the date to read expenses from, a sync marker and time that stay empty until something syncs, and whether it needs reconnecting. An Account has a
+(the Splitwise user's id) and its name for display, the access token, the date to read expenses from, a sync marker and the time of the last sync, and whether it needs reconnecting. An Account has a
 nullable connection and an id for itself at the provider, which for Splitwise is the Splitwise user's id, so a connection has one Account. The token is encrypted with Active Record encryption, and never appears in a page,
 a log or an error.
 
@@ -463,6 +463,25 @@ back. Then Budgie's own OAuth 2 flow runs, which isn't signing in to Budgie: the
 keeps nothing when they decline, swaps the code for a token, reads who it's for, and makes the connection and its Account in one database transaction. Signing in again as a Splitwise user that's already connected, after
 Disconnect or once the token stops working, gives the same connection a new token and keeps the Account and its bank transactions; a different Splitwise user is a new connection with a new Account, which is decided by who signs in: Connect Splitwise with a user that's already connected reconnects it and says so, and Reconnect on an Account's page, which has no name or date to make another Account with, accepts only that Account's own user. The Account's page says what
 it's synced from ("Synced from Splitwise as Robert G., reading expenses dated from Oct 1, 2026."), or that it needs reconnecting, with Reconnect and Disconnect, which forgets the token and keeps everything else.
+
+Syncing brings the shares in. **Sync now** on the Account's page and a job that runs every hour call the same operation, `SyncSplitwise`, which reads Splitwise's `get_expenses` a page at a time, for what changed since the
+sync marker and is dated from the Account's read-from date, and matches each expense to a bank transaction by its Splitwise id. A bank transaction that a sync brought in has no Import (so Undo never reaches it) and
+has that id, and a check constraint says a row has one or the other. The operation holds the connection's row lock while it runs, as an Import holds its Account's, so Sync now and the hourly job never both insert, and it's one
+database transaction: a sync that fails halfway changes nothing and doesn't move the marker, and the next one reads from a little before the marker, which is harmless because an expense read twice is matched by its id.
+It makes the same number of queries for each page however many expenses are on it.
+
+An expense the person has a share of (a net share other than 0, in the budget's currency, not deleted) becomes a bank transaction of that share, dated the day Splitwise shows, which is the UTC date of the timestamp it
+sends, and a settle-up arrives ignored. One the person isn't part of, or has no share of, or that's in another currency or already deleted when first seen, is skipped and counted, and nothing is stored for it, so an
+edit that gives the person a share brings it in on the next sync. Later changes update the bank transaction in place (its date, amount and description) and never a record that was filed from it, because budget
+records are never changed automatically. A deleted expense, or one the person no longer has a share of, marks the bank transaction removed and never deletes it, and a restore clears that. On the lists a changed amount, or
+a changed sign with the same size (a Refund can't stand for money out), shows "Doesn't add up" on a filed bank transaction, and a removed one shows "Deleted in Splitwise", beside Un-file when it was filed, so the person
+un-files it or keeps its records. A removed one that was never filed leaves the Unfiled state and the header's count, and can't be filed. Money in from Splitwise starts as a Refund on the filing form, since it's almost
+always friends paying back a share, though a Guess still takes precedence.
+
+Sync now says what it did ("Synced from Splitwise: 9 new, 2 changed, 1 deleted. 3 settle-ups ignored, 4 skipped."). A 401 means Splitwise no longer accepts the sign-in: the Account's page says it needs reconnecting, and the
+hourly job skips it until it's reconnected. A 429 stops that sync without moving the marker and says to try again later. Any other failure is logged with the connection's id and rolled back, doesn't stop the other connections,
+and the job raises the first once the rest are done, as `StartNewMonthsJob` does. The date to read from can be changed on the Account's page, which clears the marker so the next sync reads every expense from the new
+date again; moving it later leaves what's already there as it is. [Operating Budgie](operations.md#syncing-splitwise) has `budget:sync_connections`, which runs the job on demand.
 
 An Account that's synced takes no CSV Import: its page has none, the Import form's Account select and the header's guess leave it out, and the server refuses one. Deleting follows the Account's rule, so one with bank transactions
 can't be deleted and one without takes its connection with it. Specs never call Splitwise: everything that asks it questions sits behind `Splitwise.client`, which every spec replaces. Connecting needs Splitwise's client id and

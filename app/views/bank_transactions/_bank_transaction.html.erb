@@ -5,17 +5,27 @@
 <%# - ignored: Un-ignore %>
 <%# A filed or ignored one says which Filing rule did it, when one did and not a person: the rule's text and what it sets. Preload the rule and its envelope too. %>
 <%# An unfiled one with a `guess` says what it was like and what it would be filed as, in a muted line, which is only a suggestion: choosing the row opens the form, which starts on it. %>
+<%# One that a sync brought in, and then went from Splitwise (the expense was deleted, or the person has no share of it now), says so in a "Deleted in Splitwise" badge, whatever else it is, and is never opened to be filed. A filed one has it beside Un-file: its records stay until the person un-files it or keeps them. %>
 <%# The state is said in a word, so it isn't only in what's offered. A list of nothing but unfiled ones, such as the Bank transactions page in its Unfiled state, leaves it out with `show_state: false`. Preload the links and records of every one, so a list runs the same number of queries however long it is. %>
 <% state = bank_transaction.state %>
 <% records = bank_transaction.filed_records %>
 <% rule = bank_transaction.filed_by_rule %>
+<% removed = bank_transaction.removed? %>
 <% action_class = "btn btn-ghost btn-sm -ml-3" %>
 
 <%= render "components/record_row", href: (new_bank_transaction_filing_path(bank_transaction, **origin_params) if state == :unfiled),
       date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount, budget: budget, with_year: true,
       counterpart: (bank_transaction.account.name if show_account) do %>
-  <% if show_state %>
-    <span class="mt-1 flex flex-wrap items-center gap-2"><%= render "components/label_badge", text: state.to_s.capitalize %></span>
+  <%# A filed one has its badge beside Un-file below. One that's neither filed nor ignored has it and no state, since it isn't one of the three. %>
+  <% if show_state || (removed && state != :filed) %>
+    <span class="mt-1 flex flex-wrap items-center gap-2">
+      <% if show_state && state != :removed %>
+        <%= render "components/label_badge", text: state.to_s.capitalize %>
+      <% end %>
+      <% if removed && state != :filed %>
+        <%= render "components/warning_badge", text: "Deleted in Splitwise" %>
+      <% end %>
+    </span>
   <% end %>
 
   <% if guess && state == :unfiled %>
@@ -36,14 +46,18 @@
 
     <% unless bank_transaction.adds_up? %>
       <span class="mt-1 flex flex-wrap items-center gap-2">
-        <span class="badge badge-warning badge-sm">Doesn't add up</span>
-        <span class="text-base-content/70">Its records add up to <%= money(bank_transaction.filed_total, budget: budget) %>, not <%= money(bank_transaction.amount.abs, budget: budget) %>.</span>
+        <%= render "components/warning_badge", text: "Doesn't add up" %>
+        <span class="text-base-content/70"><%= adds_up_note(bank_transaction, budget) %></span>
       </span>
     <% end %>
 
-    <span class="mt-1 block">
+    <span class="mt-1 flex flex-wrap items-center gap-2">
       <%= button_to "Un-file", bank_transaction_filing_path(bank_transaction), method: :delete, params: origin_params,
             form: { class: "inline", data: { turbo_confirm: "Un-file this bank transaction? This deletes the records it was filed as." } }, class: action_class %>
+      <% if removed %>
+        <%= render "components/warning_badge", text: "Deleted in Splitwise" %>
+        <span class="text-base-content/70">Un-file it, or keep its records.</span>
+      <% end %>
     </span>
   <% elsif state == :ignored %>
     <%= render "bank_transactions/filing_rule", rule: rule if rule %>

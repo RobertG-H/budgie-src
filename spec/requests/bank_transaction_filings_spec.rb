@@ -74,6 +74,43 @@ RSpec.describe "Filing bank transactions", type: :request do
       expect(visible_text).to include("Money in", "$3,000.00")
     end
 
+    it "starts money in from Splitwise as a Refund instead, since it's almost always friends paying back a share, and still offers a Deposit" do
+      splitwise_account = create(:budget_account, :synced, budget: budget, name: "Splitwise")
+      shared = create(:budget_bank_transaction, account: splitwise_account, description: "Dinner at Nonna's", date: Date.new(2026, 10, 3), amount: 50)
+
+      get new_bank_transaction_filing_path(shared)
+
+      assert_select "input[type=radio][name='filing[records][0][kind]']", count: 2
+      assert_select "input[type=radio][name='filing[records][0][kind]'][value=refund][checked]"
+      assert_select "input[type=radio][name='filing[records][0][kind]'][value=deposit]:not([checked])"
+    end
+
+    it "starts a Guess ahead of that, so money in from Splitwise that was always a Deposit starts as one" do
+      splitwise_account = create(:budget_account, :synced, budget: budget, name: "Splitwise")
+      earlier = create(:budget_bank_transaction, account: splitwise_account, description: "Rent from subletter", date: Date.new(2026, 9, 1), amount: 800)
+      create(:budget_deposit_link, bank_transaction: earlier)
+      shared = create(:budget_bank_transaction, account: splitwise_account, description: "Rent from subletter", date: Date.new(2026, 10, 1), amount: 800).reload
+
+      get new_bank_transaction_filing_path(shared)
+
+      assert_select "input[type=radio][name='filing[records][0][kind]'][value=deposit][checked]"
+    end
+
+    it "refuses a bank transaction that was deleted in Splitwise, and goes back, saying so" do
+      splitwise_account = create(:budget_account, :synced, budget: budget, name: "Splitwise")
+      gone = create(:budget_bank_transaction, :removed, account: splitwise_account, description: "Deleted dinner", amount: -30)
+
+      get new_bank_transaction_filing_path(gone)
+
+      expect(response).to redirect_to(account_path(splitwise_account))
+      expect(flash[:alert]).to eq("This bank transaction was deleted in Splitwise, so it can't be filed.")
+
+      post bank_transaction_filing_path(gone), params: { filing: { records: { "0" => record_params(amount: "30") } } }
+
+      expect(flash[:alert]).to eq("This bank transaction was deleted in Splitwise, so it can't be filed.")
+      expect(Budget::Spend.count).to eq(0)
+    end
+
     it "offers a Deposit the month of its date or the month after, starting with the date's" do
       get new_bank_transaction_filing_path(money_in)
 

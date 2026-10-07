@@ -139,12 +139,52 @@ if chequing.imports.none?
   Budget::Filing.new(budget).file([ hydro_entry ]) or raise "The sample wasn't filed: #{(hydro_entry.errors.full_messages + hydro_entry.drafts.flat_map { |draft| draft.errors.full_messages }).to_sentence}"
 end
 
-# An Account synced from Splitwise, with a connection whose token isn't real: nothing signs in to Splitwise in development unless the app is registered there,
-# and nothing syncs yet, but it gives the Accounts page and an Account's page a synced Account to show. It's only made when there isn't one for its connection, so a
-# developer's changes to it stay, and it has no bank transactions. Its name can't clash with an Account a developer made by hand.
+# An Account synced from Splitwise, with a connection whose token isn't real: nothing signs in to Splitwise in development unless the app is registered there, so
+# Sync now says Splitwise doesn't accept the sign-in, but it gives the Accounts page and an Account's page a synced Account to show. It's only made when there isn't one for
+# its connection, so a developer's changes to it stay. Its name can't clash with an Account a developer made by hand.
 splitwise = budget.bank_connections.find_or_create_by!(provider: Budget::BankConnection::SPLITWISE, login_id: "1000000") do |connection|
   connection.assign_attributes(login_name: "Dev B.", access_token: "development-token-not-real", read_from: this_month)
 end
-budget.accounts.find_or_create_by!(bank_connection: splitwise) do |account|
+splitwise_account = budget.accounts.find_or_create_by!(bank_connection: splitwise) do |account|
   account.assign_attributes(name: "Splitwise (sample)", external_account_id: splitwise.login_id, files_with_rules: false)
+end
+
+# What a sync would have brought into it, one of each thing a bank transaction from Splitwise can be, so the Bank transactions page and the Account's page have them
+# all to show: unfiled ones (money in and out), filed ones, one whose amount changed since it was filed and one whose sign did, one deleted in Splitwise before it was
+# filed and one after, and a settle-up, which arrives ignored. They have no Import, as a sync's don't. Only made while the Account has none, and filed and changed straight
+# after, so what a developer has done to them since isn't redone by seeding again.
+if splitwise_account.bank_transactions.none?
+  expense = ->(number, description, amount, day) do
+    splitwise_account.bank_transactions.create!(external_id: (1_000 + number).to_s, description: description, amount: amount, date: this_month + day)
+  end
+  # As the filing form starts: money in from Splitwise is a Refund, and money out a Spend.
+  file = lambda do |bank_transaction, envelope|
+    entry = Budget::Filing::Entry.new(bank_transaction: bank_transaction, drafts: [ Budget::Filing::Draft.for(bank_transaction, envelope_id: envelope.id) ])
+    Budget::Filing.new(budget).file([ entry ]) or raise "The Splitwise sample wasn't filed: #{entry.full_messages.to_sentence}"
+  end
+  # An envelope of its own, so what's filed from them doesn't change the figures of the envelopes above.
+  shared = budget.envelopes.find_or_create_by!(name: "Shared expenses") { |envelope| envelope.starting_balance = 200 }
+
+  expense.(1, "Dinner at Nonna's", 50, 2)
+  expense.(2, "Cottage groceries", -45, 3)
+  file.(expense.(3, "Brunch with friends", 30, 1), shared)
+  file.(expense.(4, "Gas up north", -30, 1), shared)
+
+  # Filed, and then changed in Splitwise: the amount, and the sign with the size the same. Neither touches the Refund it was filed as.
+  movie_night = expense.(5, "Movie night", 20, 4)
+  file.(movie_night, shared)
+  movie_night.update!(amount: 25)
+  taxi = expense.(6, "Taxi home", 15, 4)
+  file.(taxi, shared)
+  taxi.update!(amount: -15)
+
+  # Deleted in Splitwise: one that was never filed, which leaves the Unfiled state, and one that was, which keeps its Refund until it's un-filed.
+  expense.(7, "Deleted lunch", -12, 2).update!(removed_at: Time.current)
+  concert = expense.(8, "Concert tickets", 40, 3)
+  file.(concert, shared)
+  concert.update!(removed_at: Time.current)
+
+  expense.(9, "Jane paid me back", 50, 5).update!(ignored_at: Time.current)
+  # As if it had synced a little while ago, so the Account's page has a time to say.
+  splitwise.update_columns(synced_at: 25.minutes.ago)
 end

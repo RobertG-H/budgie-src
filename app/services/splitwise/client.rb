@@ -1,7 +1,7 @@
 require "net/http"
 
-# Asks Splitwise the questions connecting needs, and nothing else yet: where to send a person to sign in, what a code they come back with is
-# worth, and who a token is for. It's the real thing behind `Splitwise.client`, and the only code that opens a connection to Splitwise.
+# Asks Splitwise the questions connecting and syncing need, and nothing else: where to send a person to sign in, what a code they come back with is
+# worth, who a token is for, and the expenses they have. It's the real thing behind `Splitwise.client`, and the only code that opens a connection to Splitwise.
 #
 # The token is only ever sent as a Bearer token to Splitwise, and the client's secret only in the token request's body. Neither appears in an error, and
 # neither in `inspect`: an error says what went wrong in words and never what Splitwise answered. Every failure to get an answer is a
@@ -51,13 +51,18 @@ class Splitwise::Client
 
   # Who the token is for.
   def current_user(access_token)
-    request = Net::HTTP::Get.new("#{API_PATH}/get_current_user")
-    request["Authorization"] = "Bearer #{access_token}"
-    response = perform(request)
-    raise Splitwise::Rejected, "Splitwise doesn't accept the token any more." if response.is_a?(Net::HTTPUnauthorized)
-    raise Splitwise::Error, "Splitwise answered #{response.code}." unless response.is_a?(Net::HTTPSuccess)
+    person(get("get_current_user", access_token)["user"])
+  end
 
-    person(parse(response)["user"])
+  # A page of the expenses of the person `user_id` is, as Splitwise::Expense values with only their own share of each: `limit` of them from `offset`, the ones
+  # that changed since `updated_after` and are dated after `dated_after` when those are given (times, sent as ISO 8601 in UTC). Both the limit and the
+  # offset are always sent, since Splitwise's defaults are small and nothing says where a page stops but a short one. Splitwise leaves deleted expenses in the
+  # listing, with `deleted_at` set. The order isn't documented, so nothing here depends on it.
+  def expenses(access_token, user_id:, limit:, offset:, updated_after: nil, dated_after: nil)
+    query = { limit: limit, offset: offset, updated_after: updated_after&.utc&.iso8601, dated_after: dated_after&.utc&.iso8601 }.compact
+    list = get("get_expenses", access_token, query)["expenses"]
+
+    Array(list.is_a?(Array) ? list : nil).filter_map { |entry| Splitwise::Expense.from_api(entry, user_id: user_id) }
   end
 
   def inspect
@@ -66,6 +71,28 @@ class Splitwise::Client
   alias_method :to_s, :inspect
 
   private
+    # One authorised read of the API, and its answer as a Hash. A token Splitwise won't accept is Rejected, a limit it has put on asking is RateLimited, and anything
+    # else that isn't an answer is an Error. Splitwise has two error shapes ({"errors": {"base": [...]}} and {"error": "..."}), answers 403 and 404 for what isn't found
+    # as well as what isn't allowed, and sometimes says a failure with a 200, so the body is looked at too. What it says is never repeated: only the status, in words.
+    def get(path, access_token, query = {})
+      request = Net::HTTP::Get.new("#{API_PATH}/#{path}#{"?#{query.to_query}" if query.any?}")
+      request["Authorization"] = "Bearer #{access_token}"
+      response = perform(request)
+
+      case response
+      when Net::HTTPUnauthorized then raise Splitwise::Rejected, "Splitwise doesn't accept the token any more."
+      when Net::HTTPTooManyRequests then raise Splitwise::RateLimited, "Splitwise is limiting how often Budgie can ask."
+      when Net::HTTPForbidden, Net::HTTPNotFound then raise Splitwise::Error, "Splitwise says what Budgie asked for wasn't found, or isn't allowed (#{response.code})."
+      when Net::HTTPSuccess then parse(response).tap { |body| raise Splitwise::Error, "Splitwise answered with an error." if error_in?(body) }
+      else raise Splitwise::Error, "Splitwise answered #{response.code}."
+      end
+    end
+
+    # An error in either shape. An empty `errors` is how Splitwise says there were none.
+    def error_in?(body)
+      body["error"].present? || body["errors"].present?
+    end
+
     def perform(request)
       Net::HTTP.start(HOST, 443, use_ssl: true, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT) { |http| http.request(request) }
     rescue *UNREACHABLE

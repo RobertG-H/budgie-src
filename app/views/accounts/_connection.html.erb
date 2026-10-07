@@ -1,22 +1,29 @@
 <%# locals: (account:) %>
-<%# What a synced Account is synced from, and what can be done about it: Reconnect, which sends the person to sign in to Splitwise again, and Disconnect, which forgets the token and keeps everything else. Whether it's working is said in words, and a connection that needs reconnecting is a warning. Reconnect needs Splitwise's client id and secret, which not every host has. %>
+<%# What a synced Account is synced from, and what can be done about it: Sync now, which brings its expenses in by hand (the hourly job does too), Reconnect, which sends the person to sign in to Splitwise again, and Disconnect, which forgets the token and keeps everything else. Whether it's working is said in words, and a connection that needs reconnecting is a warning. Sync now needs a connection that works, and Splitwise's keys, and Reconnect needs its client id and secret as well: not every host has them. The date it reads from is rarely changed, so it's under a closed details, which says what's in it. %>
 <% connection = account.bank_connection %>
 <div class="mt-4 space-y-4">
-  <% if connection.disconnected? %>
-    <p class="text-base-content/70">
-      Disconnected from <%= connection.provider_name %>, so this Account isn't syncing. Its bank transactions stay as they are. Reconnect as <%= connection.login_name %> to start again.
-    </p>
-  <% elsif connection.needs_reconnect? %>
-    <div role="status" class="alert alert-warning">
-      <span><%= connection.provider_name %> stopped accepting the sign-in as <%= connection.login_name %>, so this Account isn't syncing. Reconnect to start again.</span>
-    </div>
-  <% else %>
-    <p class="text-base-content/70">
-      Synced from <%= connection.provider_name %> as <%= connection.login_name %>, reading expenses dated from <%= spelled_date(connection.read_from) %>.
-    </p>
-  <% end %>
+  <div>
+    <% if connection.disconnected? %>
+      <p class="text-base-content/70">
+        Disconnected from <%= connection.provider_name %>, so this Account isn't syncing. Its bank transactions stay as they are. Reconnect as <%= connection.login_name %> to start again.
+      </p>
+    <% elsif connection.needs_reconnect? %>
+      <div role="status" class="alert alert-warning">
+        <span><%= connection.provider_name %> stopped accepting the sign-in as <%= connection.login_name %>, so this Account isn't syncing. Reconnect to start again.</span>
+      </div>
+    <% else %>
+      <p class="text-base-content/70">
+        Synced from <%= connection.provider_name %> as <%= connection.login_name %>, reading expenses dated from <%= spelled_date(connection.read_from) %>.
+      </p>
+    <% end %>
+    <p class="mt-1 text-sm text-base-content/70"><%= last_synced_text(connection) %></p>
+  </div>
 
   <div class="flex flex-wrap items-center gap-2">
+    <% if connection.connected? && Splitwise.configured? %>
+      <%# A sync can take a few seconds, so the button says so, and can't be pressed twice. %>
+      <%= button_to "Sync now", account_connection_sync_path(account), class: "btn btn-primary", data: { turbo_submits_with: "Syncing…" } %>
+    <% end %>
     <%# Turbo is off: it ends in a redirect to Splitwise's own sign-in, which a fetch can't follow to another site. %>
     <% if Splitwise.configured? %>
       <%= button_to "Reconnect", account_connection_path(account), form: { data: { turbo: false } }, class: "btn" %>
@@ -25,4 +32,20 @@
       <%= render "components/delete_button", path: account_connection_path(account), label: "Disconnect", confirm: disconnect_question(connection) %>
     <% end %>
   </div>
+
+  <details class="rounded-box border border-base-300">
+    <summary class="cursor-pointer p-4">
+      <span class="font-semibold">Date to read from</span>
+      <span class="block text-sm text-base-content/70">Expenses dated from <%= spelled_date(connection.read_from) %></span>
+    </summary>
+    <div class="border-t border-base-300 p-4">
+      <%= form_with model: connection, scope: :bank_connection, url: account_connection_path(account), method: :patch, class: "space-y-6" do |form| %>
+        <%= render "components/field", form: form, attribute: :read_from, label: "Read expenses dated from",
+              hint: "Splitwise expenses dated before this are never read. Changing it makes the next sync read every expense dated from it again. What's already here stays as it is." do |field| %>
+          <%= form.date_field :read_from, required: true, **field %>
+        <% end %>
+        <%= form.submit "Change date", class: "btn" %>
+      <% end %>
+    </div>
+  </details>
 </div>

@@ -16,3 +16,7 @@ production:
   start_new_months:
     class: StartNewMonthsJob
     schedule: every hour
+  # Splitwise's expenses, into each connected Account. The minute is staggered from the month's start, which runs on the hour.
+  sync_bank_connections:
+    class: SyncBankConnectionsJob
+    schedule: every hour at minute 20

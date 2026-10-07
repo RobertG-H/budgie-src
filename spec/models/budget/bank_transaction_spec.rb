@@ -4,7 +4,7 @@ RSpec.describe Budget::BankTransaction, type: :model do
   subject { build(:budget_bank_transaction) }
 
   it { is_expected.to belong_to(:account).class_name("Budget::Account") }
-  it { is_expected.to belong_to(:import).class_name("Budget::Import") }
+  it { is_expected.to belong_to(:import).class_name("Budget::Import").optional }
 
   it "uses the budget_bank_transactions table, and is named without the Budget prefix in routes and params" do
     expect(Budget::BankTransaction.table_name).to eq("budget_bank_transactions")
@@ -611,7 +611,7 @@ RSpec.describe Budget::BankTransaction, type: :model do
       expect { update_transaction(other, ActiveRecord::Base.sanitize_sql_array([ "content_key = ?", transaction.content_key ])) }.not_to raise_error
     end
 
-    %w[ account_id import_id date description amount content_key occurrence ].each do |column|
+    %w[ account_id date description amount content_key occurrence ].each do |column|
       it "requires a #{column}" do
         expect { update_transaction(transaction, "#{column} = NULL") }.to raise_error(ActiveRecord::NotNullViolation)
       end
@@ -625,6 +625,188 @@ RSpec.describe Budget::BankTransaction, type: :model do
     it "keeps an Import with bank transactions from being deleted without them" do
       expect { Budget::Import.where(id: transaction.import_id).delete_all }
         .to raise_error(ActiveRecord::StatementInvalid, /PG::RestrictViolation/)
+    end
+  end
+
+  describe "one that a sync brought in, which has no Import" do
+    let(:account) { create(:budget_account, :synced) }
+
+    it "has the provider's id for it instead, and is made without an Import" do
+      transaction = create(:budget_bank_transaction, account: account, external_id: "9001")
+
+      expect(transaction).to have_attributes(import: nil, external_id: "9001")
+      expect(transaction).to be_persisted
+    end
+
+    it "needs an Import or an external id, so that it always says where it came from" do
+      transaction = build(:budget_bank_transaction, import: nil, external_id: nil)
+
+      expect(transaction).not_to be_valid
+      expect(transaction.errors[:base]).to eq([ "Bank transaction needs an Import or an external id" ])
+    end
+
+    it "is told apart in its Account by the external id, which the Account's other bank transactions can't have" do
+      create(:budget_bank_transaction, account: account, external_id: "9001")
+
+      duplicate = build(:budget_bank_transaction, account: account, external_id: "9001", description: "Something else")
+
+      expect(duplicate).not_to be_valid
+      expect(duplicate.errors[:external_id]).to eq([ "is already in this Account" ])
+    end
+
+    it "can share an external id with a bank transaction in another Account" do
+      create(:budget_bank_transaction, account: account, external_id: "9001")
+
+      expect(build(:budget_bank_transaction, account: create(:budget_account, :synced), external_id: "9001")).to be_valid
+    end
+
+    it "is not touched by Undo, which only reaches an Import's own bank transactions" do
+      synced = create(:budget_bank_transaction, account: account)
+      imported = create(:budget_bank_transaction)
+
+      imported.import.undo
+
+      expect(synced.reload).to be_persisted
+    end
+
+    describe "removed" do
+      it "is when it went from the provider: it's removed once removed_at is set, and never deleted" do
+        transaction = create(:budget_bank_transaction, account: account)
+        expect(transaction).not_to be_removed
+
+        transaction.update!(removed_at: Time.current)
+
+        expect(transaction).to be_removed
+        expect(Budget::BankTransaction.removed).to contain_exactly(transaction)
+        expect(Budget::BankTransaction.not_removed).to be_empty
+      end
+
+      it "is neither unfiled, filed nor ignored when it was never filed or ignored, so it leaves the Unfiled state" do
+        transaction = create(:budget_bank_transaction, :removed, account: account)
+
+        expect(transaction.state).to eq(:removed)
+        expect(transaction).not_to be_unfiled
+        expect(Budget::BankTransaction.unfiled).to be_empty
+        expect(Budget::BankTransaction.filed).to be_empty
+        expect(Budget::BankTransaction.ignored).to be_empty
+      end
+
+      it "stays filed when it was filed, which its records still say, and ignored when it was ignored" do
+        filed = create(:budget_bank_transaction, :filed, :removed, account: account)
+        ignored = create(:budget_bank_transaction, :ignored, :removed, account: account)
+
+        expect(filed.reload).to be_removed
+        expect(filed.state).to eq(:filed)
+        expect(ignored.state).to eq(:ignored)
+        expect(Budget::BankTransaction.filed).to contain_exactly(filed)
+        expect(Budget::BankTransaction.ignored).to contain_exactly(ignored)
+      end
+
+      it "isn't the next unfiled bank transaction, and isn't counted among the unfiled ones" do
+        keep = create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 14))
+        create(:budget_bank_transaction, :removed, account: account, date: Date.new(2026, 9, 13))
+        current = create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 15))
+
+        expect(current.next_unfiled(scope: account.bank_transactions)).to eq(keep)
+        expect(account.bank_transactions.unfiled.count).to eq(2)
+      end
+
+      it "is why it can't be filed" do
+        expect(described_class::FILING_REFUSALS.fetch(:removed)).to eq("This bank transaction was deleted in Splitwise, so it can't be filed.")
+      end
+
+      it "doesn't count as history for nothing: a removed one that was filed is still a filed bank transaction" do
+        filed = create(:budget_bank_transaction, :filed, :removed, account: account)
+
+        expect(Budget::BankTransaction.filed).to include(filed)
+      end
+    end
+
+    describe "adds_up?" do
+      let(:budget) { account.budget }
+      let(:groceries) { create(:budget_envelope, budget: budget) }
+
+      def file_as(transaction, kind, amount)
+        case kind
+        when :spend then create(:budget_spend_link, bank_transaction: transaction, spend: create(:budget_spend, envelope: groceries, amount: amount, date: transaction.date))
+        when :refund then create(:budget_refund_link, bank_transaction: transaction, refund: create(:budget_refund, envelope: groceries, amount: amount, date: transaction.date))
+        when :deposit then create(:budget_deposit_link, bank_transaction: transaction, deposit: create(:budget_deposit, budget: budget, amount: amount, date: transaction.date))
+        end
+      end
+
+      it "stops when the amount changes, as before" do
+        transaction = create(:budget_bank_transaction, account: account, amount: 50)
+        file_as(transaction, :refund, 50)
+        expect(transaction.reload).to be_adds_up
+
+        transaction.update!(amount: 60)
+
+        expect(transaction.reload).not_to be_adds_up
+      end
+
+      it "stops when the sign changes, though the size is the same, since a Refund can't stand for money out" do
+        transaction = create(:budget_bank_transaction, account: account, amount: 50)
+        file_as(transaction, :refund, 50)
+
+        transaction.update!(amount: -50)
+
+        expect(transaction.reload).not_to be_adds_up
+        expect(transaction.filed_total).to eq(50)
+      end
+
+      it "stops when money out becomes money in, for a Spend, and for a Deposit when money in becomes money out" do
+        spent = create(:budget_bank_transaction, account: account, amount: -50)
+        file_as(spent, :spend, 50)
+        deposited = create(:budget_bank_transaction, account: account, amount: 50)
+        file_as(deposited, :deposit, 50)
+        expect([ spent.reload, deposited.reload ]).to all(be_adds_up)
+
+        spent.update!(amount: 50)
+        deposited.update!(amount: -50)
+
+        expect([ spent.reload, deposited.reload ]).to all(satisfy { |transaction| !transaction.adds_up? })
+      end
+
+      it "still adds up for every record of a split that suits the sign" do
+        transaction = create(:budget_bank_transaction, account: account, amount: 100)
+        file_as(transaction, :deposit, 60)
+        file_as(transaction, :refund, 40)
+
+        expect(transaction.reload).to be_adds_up
+      end
+
+      it "has nothing to add up while it's not filed, whatever the sign" do
+        expect(create(:budget_bank_transaction, account: account, amount: 50)).to be_adds_up
+      end
+    end
+
+    describe "its database constraints" do
+      let(:transaction) { create(:budget_bank_transaction, account: account) }
+
+      def update_transaction(transaction, assignments)
+        Budget::BankTransaction.transaction(requires_new: true) { Budget::BankTransaction.where(id: transaction.id).update_all(assignments) }
+      end
+
+      it "rejects a row with neither an Import nor an external id" do
+        expect { update_transaction(transaction, "external_id = NULL") }.to raise_error(ActiveRecord::CheckViolation, /budget_bank_transactions_import_or_external_id/)
+      end
+
+      it "rejects a blank external id" do
+        expect { update_transaction(transaction, "external_id = '  '") }.to raise_error(ActiveRecord::CheckViolation, /budget_bank_transactions_external_id_not_blank/)
+      end
+
+      it "rejects a second row with the same Account and external id" do
+        other = create(:budget_bank_transaction, account: account)
+
+        expect { update_transaction(other, ActiveRecord::Base.sanitize_sql_array([ "external_id = ?", transaction.external_id ])) }
+          .to raise_error(ActiveRecord::RecordNotUnique, /index_budget_bank_transactions_on_account_and_external_id/)
+      end
+
+      it "lets any number of an Import's rows have no external id" do
+        imported = create_list(:budget_bank_transaction, 2, account: create(:budget_account))
+
+        expect(imported.map(&:external_id)).to eq([ nil, nil ])
+      end
     end
   end
 

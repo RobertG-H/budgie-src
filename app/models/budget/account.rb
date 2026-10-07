@@ -59,6 +59,12 @@ class Budget::Account < ApplicationRecord
     bank_connection&.provider_name
   end
 
+  # What money in starts as when one of its bank transactions is filed: a Deposit, as for a bank, except from Splitwise, where it's almost always friends paying
+  # back a share, which is a Refund (ADR 0016). Only where the filing form starts: a Guess and a Filing rule say what they like.
+  def money_in_kind
+    bank_connection&.splitwise? ? "refund" : "deposit"
+  end
+
   # Why it takes no Import, which is what a synced Account says when one is asked of it, or nothing for an Account that does.
   def import_refusal
     "is synced from #{synced_from}, so it takes no Import" if synced?

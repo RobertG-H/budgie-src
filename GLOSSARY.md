@@ -64,7 +64,7 @@ A real bank or card account that bank transactions come from. Budgie doesn't tra
 _Avoid_: Wallet
 
 **Bank transaction**:
-The bank's record of money moving in or out of an account, before Budgie has filed it as one or more Deposits, Spends or Refunds, or ignored it. For a Splitwise Account it's Splitwise's record of the user's share of an expense: what they paid less what they owe, positive when friends owe them.
+The bank's record of money moving in or out of an account, before Budgie has filed it as one or more Deposits, Spends or Refunds, or ignored it. For a Splitwise Account it's Splitwise's record of the user's share of an expense: what they paid less what they owe, positive when friends owe them. A sync keeps it up to date as the expense is edited, and marks it deleted in Splitwise, never deleting it, when the expense is deleted.
 _Avoid_: Transaction, statement line, import row
 
 **CSV format**:

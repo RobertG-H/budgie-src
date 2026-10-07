@@ -15,6 +15,18 @@ module BankTransactionsHelper
     edit_polymorphic_path(record, month: month.strftime("%Y-%m"))
   end
 
+  # Why a filed bank transaction's records don't add up to it, which "Doesn't add up" is followed by: "Its records add up to $60.00, not $50.00." when the amount
+  # changed, and when what they're filed as no longer suits the sign, which a sync can change though the size is the same, what it is now and what it was filed as: "It's
+  # now money out, but it was filed as a Refund."
+  def adds_up_note(bank_transaction, budget)
+    return "Its records add up to #{money(bank_transaction.filed_total, budget: budget)}, not #{money(bank_transaction.amount.abs, budget: budget)}." if bank_transaction.records_suit_the_sign?
+
+    unsuited = bank_transaction.filed_records.select { |record| record.is_a?(Budget::Spend) == bank_transaction.amount.positive? }
+    kinds = unsuited.map { |record| record.model_name.human }.uniq.map { |kind| "a #{kind}" }.to_sentence
+
+    "It's now #{money_direction(bank_transaction.amount).downcase}, but it was filed as #{kinds}."
+  end
+
   # The options of the State select on the Bank transactions page: every state, then each one.
   def bank_transaction_state_options
     [ [ "All", "all" ], [ "Unfiled", "unfiled" ], [ "Filed", "filed" ], [ "Ignored", "ignored" ] ]
