@@ -235,6 +235,29 @@ RSpec.describe Budget::Filing do
       expect(Budget::Spend.count).to eq(0)
     end
 
+    it "can't be filed once it was deleted in Splitwise, and creates nothing" do
+      synced = create(:budget_account, :synced, budget: budget)
+      removed = create(:budget_bank_transaction, :removed, account: synced, amount: -100, description: "Costco", date: Date.new(2026, 9, 12))
+      entry = entry(removed, draft("spend", "100"))
+
+      filing = file(entry)
+
+      expect(refused_with(filing, entry)).to eq([ false, [ "This bank transaction was deleted in Splitwise, so it can't be filed." ], [] ])
+      expect(Budget::Spend.count).to eq(0)
+    end
+
+    it "is judged once it's locked for having been removed since it was looked at, too" do
+      synced = create(:budget_account, :synced, budget: budget)
+      money_out = create(:budget_bank_transaction, account: synced, amount: -100, description: "Costco", date: Date.new(2026, 9, 12))
+      stale = Budget::BankTransaction.find(money_out.id)
+      money_out.update!(removed_at: Time.current)
+
+      second = entry(stale, draft("spend", "100"))
+
+      expect(file(second).filed?).to be(false)
+      expect(second.errors.full_messages).to eq([ "This bank transaction was deleted in Splitwise, so it can't be filed." ])
+    end
+
     it "is judged once it's locked, so a double submit files once" do
       money_out = bank_transaction(-100)
       stale = Budget::BankTransaction.find(money_out.id) # What the second submit looked at, before the first was done.

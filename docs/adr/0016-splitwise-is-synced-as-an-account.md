@@ -18,6 +18,15 @@ The connection is made by Budgie's own OAuth 2 authorization-code flow, not thro
 
 The token is encrypted with Active Record encryption, its keys read from the environment, and is never shown in a page, a log or an error. The Splitwise API is for non-commercial use, which an invite-only personal budget is.
 
+## The sync
+
+A sync (Sync now on the Account's page, and a job every hour) reads Splitwise's `get_expenses` for what changed since a sync marker and is dated from the connection's read-from date, and matches each expense to a bank transaction by its Splitwise id, kept as `external_id` on the bank transaction. A bank transaction that a sync brought in has no Import, so Undo and an Account's latest Import never reach it, and a sync isn't an Import. It holds the connection's row lock while it runs and is one database transaction, so two syncs never both insert, a sync that fails changes nothing, and the marker moves forward only when one finishes. The next sync reads from a little before the marker: reading an expense twice is harmless, because it's matched by its id.
+
+- **What comes in.** An expense the person has a share of (a net share other than 0, in the budget's currency, not deleted) becomes a bank transaction of that share, dated the day Splitwise shows the person, which is the UTC date of the timestamp it sends. A settle-up arrives ignored, with no Filing rule noted, and the sync's summary counts it. What's skipped is counted, and nothing is stored for it, so an edit that later gives the person a share brings the expense in on the next sync.
+- **What changes.** An edit updates the bank transaction's date, amount and description in place, and never its content key, its occurrence or any record that was filed from it, because budget records are never changed automatically. A deleted expense, or one whose share is now 0 or in another currency, marks the bank transaction removed (`removed_at`) and never deletes it, and a restore clears that. Ignored stays ignored, and filed stays filed.
+- **What the person sees.** A filed bank transaction whose amount changed shows "Doesn't add up", and so does one whose sign changed, even when the size is the same, since a Refund can't stand for money out. A removed one that was filed shows "Deleted in Splitwise" beside Un-file, and the person un-files it or keeps the records. A removed one that was never filed leaves the Unfiled state and the header's count and can't be filed.
+- **Filing rules** run on new bank transactions only when the Account has them on, which a Splitwise Account doesn't to start with. Money in from Splitwise starts as a Refund on the filing form and not a Deposit, since it's almost always friends paying back a share. A Guess still takes precedence.
+
 ## Considered Options
 
 - **Cash basis: Spent is the full charge, and the friend's repayment is a Refund when the cash arrives.** It is the simplest to describe, but a repayment has to be divided across envelopes and months it can't see, and under simplified debts it can't even tell which expenses it's for. It also makes the month of a shared dinner wrong until it's settled.
@@ -31,6 +40,8 @@ The token is encrypted with Active Record encryption, its keys read from the env
 - A bank transaction can't be partly ignored (ADR 0009), so an over-payment that includes something outside Splitwise can't be split into an ignored part and a filed one (scenario 8).
 - The Splitwise Account's own balance, what friends owe the person, is never shown, as for any Account (ADR 0001).
 - A share in another currency isn't synced, and the sync counts it as skipped (scenario 13).
+- Dates are the UTC date Splitwise sends. If Splitwise stamped a day with a local time instead of midnight UTC, an expense could come in a day out, so the operator checks an expense dated the 1st of a month against Splitwise itself (`docs/splitwise.md`).
+- Changing the read-from date clears the marker, so the next sync reads every expense dated from it again. Moving it later leaves what's already in the Account as it is.
 
 ## The scenarios
 

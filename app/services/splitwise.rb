@@ -12,6 +12,9 @@ module Splitwise
   # says the connection needs reconnecting.
   class Rejected < Error; end
 
+  # Splitwise is limiting how often it can be asked (HTTP 429). It isn't a broken sign-in: a sync that finds this stops without moving on, and the next one tries again.
+  class RateLimited < Error; end
+
   # Who signed in to Splitwise, and all that's kept of them: their Splitwise user's id, and the name Splitwise shows for them ("Robert G."). Not their email.
   Person = Data.define(:id, :name)
 

@@ -2,28 +2,37 @@
 # ignored it. Its amount is signed: positive is money in and negative is money out, never 0 (ADR 0009).
 #
 # It belongs to its budget through its Account, as a Spend does through its envelope, so it has no budget of its own. It's
-# read-only to the person: bank transactions come from an Import and go with it, or with their Account's budget.
+# read-only to the person: bank transactions come from an Import and go with it, or with their Account's budget, or from a sync
+# of the Account's connection (ADR 0016), which has no Import and tells its rows apart by the provider's `external_id` for each.
 #
 # What says which row it is in its Account (ADR 0010) is its content key and occurrence, which are written once, when the row
 # is made, and never again, because they record how it first looked. The description is as the bank gave it, so it can be
 # updated in place later, and `normalized_description` is kept by the database to follow it, for a Filing rule or a Guess to
-# read.
+# read. For one a sync brought in, the row is told apart by its `external_id` (the Splitwise expense's id), and the content key and
+# occurrence are only there to keep the Account's rows distinct: an edit in Splitwise updates the date, amount and description in place and
+# never the key, the occurrence or any record that was filed from it. One that went from the provider has `removed_at` set, and is never deleted.
 #
 # It's unfiled, filed or ignored, which is derived and never stored: ignored if `ignored_at` is set, filed if it has at least one
 # link, and otherwise unfiled. It's never both ignored and filed, and never partly filed: Filing (Budget::Filing) makes every
 # record and link at once, and they add up to its amount, though a record edited afterwards may stop it (the flag, see
-# `adds_up?`, which blocks nothing, ADR 0009). It changes only through ignoring and un-ignoring, filing and un-filing, Undo, a
-# sync's update, and deletion through its Account or Budget.
+# `adds_up?`, which blocks nothing, ADR 0009). One that's removed and was neither filed nor ignored is none of the three, since it leaves
+# the Unfiled state and can't be filed (`state` says `removed`). It changes only through ignoring and un-ignoring, filing and un-filing,
+# Undo, a sync's update, and deletion through its Account or Budget.
 class Budget::BankTransaction < ApplicationRecord
   # Raised when a bank transaction can't be ignored, un-ignored or un-filed as asked; the message says why, for the person who
   # asked.
   class Refused < StandardError; end
 
   # Why a bank transaction can't be filed, by the state that stops it.
-  FILING_REFUSALS = { filed: "This bank transaction is already filed.", ignored: "This bank transaction is ignored. Un-ignore it first." }.freeze
+  FILING_REFUSALS = {
+    filed: "This bank transaction is already filed.",
+    ignored: "This bank transaction is ignored. Un-ignore it first.",
+    removed: "This bank transaction was deleted in Splitwise, so it can't be filed."
+  }.freeze
 
   belongs_to :account
-  belongs_to :import
+  # The Import it came from, which a row a sync brought in has none of: it has its `external_id` instead.
+  belongs_to :import, optional: true
   # The Filing rule that filed or ignored it, if one did and it's still filed or ignored: null when a person did it. It's only to
   # be read while the bank transaction is filed or ignored (see `filed_by_rule`), since deleting its last record by hand leaves
   # the value stale, until the next filing or ignoring writes it again.
@@ -35,22 +44,27 @@ class Budget::BankTransaction < ApplicationRecord
   has_many :refund_links, class_name: "Budget::RefundLink", dependent: :restrict_with_error
 
   normalizes :description, with: ->(description) { description.strip }
+  # A blank id is no id, so a row with only that is refused for having neither it nor an Import, in the model as the database's check says.
+  normalizes :external_id, with: ->(external_id) { external_id.strip.presence }
 
   before_validation :set_content_key_and_occurrence, on: :create
 
   validates :description, presence: true
   validates :date, presence: true
   validates :amount, money: true
+  validates :external_id, uniqueness: { scope: :account_id, message: "is already in this Account" }, allow_nil: true
   validate :amount_is_not_zero
+  validate :comes_from_an_import_or_a_connection
   validate :not_ignored_and_filed, if: :ignored_at_changed?
 
   scope :newest_first, -> { order(date: :desc, id: :desc) }
-  # Neither ignored nor filed as anything. Left joins, so a bank transaction with several links is still found once.
-  scope :unfiled, -> { where(ignored_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
+  # Neither ignored, filed as anything nor removed (gone from the provider it was synced from, so there's nothing to file). Left joins, so a bank
+  # transaction with several links is still found once.
+  scope :unfiled, -> { where(ignored_at: nil, removed_at: nil).where.missing(:deposit_links, :spend_links, :refund_links) }
 
   # Filed as at least one record, and not ignored, whichever kind of record: found by what its links are, so one with several is
-  # still found once. With `unfiled` and `ignored`, every bank transaction is in exactly one of the three, and nothing is both
-  # ignored and filed, which the model refuses.
+  # still found once. With `unfiled` and `ignored`, every bank transaction is in exactly one of the three, except one that's removed
+  # and was neither filed nor ignored, which is in none, and nothing is both ignored and filed, which the model refuses.
   scope :filed, -> {
     where(ignored_at: nil).where(id: Budget::DepositLink.select(:bank_transaction_id))
       .or(where(ignored_at: nil).where(id: Budget::SpendLink.select(:bank_transaction_id)))
@@ -98,6 +112,22 @@ class Budget::BankTransaction < ApplicationRecord
     # Cast, since a CASE of nothing but nulls is text to PostgreSQL, which is what it is when a person did them all.
     rule_ids = rule_ids_by_id.reduce(Arel::Nodes::Case.new(arel_table[:id])) { |node, (id, rule_id)| node.when(id).then(rule_id) }
     where(id: rule_ids_by_id.keys).update_all(attributes.merge(filing_rule_id: Arel::Nodes::NamedFunction.new("CAST", [ rule_ids.as("bigint") ]), updated_at: Time.current))
+  end
+
+  # The four columns a sync ever writes on a bank transaction it already has, and their types, which a CASE of nothing but nulls needs said.
+  SYNCED_COLUMNS = { date: "date", description: "varchar", amount: "numeric", removed_at: "timestamp" }.freeze
+
+  # What a sync changed, in one statement however many there are: `changes` is `{ id => { date:, description:, amount:, removed_at: } }`, every column of
+  # SYNCED_COLUMNS for each. Never the content key or the occurrence, which record how a row first looked (ADR 0010), and never a record that was filed from it.
+  def self.update_from_sync(changes)
+    return if changes.empty?
+
+    assignments = SYNCED_COLUMNS.to_h do |column, type|
+      cases = changes.reduce(Arel::Nodes::Case.new(arel_table[:id])) { |node, (id, values)| node.when(id).then(values.fetch(column)) }
+      [ column, Arel::Nodes::NamedFunction.new("CAST", [ cases.as(type) ]) ]
+    end
+
+    where(id: changes.keys).update_all(assignments.merge(updated_at: Time.current))
   end
 
   # How many records of each kind were filed from the bank transactions in `transactions`, by the kind's plural: `{ deposits: 1,
@@ -163,7 +193,13 @@ class Budget::BankTransaction < ApplicationRecord
   end
 
   def unfiled?
-    !ignored? && !filed?
+    state == :unfiled
+  end
+
+  # It went from the provider it was synced from, such as a Splitwise expense that was deleted, or that no longer has a share for the person.
+  # It's kept, since what was filed from it stays, and a sync that finds it again clears this.
+  def removed?
+    removed_at.present?
   end
 
   # The Filing rule that filed or ignored it, which is nothing for one that's unfiled, or that a person filed or ignored.
@@ -174,6 +210,7 @@ class Budget::BankTransaction < ApplicationRecord
   def state
     if ignored? then :ignored
     elsif filed? then :filed
+    elsif removed? then :removed
     else :unfiled
     end
   end
@@ -188,10 +225,22 @@ class Budget::BankTransaction < ApplicationRecord
     filed_records.sum(&:amount)
   end
 
-  # Whether its records add up to its amount, which they do when they're made. Editing one so they don't blocks nothing, and is
-  # shown as a flag (ADR 0009). A bank transaction that isn't filed has nothing to add up, and isn't flagged.
+  # Whether its records add up to its amount, which they do when they're made. Editing one so they don't, or a sync changing the amount, blocks
+  # nothing, and is shown as a flag (ADR 0009). A bank transaction that isn't filed has nothing to add up, and isn't flagged. They don't add up either
+  # when they no longer suit its sign, though the sizes are the same, since a Refund can't stand for money out.
   def adds_up?
-    !filed? || filed_total == amount.abs
+    !filed? || (filed_total == amount.abs && records_suit_the_sign?)
+  end
+
+  # Whether what it was filed as is the kind its money calls for: money out is Spends, and money in Deposits and Refunds (Budget::Filing). They are when it's
+  # filed, and stop being if a sync turns money in into money out, or the other way. One that isn't filed has none to suit.
+  def records_suit_the_sign?
+    records_unsuited_to_the_sign.empty?
+  end
+
+  # The records that no longer suit its sign: Spends when it's money in, and Deposits and Refunds when it's money out.
+  def records_unsuited_to_the_sign
+    filed_records.select { |record| record.is_a?(Budget::Spend) == amount.positive? }
   end
 
   # The next unfiled bank transaction in `scope`, which is what working through a list one at a time goes to: the first unfiled one older than this
@@ -244,6 +293,11 @@ class Budget::BankTransaction < ApplicationRecord
 
     def not_ignored_and_filed
       errors.add(:base, "Bank transaction is filed, so it can't be ignored") if ignored_at.present? && filed?
+    end
+
+    # It says where it came from: the Import that read it from a file, or the provider's id for it, which the database checks too.
+    def comes_from_an_import_or_a_connection
+      errors.add(:base, "Bank transaction needs an Import or an external id") if import_id.nil? && import.nil? && external_id.nil?
     end
 
     def amount_is_not_zero

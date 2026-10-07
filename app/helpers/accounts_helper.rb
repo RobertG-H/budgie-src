@@ -13,6 +13,11 @@ module AccountsHelper
     "Delete the #{account.name_was} account?#{filing_rules_deleted_with(account)}#{connection}"
   end
 
+  # When a synced Account last synced, in words: "Last synced 12 minutes ago.", or "Not synced yet." before one has finished.
+  def last_synced_text(connection)
+    connection.synced_at ? "Last synced #{time_ago_in_words(connection.synced_at)} ago." : "Not synced yet."
+  end
+
   # What's asked before an Account's connection is disconnected: the token is forgotten, and everything that came through it stays.
   def disconnect_question(connection)
     "Disconnect #{connection.provider_name}? Budgie forgets its sign-in and stops syncing. The Account, its bank transactions and what they were filed as stay."

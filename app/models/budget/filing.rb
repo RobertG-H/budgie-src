@@ -83,8 +83,8 @@ class Budget::Filing
         "than the bank transaction's #{money(entry.bank_transaction.amount.abs)}.")
     end
 
-    # What can only be said once the bank transactions are locked: that they're the budget's, and unfiled. A double submit finds
-    # the first one's records, so it files nothing.
+    # What can only be said once the bank transactions are locked: that they're the budget's, and unfiled (not ignored, filed or gone from the provider
+    # that synced them). A double submit finds the first one's records, so it files nothing.
     def check_unfiled(entries)
       ids = entries.map { |entry| entry.bank_transaction.id }
       locked = Budget::BankTransaction.where(id: @budget.bank_transactions.where(id: ids).select(:id)).lock.index_by(&:id)
@@ -99,6 +99,8 @@ class Budget::Filing
           entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:ignored))
         elsif filed.include?(current.id)
           entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:filed))
+        elsif current.removed?
+          entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:removed))
         end
       end
     end

@@ -24,6 +24,21 @@ RSpec.describe Budget::BankTransactionList do
     { unfiled: [], filed: [ :filed ], ignored: [ :ignored ] }.fetch(state)
   end
 
+  describe "a bank transaction a sync found gone from Splitwise, which was neither filed nor ignored" do
+    let(:splitwise_account) { create(:budget_account, :synced, budget: budget) }
+    let!(:in_range) { create(:budget_bank_transaction, :removed, account: splitwise_account, date: Date.new(2026, 10, 5), description: "Removed this month") }
+    let!(:out_of_range) { create(:budget_bank_transaction, :removed, account: splitwise_account, date: Date.new(2026, 8, 5), description: "Removed in August") }
+
+    it "isn't in the Unfiled state, whatever its date" do
+      expect(listed(list_for(state: "unfiled"))).to be_empty
+    end
+
+    it "is in the All state, with the filed and ignored ones, when it's in the range, and not otherwise" do
+      expect(listed(list_for(state: "all"))).to eq([ in_range ])
+      expect(listed(list_for(state: "all", date_from: "2026-08-01", date_to: "2026-08-31"))).to eq([ out_of_range ])
+    end
+  end
+
   describe "the state" do
     it "is All when it's blank, or isn't one of the four" do
       [ {}, { state: "" }, { state: "everything" }, { state: [ "filed" ] }, { state: { a: 1 } }, "//evil.test", nil ].each do |filter|

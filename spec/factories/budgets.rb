@@ -120,16 +120,14 @@ FactoryBot.define do
     sequence(:file_name) { |n| "import-#{n}.csv" }
     duplicates_skipped { 0 }
     zero_rows_skipped { 0 }
-
-    # A synced Account takes no Import, which the model refuses. But a bank transaction can't be made without one until Splitwise's sync makes them
-    # (`import_id` stops being required then), so a spec that needs a synced Account to have bank transactions is let past that one refusal.
-    to_create { |import| import.save!(validate: !import.account&.synced?) }
   end
 
-  # Money out of $10 by default, which is the sign a Spend would be filed from, in the Account of its Import.
+  # Money out of $10 by default, which is the sign a Spend would be filed from, in the Account of its Import. In an Account that's synced from a
+  # connection it has no Import, which takes no Import, and the provider's id for it instead.
   factory :budget_bank_transaction, class: "Budget::BankTransaction" do
     account { association :budget_account }
-    import { association :budget_import, account: account }
+    import { association :budget_import, account: account unless account.synced? }
+    external_id { "expense-#{generate(:external_expense_id)}" if account.synced? }
     sequence(:description) { |n| "Merchant #{n}" }
     date { Date.new(2026, 9, 15) }
     amount { -10 }
@@ -144,7 +142,14 @@ FactoryBot.define do
     trait :ignored do
       ignored_at { Time.zone.local(2026, 9, 16, 10) }
     end
+
+    # Gone from the provider it was synced from, such as a Splitwise expense that was deleted.
+    trait :removed do
+      removed_at { Time.zone.local(2026, 9, 17, 10) }
+    end
   end
+
+  sequence(:external_expense_id)
 
   # A standing instruction: bank transactions with its text in their description are filed as a Spend from an envelope of its budget
   # unless it says otherwise, with no Account or amount condition. The traits are the other outcomes.

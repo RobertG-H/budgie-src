@@ -44,6 +44,46 @@ RSpec.describe "budget rake tasks", type: :task do
     end
   end
 
+  describe "budget:sync_connections" do
+    # A budget with a connected Splitwise Account, and an expense Splitwise has for its person.
+    def connected_account(user_id)
+      budget = create(:budget, currency: "CAD")
+      connection = create(:budget_bank_connection, budget: budget, login_id: user_id, access_token: "token-#{user_id}", read_from: Date.new(2026, 10, 1))
+      splitwise.signs_in("code-#{user_id}", as: Splitwise::Person.new(id: user_id, name: "Person #{user_id}"), token: "token-#{user_id}")
+      create(:budget_account, :synced, budget: budget, bank_connection: connection)
+    end
+
+    it "syncs every connection that can be synced, and says how many" do
+      splitwise.expense(1, "Dinner", net_balance: "-5.00", date: "2026-10-03")
+      accounts = [ connected_account("1"), connected_account("2") ]
+
+      output = run_task("budget:sync_connections")
+
+      expect(accounts.map { |account| account.bank_transactions.count }).to eq([ 1, 1 ])
+      expect(output).to eq("Synced 2 connections.\n")
+    end
+
+    it "counts a single connection in the singular" do
+      connected_account("1")
+
+      expect(run_task("budget:sync_connections")).to eq("Synced 1 connection.\n")
+    end
+
+    it "says Splitwise isn't set up, and syncs nothing, where it isn't" do
+      account = connected_account("1")
+      Splitwise.client = SplitwiseFake.new(configured: false)
+
+      expect(run_task("budget:sync_connections")).to eq("Splitwise isn't set up here, so nothing can be synced.\n")
+      expect(account.bank_transactions).to be_empty
+    end
+
+    it "says so when no connection can be synced" do
+      create(:budget_bank_connection).disconnect!
+
+      expect(run_task("budget:sync_connections")).to eq("No connection can be synced.\n")
+    end
+  end
+
   describe "budget:currency" do
     let!(:user) { create(:user, email: "robin@example.com") }
     let!(:budget) { create(:budget, user: user, currency: "CAD") }

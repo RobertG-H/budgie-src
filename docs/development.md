@@ -63,7 +63,8 @@ your budget's currency, and then you land on the month view.
 **6. Optionally, connect Splitwise.** Register a development app with the callback `http://localhost:3000/splitwise/callback`, put its Consumer Key and Consumer
 Secret in `.env` as `SPLITWISE_CLIENT_ID` and `SPLITWISE_CLIENT_SECRET`, restart the app, and open http://localhost:3000 (not `127.0.0.1`, which isn't the registered address). The Accounts page then has "Connect Splitwise". Follow
 [Splitwise setup](splitwise.md). The token is encrypted under fixed throwaway keys in development, which are in the repo and protect nothing, so nothing else needs setting up to try it out; set the `ACTIVE_RECORD_ENCRYPTION_…` variables in `.env` as well (see [Splitwise setup](splitwise.md#2-generate-the-encryption-keys)) if you connect your real Splitwise account. The sample data
-below already has a Splitwise Account with a made-up token, for looking at its page without signing in to Splitwise.
+below already has a Splitwise Account with a made-up token and bank transactions in every state a sync leaves one in (unfiled, filed, changed since it was filed, deleted in Splitwise and a settle-up), for looking at its page and the Bank transactions page without signing in to Splitwise.
+`docker compose run --rm web bin/rails budget:sync_connections` runs the hourly sync now, which only works for a connection that signed in to Splitwise for real.
 
 **7. Optionally, load the sample data.**
 
@@ -71,7 +72,7 @@ below already has a Splitwise Account with a made-up token, for looking at its p
 docker compose run --rm web bin/rails db:seed
 ```
 
-This creates a development user with a budget, a few envelopes, two Paycheck Deposits and an Assigned amount for most envelopes in each of those two months, and an Account synced from Splitwise. It's what [`/dev/sign_in`](#working-on-the-ui)
+This creates a development user with a budget, a few envelopes, two Paycheck Deposits and an Assigned amount for most envelopes in each of those two months, and an Account synced from Splitwise, with sample bank transactions. It's what [`/dev/sign_in`](#working-on-the-ui)
 signs in as, and it only ever runs in development.
 
 ## Everyday commands

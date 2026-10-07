@@ -40,8 +40,11 @@ Rails.application.routes.draw do
   # until it's made, and then it's its summary, which is also where it's undone (destroy).
   resources :accounts do
     resources :imports, only: [ :new, :create ]
-    # What a synced Account is synced from: Reconnect (create) sends the person to sign in to Splitwise again, and Disconnect (destroy) forgets its token.
-    resource :connection, only: [ :create, :destroy ], controller: "account_connections"
+    # What a synced Account is synced from: Reconnect (create) sends the person to sign in to Splitwise again, Disconnect (destroy) forgets its token, and the date it
+    # reads expenses from is changed (update). Sync now (the sync's create) brings its expenses in by hand, which the hourly job also does.
+    resource :connection, only: [ :create, :update, :destroy ], controller: "account_connections" do
+      resource :sync, only: :create, controller: "account_connection_syncs"
+    end
   end
   # Connecting Splitwise: a form for the Account's name and the date to read from (new), which sends the person to Splitwise to sign in (create), and
   # the callback they come back to, which makes the connection and its Account. This is Budgie's own OAuth 2 flow and isn't signing in to Budgie, so it

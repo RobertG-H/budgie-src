@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_06_140200) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -62,7 +62,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_140200) do
 
   create_table "budget_bank_transactions", force: :cascade do |t|
     t.bigint "account_id", null: false
-    t.bigint "import_id", null: false
+    t.bigint "import_id"
     t.date "date", null: false
     t.string "description", null: false
     t.decimal "amount", precision: 15, scale: 2, null: false
@@ -73,13 +73,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_140200) do
     t.datetime "updated_at", null: false
     t.datetime "ignored_at"
     t.bigint "filing_rule_id"
+    t.string "external_id"
+    t.datetime "removed_at"
     t.index ["account_id", "content_key", "occurrence"], name: "index_budget_bank_transactions_on_content_key_and_occurrence", unique: true
     t.index ["account_id", "date", "id"], name: "index_budget_bank_transactions_on_account_id_and_date_and_id"
+    t.index ["account_id", "external_id"], name: "index_budget_bank_transactions_on_account_and_external_id", unique: true, where: "(external_id IS NOT NULL)"
     t.index ["filing_rule_id"], name: "index_budget_bank_transactions_on_filing_rule_id"
     t.index ["import_id"], name: "index_budget_bank_transactions_on_import_id"
     t.check_constraint "amount <> 0::numeric", name: "budget_bank_transactions_amount_not_zero"
     t.check_constraint "btrim(description::text) <> ''::text", name: "budget_bank_transactions_description_not_blank"
     t.check_constraint "content_key::text ~ '^[0-9a-f]{64}$'::text", name: "budget_bank_transactions_content_key_format"
+    t.check_constraint "external_id IS NULL OR btrim(external_id::text) <> ''::text", name: "budget_bank_transactions_external_id_not_blank"
+    t.check_constraint "import_id IS NOT NULL OR external_id IS NOT NULL", name: "budget_bank_transactions_import_or_external_id"
     t.check_constraint "occurrence >= 1", name: "budget_bank_transactions_occurrence_positive"
   end
 

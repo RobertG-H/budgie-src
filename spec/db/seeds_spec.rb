@@ -146,9 +146,11 @@ RSpec.describe "db/seeds.rb" do
       run_seeds
 
       budget = User.find_by!(email: Dev::USER_EMAIL).budget
-      refund = budget.refunds.sole
+      # The Splitwise Account's filed bank transactions have Refunds of their own, in an envelope of their own, so it's only Groceries' that's counted.
+      refund = budget.refunds.merge(Budget::Envelope.where(name: "Groceries")).sole
       expect(refund).to have_attributes(description: "Loblaws return", date: Date.new(2026, 10, 6), amount: BigDecimal("18.75"))
       expect(refund.envelope.name).to eq("Groceries")
+      expect(budget.refunds.where.not(envelope: refund.envelope).map { |other| other.envelope.name }.uniq).to eq([ "Shared" ])
     end
 
     it "raises Groceries' Available by the Refund this month, and not last month's" do
@@ -266,7 +268,7 @@ RSpec.describe "db/seeds.rb" do
           description: "Loblaws", date: Date.new(2026, 9, 2), amount: BigDecimal("82.45"), envelope: budget.envelopes.find_by!(name: "Groceries")
         )
         expect(bank_transactions["Coffee shop"]).to be_ignored
-        expect(budget.bank_transactions.unfiled.pluck(:description)).to contain_exactly("Paycheck", "Hydro rebate")
+        expect(budget.accounts.find_by!(name: "Chequing").bank_transactions.unfiled.pluck(:description)).to contain_exactly("Paycheck", "Hydro rebate")
         expect(bank_transactions.values.select(&:filed?).size).to eq(2)
       end
 
@@ -298,14 +300,39 @@ RSpec.describe "db/seeds.rb" do
     describe "the Splitwise Account" do
       let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
 
-      it "is synced from a connection whose token isn't real, with its Filing rules off and no bank transactions" do
+      it "is synced from a connection whose token isn't real, with its Filing rules off" do
         account = budget.accounts.find_by!(name: "Splitwise (sample)")
 
         expect(account).to be_synced
         expect(account).to have_attributes(files_with_rules: false, external_account_id: "1000000")
         expect(account.bank_connection).to have_attributes(provider: "splitwise", login_name: "Dev B.", access_token: "development-token-not-real", budget: budget)
         expect(account.bank_connection).to be_connected
-        expect(account.bank_transactions).to be_empty
+        expect(account.bank_connection.synced_at).to be_present
+      end
+
+      it "has a bank transaction in every state a sync can leave one in, which have no Import" do
+        account = budget.accounts.find_by!(name: "Splitwise (sample)")
+        transactions = account.bank_transactions.index_by(&:description)
+
+        expect(transactions.values).to all(have_attributes(import: nil, external_id: be_present))
+        expect(transactions.values_at("Dinner at Nonna's", "Cottage groceries").map(&:state)).to eq([ :unfiled, :unfiled ])
+        expect(transactions.values_at("Brunch with friends", "Gas up north").map(&:state)).to eq([ :filed, :filed ])
+        expect(transactions.values_at("Brunch with friends", "Gas up north")).to all(be_adds_up)
+        expect(transactions["Movie night"]).to be_filed
+        expect(transactions["Movie night"]).not_to be_adds_up
+        expect(transactions["Taxi home"]).to be_filed
+        expect(transactions["Taxi home"]).not_to be_adds_up
+        expect(transactions["Taxi home"]).not_to be_records_suit_the_sign
+        expect(transactions["Deleted lunch"].state).to eq(:removed)
+        expect(transactions["Concert tickets"]).to be_filed
+        expect(transactions["Concert tickets"]).to be_removed
+        expect(transactions["Jane paid me back"].state).to eq(:ignored)
+      end
+
+      it "starts money in from Splitwise as a Refund, which is what its filed ones were filed as" do
+        refunds = budget.refunds.where(description: [ "Brunch with friends", "Movie night", "Taxi home", "Concert tickets" ])
+
+        expect(refunds.count).to eq(4)
       end
 
       it "leaves Chequing the only Account a file can be imported into" do
@@ -405,7 +432,7 @@ RSpec.describe "db/seeds.rb" do
 
     it "leaves a Refund the developer has changed" do
       run_seeds
-      refund = Budget::Refund.sole
+      refund = Budget::Refund.find_by!(description: "Loblaws return")
       refund.update!(amount: 1)
 
       run_seeds

@@ -8,6 +8,17 @@ namespace :budget do
     puts "Started the new months of #{behind} #{"budget".pluralize(behind)}."
   end
 
+  desc "Sync every connected Splitwise Account that can be synced, as the hourly job does"
+  task sync_connections: :environment do
+    next puts("Splitwise isn't set up here, so nothing can be synced.") unless Splitwise.configured?
+
+    connections = Budget::BankConnection.syncable.count
+    next puts("No connection can be synced.") if connections.zero?
+
+    SyncBankConnectionsJob.perform_now
+    puts "Synced #{connections} #{"connection".pluralize(connections)}."
+  end
+
   desc "Change the currency of EMAIL's budget to CURRENCY, without converting amounts (asks for confirmation)"
   task currency: :environment do |task|
     email, currency = ENV["EMAIL"].presence, ENV["CURRENCY"].presence
