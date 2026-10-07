@@ -1,0 +1,46 @@
+<%# locals: (list:, rows:, page:, chosen_envelope_id: nil) %>
+<%# The bar above a list of bank transactions of one state (Unfiled, To review, Filed or Ignored), for doing the same thing to every one that's ticked: it sticks to the top while the list scrolls. It's always drawn, so it works without JavaScript: the rows' checkboxes join its form by the HTML `form` attribute (the rows hold forms of their own, which can't nest), and each button sends it to its own address. With JavaScript, the bulk-selection controller adds the select-all checkbox, counts what's ticked, disables the buttons while nothing is, and names the outcome on the filing button ("File 38 Spends and 2 Refunds to Travel"). %>
+<%# The actions are all or none, except Mark reviewed, which marks the ones that are still to review. Un-filing asks first, since it deletes the records. Ignoring a bank transaction isn't to review, and filing it makes no Filing rule. %>
+<% state = list.state %>
+<% action_class = "btn btn-sm" %>
+<%= form_with url: bulk_bank_transaction_filing_path, method: :post, id: "bulk-bank-transactions", class: "sticky top-0 z-20 mb-4 space-y-3 rounded-box border border-base-300 bg-base-100 p-3" do |form| %>
+  <%# Which page of which list this is, so every action goes back to it. %>
+  <% list.to_params.each do |name, value| %><%= hidden_field_tag "filter[#{name}]", value, id: nil %><% end %>
+  <%= hidden_field_tag :page, page, id: nil if page %>
+
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <%# Only JavaScript can tick them all, so it's revealed by the controller. %>
+    <label class="flex min-h-11 cursor-pointer items-center gap-2" hidden data-bulk-selection-target="allLabel">
+      <%= check_box_tag nil, "1", false, id: nil, class: "checkbox checkbox-primary", data: { bulk_selection_target: "all", action: "bulk-selection#toggleAll" } %>
+      <span>Select all <%= rows.size %> on this page</span>
+    </label>
+    <span class="text-base-content/70" role="status" data-bulk-selection-target="count">Tick bank transactions to choose them.</span>
+  </div>
+
+  <div class="flex flex-wrap items-end gap-2">
+    <% if state == "unfiled" %>
+      <div class="min-w-0 grow sm:max-w-xs">
+        <%= render "components/field", form: form, attribute: :envelope_id, label: "File to", control: :select, hide_label: true do |field| %>
+          <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope", selected: chosen_envelope_id.to_s }, required: true,
+                **field.merge(data: { bulk_selection_target: "envelope", action: "bulk-selection#update" }) %>
+        <% end %>
+      </div>
+      <%= form.button "File selected", name: nil, class: "#{action_class} btn-primary", data: { bulk_selection_target: "action", kind: "file" } %>
+      <%= form.button "Ignore selected", name: nil, formaction: bulk_bank_transaction_ignore_path, formnovalidate: true, class: action_class, data: { bulk_selection_target: "action" } %>
+    <% end %>
+
+    <% if state == "to_review" %>
+      <%= form.button "Mark reviewed", name: nil, formaction: bulk_bank_transaction_review_path, class: "#{action_class} btn-primary", data: { bulk_selection_target: "action" } %>
+    <% end %>
+
+    <% if state.in?(%w[ to_review filed ]) %>
+      <%# What it asks says how many records it deletes: the controller counts them from the ticked rows, and this is for a page without JavaScript. %>
+      <%= form.button "Un-file selected", formaction: bulk_bank_transaction_filing_path, name: "_method", value: "delete", class: action_class,
+            data: { bulk_selection_target: "action", kind: "unfile", turbo_confirm: "Un-file the selected bank transactions? This deletes the records they were filed as." } %>
+    <% end %>
+
+    <% if state.in?(%w[ to_review ignored ]) %>
+      <%= form.button "Un-ignore selected", formaction: bulk_bank_transaction_ignore_path, name: "_method", value: "delete", class: action_class, data: { bulk_selection_target: "action" } %>
+    <% end %>
+  </div>
+<% end %>

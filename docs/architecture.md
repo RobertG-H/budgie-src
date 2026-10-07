@@ -196,13 +196,15 @@ shows a Refunded column behind Show details (as is Reallocated, below) and has n
 has "New refund" beside "New spend", its Refunded, and a Refunds section when the month has any. With Refunds, the core
 of the month view is complete, and every balance on it, in a fixed number of grouped queries, comes from `Budget::Month`.
 
-The month view's table also shows, under each envelope's Available figure, a bar for how much of what it had to spend is left,
+The month view's table also shows, under each envelope's name, a bar for how much of what it had to spend is left,
 and hides Carried over, Refunded and Reallocated behind one Show details toggle. The bar's figures are on
 `Budget::Month::EnvelopeLine`, so views do no arithmetic and no query is added: what the envelope had to spend is the positive part
 of Carried over + Assigned + Refunded + the positive part of Reallocated, its share is Available over that (never over 100%), and
 its level is plenty, a little (strictly under a quarter), Overspent (a full bar, even with nothing to spend) or none (no bar). The
-bar is a native `<progress aria-hidden="true">` with no word for its level, in `progress-success`, `progress-warning` or
-`progress-error`, and the Overspent badge sits on a line under it so every Available figure stays right-aligned. The toggle's
+bar is a native `<progress aria-hidden="true">` with no word for its level, in `progress-primary` or `progress-warning`, or a
+dashed `text-error` line for Overspent: plenty is blue and not green, so red-green colour blindness never has to tell it from
+Overspent by hue. The Available figure is in a pill tinted for the level, with an icon for each, and Overspent says so in a
+word under the pill, on the line the bar takes up, so every row is the same height whatever its level. The toggle's
 state is `data-details="on|off"` on `<html>`, outside the `<body>` that Turbo morphs, so saving an Assigned amount doesn't reset
 it; it's remembered per browser in `localStorage`, applied before the first paint by a script in the layout's `<head>`, and kept
 in step with the button by the `month-details` Stimulus controller. The markup reads it with Tailwind's `in-data-[details=on]:`
@@ -352,6 +354,11 @@ are made together with their links in one database transaction, so there's no pa
 nothing. Ignoring is for what Budgie won't file, such as a card payment between a person's own accounts, and both can be taken back:
 un-filing deletes the records, and un-ignoring makes the bank transaction unfiled again.
 
+**Several at once.** The Bank transactions page's Unfiled, To review, Filed and Ignored states have a checkbox on each row and a bar that files the ticked ones to one
+envelope (money out as Spends, money in as Refunds, of the whole amount with no notes), ignores, un-files or un-ignores them. Each is all or none: the rows are locked in one
+query and judged once locked, so if any can't be done, because one was filed in another tab or its envelope was archived, nothing changes and the page comes back with the
+selection kept and the row named. Filing goes through the same operation as one at a time, so it makes the same number of queries for 5 rows as for 50, and it makes no Filing rule.
+
 **Links, not columns.** A record that came from a bank transaction is an ordinary Deposit, Spend or Refund
 ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)): it shows in the month view and on its envelope's page, and is edited and
 deleted like one typed in. What says where it came from is a link table for each kind, so the core tables have no import columns and a
@@ -383,7 +390,7 @@ when the buttons are drawn or "and next" is pressed. A form that wasn't opened f
 or none. The filing form calls it for one bank transaction, and Filing rules and "File as guessed" call the same operation, so it makes the
 same number of queries however many it files: it loads the budget's envelopes once, validates every record in memory, locks the bank
 transactions in one query so a double submit files once, and inserts each kind of record and link in one statement. The Bank transactions page shows
-every bank transaction across the Accounts, in any state, filtered by state, Account and dates (every unfiled one whatever its date), and an Account's page shows each of its own, with its state.
+every bank transaction across the Accounts, in any state, filtered by state, Account and dates (every unfiled one whatever its date unless Unfiled or To review is given a range, which they take optionally and start without), and an Account's page shows each of its own, with its state.
 
 **Filing rules.** A Filing rule is a standing instruction, such as "anything from Loblaws goes to Groceries": when an Import creates a
 bank transaction that a rule fits, Budgie files it the way the rule says, or ignores it, straight away and with no confirmation, through the same
@@ -403,6 +410,13 @@ queries for 10 rows as for 1,000 and for 1 rule as for 100. A rule never fails a
 ago, it's left unfiled for a person. A bank transaction remembers which rule filed or ignored it, which an Account's page shows, and that's cleared when it's un-filed
 or un-ignored; the filed records are ordinary ([ADR 0002](adr/0002-budget-records-are-source-agnostic.md)), with no rule columns, and editing or deleting a rule
 never changes what it already filed.
+
+**What a rule did waits to be reviewed.** The Import summary only says how many rows rules filed and ignored, never which, and an ignored row is in no figure, so a rule
+whose text is too broad could do harm unseen. So everything a rule files or ignores, of all four outcomes and with no rule exempt, is **to review** until a person has looked at it
+([ADR 0017](adr/0017-what-a-filing-rule-files-waits-to-be-reviewed.md)): `reviewed_at` on the bank transaction is null, and it's only read while a rule is what filed or ignored it.
+The figures never wait for it. A rule acting (an Import, a sync, a sweep) clears `reviewed_at`; what takes it out is Mark reviewed (one row, or a page in the To review state, where
+it skips rows that are no longer to review), saving an edit to a record filed from it, and un-filing or un-ignoring it. A person's own filing, ignoring or "Always file like this"
+is never to review. The header counts them beside the unfiled ones, in the same query, and the Import summary and the sync's notice link to them.
 
 **An Account can keep Filing rules off.** For an Account where a person wants to look at every bank transaction themselves, such as a Splitwise Account, where each share of an expense should be
 reviewed before it becomes a record, the Account form has a "File its bank transactions with Filing rules" checkbox, on by default so every Account behaves as it did. While it's off, no rule acts on that
@@ -490,7 +504,7 @@ secret and the keys the token is encrypted with, and without them it isn't offer
 
 The header's top row has Import, the primary button, beside Sign out, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
 bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
-count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state: it's one query, counting at most 100 and read once per request, so every page with the header costs one query more.
+count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state, and of the ones to review ("8 to review"), a link to the To review state: both come from one query, counting at most 100 of each and read once per request, so every page with the header costs one query more.
 
 ### Frontend
 

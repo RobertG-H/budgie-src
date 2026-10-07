@@ -55,7 +55,8 @@
       <% if flash.any? %>
         <div class="mb-6 space-y-2">
           <% flash.each do |type, message| %>
-            <%= render "components/flash", type: type, message: message %>
+            <% next if type.to_s == "review_path" %>
+            <%= render "components/flash", type: type, message: message, link: (flash[:review_path] if type.to_s == "notice") %>
           <% end %>
         </div>
       <% end %>

@@ -23,7 +23,7 @@ class BankTransactionIgnoresController < ApplicationController
 
   def destroy
     @bank_transaction.unignore
-    redirect_to origin_path, status: :see_other, notice: "Bank transaction un-ignored."
+    redirect_after_undoing "Bank transaction un-ignored."
   rescue Budget::BankTransaction::Refused => refusal
     redirect_to origin_path, status: :see_other, alert: refusal.message
   end

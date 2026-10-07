@@ -118,6 +118,7 @@ RSpec.describe "The words on the pages", type: :request do
     "an Import's summary" => -> { import_path(import) },
     "the Bank transactions" => -> { bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
     "the Bank transactions, Unfiled" => -> { bank_transactions_path(filter: { state: "unfiled" }) },
+    "the Bank transactions, To review" => -> { bank_transactions_path(filter: { state: "to_review" }) },
     "the Bank transactions, Filed" => -> { bank_transactions_path(filter: { state: "filed", date_from: "2026-10-01", date_to: "2026-10-31" }) },
     "the Bank transactions, Ignored" => -> { bank_transactions_path(filter: { state: "ignored", date_from: "2026-10-01", date_to: "2026-10-31" }) },
     "the Bank transactions, with nothing that matches" => -> { bank_transactions_path(filter: { state: "ignored", date_from: "2000-01-01", date_to: "2000-01-31" }) },
@@ -175,6 +176,73 @@ RSpec.describe "The words on the pages", type: :request do
 
       expect(response.body).not_to match(/ready_to_assign/)
       expect(response.body).to include("/reallocations/to-ready-to-assign/")
+    end
+  end
+
+  describe "what's to review" do
+    let!(:filed_by_rule) do
+      create(:budget_bank_transaction, :filed, :by_rule, account: account, description: "Hydro bill", date: Date.new(2026, 10, 4))
+    end
+    let!(:ignored_by_rule) do
+      create(:budget_bank_transaction, :ignored, :by_rule, account: account, description: "Card bill", amount: -250, date: Date.new(2026, 10, 5))
+    end
+
+    def check_words
+      expect(visible_text).not_to match(/\w+_\w+/)
+      expect(visible_text).not_to match(retired_terms)
+      expect(visible_text).not_to match(/\b(check|confirm|approve|unconfirmed|pending)\b/i)
+    end
+
+    it "says To review, Mark reviewed and the bulk actions in the terms CLAUDE.md lists, in the To review state" do
+      get bank_transactions_path(filter: { state: "to_review" })
+
+      expect(visible_text).to include("To review", "Mark reviewed", "Un-file selected", "Un-ignore selected", "Select all 2 on this page", "Tick bank transactions to choose them.")
+      check_words
+    end
+
+    it "says them on a row wherever it is, in the header and on the pages that link to them" do
+      [ bank_transactions_path, account_path(account), bank_transactions_path(filter: { state: "filed", date_from: "2026-10-01", date_to: "2026-10-31" }) ].each do |path|
+        get path
+
+        expect(visible_text).to include("To review", "Mark reviewed")
+        check_words
+      end
+      expect(css_select("nav[aria-label=Sections]").first.text.squish).to include("2 to review")
+    end
+
+    it "says the bar of the Unfiled state in words, and what a refused bulk action says" do
+      create(:budget_bank_transaction, account: account, description: "Hotel")
+
+      get bank_transactions_path(filter: { state: "unfiled" })
+      expect(visible_text).to include("File selected", "Ignore selected", "Choose an envelope")
+      check_words
+
+      post bulk_bank_transaction_filing_path, params: { ids: [ filed_by_rule.id ], envelope_id: bills.id, filter: { state: "unfiled" } }
+      expect(visible_text).to include("Nothing was filed. Hydro bill: This bank transaction is already filed.")
+      check_words
+
+      post bulk_bank_transaction_ignore_path, params: { filter: { state: "unfiled" } }
+      expect(visible_text).to include("Choose at least one bank transaction.")
+      check_words
+    end
+
+    it "says what Mark reviewed did, in the notice" do
+      post bulk_bank_transaction_review_path, params: { ids: [ filed_by_rule.id, ignored_by_rule.id ], filter: { state: "to_review" } }
+      follow_redirect!
+
+      expect(visible_text).to include("2 bank transactions marked reviewed.")
+      check_words
+    end
+
+    it "says on an Import's summary where what rules did can be reviewed" do
+      create(:budget_filing_rule, budget: budget, envelope: bills, text: "paycheck", outcome: "refund")
+      csv = create(:budget_csv_format, budget: budget, name: "Rules plain")
+      another = account.imports.build(csv_format: csv, file_name: "rules.csv").tap { |i| i.run("2026-10-04,Paycheck bonus,100.00\n") }
+
+      get import_path(another)
+
+      expect(visible_text).to include("Filed by Filing rules 1 bank transaction · Review")
+      check_words
     end
   end
 

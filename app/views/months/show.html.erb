@@ -31,21 +31,22 @@
         <table class="table">
           <thead>
             <tr>
-              <th scope="col">Envelope</th>
+              <th scope="col" class="max-sm:pl-0">Envelope</th>
               <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell"><%= render "components/term", key: :carried_over, placement: :bottom %></th>
               <th scope="col" class="text-right"><%= render "components/term", key: :assigned, placement: :bottom %></th>
               <th scope="col" class="text-right">Spent</th>
               <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell">Refunded</th>
               <th scope="col" class="hidden text-right sm:in-data-[details=on]:table-cell"><%= render "components/term", key: :reallocated, placement: :bottom %></th>
-              <th scope="col" class="text-right">Available</th>
+              <th scope="col" class="text-right max-sm:pr-0">Available</th>
             </tr>
           </thead>
           <% @month.envelopes.each do |line| %>
             <tbody>
               <tr id="<%= dom_id(line.envelope) %>" class="in-data-[details=on]:max-sm:*:border-b-0">
-                <td class="align-top leading-8">
-                  <%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link" %>
+                <td class="align-top leading-8 max-sm:pl-0">
+                  <%= link_to line.envelope.name, month_envelope_path(@month, line.envelope), class: "link text-base font-medium" %>
                   <% if line.envelope.archived? %><%= render "components/archived_badge" %><% end %>
+                  <%= render "components/available_bar", line: line %>
                 </td>
                 <td class="hidden text-right align-top leading-8 tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.carried_over, budget: budget %></td>
                 <%# An archived envelope's Assigned is read-only, so it's plain text and not the input's button. %>
@@ -59,14 +60,11 @@
                 <td class="text-right align-top leading-8 tabular-nums"><%= render "components/money", amount: line.spent, budget: budget %></td>
                 <td class="hidden text-right align-top leading-8 tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.refunded, budget: budget %></td>
                 <td class="hidden text-right align-top leading-8 tabular-nums sm:in-data-[details=on]:table-cell"><%= render "components/money", amount: line.reallocated, budget: budget %></td>
-                <td class="text-right align-top leading-8 tabular-nums">
-                  <%= render "components/money", amount: line.available, budget: budget %>
-                  <%= render "components/available_bar", line: line %>
-                </td>
+                <td class="text-right align-top leading-8 tabular-nums max-sm:pr-0"><%= render "components/available_pill", line: line, budget: budget %></td>
               </tr>
               <%# On a phone, with details on: the three figures the columns above hold from sm: up. Four columns show there, so it spans four. %>
               <tr class="hidden in-data-[details=on]:max-sm:table-row">
-                <td colspan="4" class="pt-0">
+                <td colspan="4" class="pt-0 max-sm:px-0">
                   <dl class="grid grid-cols-3 gap-2 text-xs">
                     <div><dt class="text-base-content/70">Carried over</dt><dd class="tabular-nums"><%= render "components/money", amount: line.carried_over, budget: budget %></dd></div>
                     <div><dt class="text-base-content/70">Refunded</dt><dd class="tabular-nums"><%= render "components/money", amount: line.refunded, budget: budget %></dd></div>

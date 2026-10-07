@@ -1,5 +1,5 @@
 <%# locals: (budget:) %>
-<%# The month view's Available bar at each level, drawn from sample figures, and the Show details toggle. %>
+<%# The month view's Available bar and pill at each level, drawn from sample figures, and the Show details toggle. %>
 <% levels = [
      { name: "Plenty", note: "$400.00 of $500.00 left", line: { assigned: 500, spent: 100 } },
      { name: "A little", note: "$20.00 of $500.00 left", line: { assigned: 500, spent: 480 } },
@@ -10,8 +10,8 @@
      level.merge(line: Budget::Month::EnvelopeLine.new(envelope: nil, **figures, available: figures[:assigned] - figures[:spent]))
    end %>
 <section id="available-bars" aria-labelledby="available-bars-heading" class="space-y-4 border-t border-base-300 pt-6">
-  <h2 id="available-bars-heading" class="text-xl font-semibold">Available bar and Show details</h2>
-  <p class="text-base-content/70">The bar sits under the Available figure, with no word: its colour and length say plenty from a little. Overspent is a full bar with its badge on a line under it, and an envelope with nothing to spend has no bar.</p>
+  <h2 id="available-bars-heading" class="text-xl font-semibold">Available bar, Available pill and Show details</h2>
+  <p class="text-base-content/70">The bar sits under the envelope's name, as wide as its column, with no word: its colour and length say plenty from a little, and Overspent is a dashed line. The Available figure is in a pill tinted for the level, with an icon for each, and Overspent says so in a word under it, on the bar's line, so every row is the same height. An envelope with nothing to spend has no bar and a plain pill.</p>
 
   <div class="overflow-x-auto">
     <table class="table">
@@ -24,11 +24,11 @@
       <% levels.each do |level| %>
         <tbody>
           <tr>
-            <td class="align-top"><%= level[:name] %> <span class="text-sm text-base-content/70">(<%= level[:note] %>)</span></td>
-            <td class="text-right align-top tabular-nums">
-              <%= render "components/money", amount: level[:line].available, budget: budget %>
+            <td class="align-top leading-8">
+              <span class="text-base font-medium"><%= level[:name] %></span> <span class="text-sm text-base-content/70">(<%= level[:note] %>)</span>
               <%= render "components/available_bar", line: level[:line] %>
             </td>
+            <td class="text-right align-top leading-8 tabular-nums"><%= render "components/available_pill", line: level[:line], budget: budget %></td>
           </tr>
         </tbody>
       <% end %>

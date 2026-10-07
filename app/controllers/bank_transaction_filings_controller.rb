@@ -32,7 +32,7 @@ class BankTransactionFilingsController < ApplicationController
   # Un-files it: the records it was filed as are deleted, and it's unfiled again.
   def destroy
     @bank_transaction.unfile
-    redirect_to origin_path, status: :see_other, notice: "Bank transaction unfiled."
+    redirect_after_undoing "Bank transaction unfiled."
   rescue Budget::BankTransaction::Refused => refusal
     redirect_to origin_path, status: :see_other, alert: refusal.message
   end

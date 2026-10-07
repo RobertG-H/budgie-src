@@ -28,7 +28,15 @@ module BankTransactionsHelper
 
   # The options of the State select on the Bank transactions page: every state, then each one.
   def bank_transaction_state_options
-    [ [ "All", "all" ], [ "Unfiled", "unfiled" ], [ "Filed", "filed" ], [ "Ignored", "ignored" ] ]
+    [ [ "All", "all" ], [ "Unfiled", "unfiled" ], [ "To review", "to_review" ], [ "Filed", "filed" ], [ "Ignored", "ignored" ] ]
+  end
+
+  # What filing `bank_transactions` to an envelope in one go makes of them, in words: money out is Spends and money in is Refunds, "38 Spends and 2 Refunds". The
+  # bulk bar's button says it before and the notice after, and the bulk-selection controller says it as the rows are ticked, in the same words.
+  def bulk_filing_kinds(bank_transactions)
+    spends, refunds = bank_transactions.partition { |bank_transaction| bank_transaction.amount.negative? }.map(&:size)
+
+    [ (pluralize(spends, "Spend") if spends.positive?), (pluralize(refunds, "Refund") if refunds.positive?) ].compact.to_sentence
   end
 
   # The options of its Account select: all of them, then each Account alphabetically.

@@ -10,6 +10,8 @@ class AccountConnectionSyncsController < ApplicationController
     result = SyncSplitwise.call(@connection)
 
     if result.success?
+      # Whatever its Filing rules filed or ignored is to review (ADR 0017), so the notice links to where it is, for this Account.
+      flash[:review_path] = bank_transactions_path(filter: { state: "to_review", account: @account.id }) if result.filed_by_rules.positive? || result.ignored_by_rules.positive?
       redirect_to account_path(@account), status: :see_other, notice: result.notice
     else
       redirect_to account_path(@account), status: :see_other, alert: result.failure

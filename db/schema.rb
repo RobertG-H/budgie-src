@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -75,6 +75,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_120000) do
     t.bigint "filing_rule_id"
     t.string "external_id"
     t.datetime "removed_at"
+    t.datetime "reviewed_at"
     t.index ["account_id", "content_key", "occurrence"], name: "index_budget_bank_transactions_on_content_key_and_occurrence", unique: true
     t.index ["account_id", "date", "id"], name: "index_budget_bank_transactions_on_account_id_and_date_and_id"
     t.index ["account_id", "external_id"], name: "index_budget_bank_transactions_on_account_and_external_id", unique: true, where: "(external_id IS NOT NULL)"

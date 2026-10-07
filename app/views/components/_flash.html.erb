@@ -1,5 +1,6 @@
-<%# locals: (type:, message:) %>
+<%# locals: (type:, message:, link: nil) %>
 <%# One flash message. The layout renders one for each flash, and the styleguide shows all four types. %>
+<%# `link` is where a notice sends the person on, such as a sync's "Review them" to the bank transactions its Filing rules filed or ignored, as an underlined link in the message's own line. %>
 <%# Class names are written out in full because Tailwind can't find one built from a variable. %>
 <% variant, role = {
      "notice" => [ "alert-success", "status" ],
@@ -8,5 +9,5 @@
      "warning" => [ "alert-warning", "alert" ]
    }.fetch(type.to_s, [ "alert-info", "status" ]) %>
 <div role="<%= role %>" class="alert <%= variant %>">
-  <span><%= message %></span>
+  <span><%= message %><% if link %> <%= link_to "Review them", link, class: "link font-medium" %><% end %></span>
 </div>

@@ -364,8 +364,8 @@ RSpec.describe "Accounts", type: :request do
 
           get account_path(account)
 
-          expect(row("Filed one").text.squish).to eq("Sep 2, 2026 Filed one Filed Spend from Groceries Filing rule: filed one → Spend from Groceries Un-file -$50.00")
-          expect(row("Ignored one").text.squish).to eq("Sep 3, 2026 Ignored one Ignored Filing rule: ignored one → Ignore Un-ignore -$30.00")
+          expect(row("Filed one").text.squish).to eq("Sep 2, 2026 Filed one Filed To review Spend from Groceries Filing rule: filed one → Spend from Groceries Un-file Mark reviewed -$50.00")
+          expect(row("Ignored one").text.squish).to eq("Sep 3, 2026 Ignored one Ignored To review Filing rule: ignored one → Ignore Un-ignore Mark reviewed -$30.00")
         end
 
         it "isn't named on one a person filed or ignored, or on one that's unfiled again, though its value went stale" do

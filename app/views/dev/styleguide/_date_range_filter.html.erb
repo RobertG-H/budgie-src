@@ -4,6 +4,7 @@
 <% chosen = DateRangeFilter.new(from: "2026-09-02", to: "2026-09-30", today: today) %>
 <% default = DateRangeFilter.new(from: nil, to: nil, today: today) %>
 <% invalid = DateRangeFilter.new(from: "2026-09-30", to: "2026-09-01", today: today) %>
+<% any_date = DateRangeFilter.new(from: nil, to: nil, today: today, optional: true) %>
 <section id="date-range-filter" aria-labelledby="date-range-filter-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="date-range-filter-heading" class="text-xl font-semibold">Date range filter</h2>
   <p class="text-base-content/70">From and To as date fields, the presets as links (the one the range equals is marked, filled dark and with aria-current) and an Apply button, for a page's GET form. Nothing is sent until Apply is, so there's no JavaScript. A range that can't be used is never an empty page: the page says so as an alert and shows the current month instead.</p>
@@ -12,7 +13,7 @@
        "This month, which is the default" => [ default, {} ],
        "A range that equals no preset" => [ chosen, {} ],
        "A range that can't be used, so it's the current month with an alert" => [ invalid, {} ],
-       "A range the state doesn't use, such as the unfiled bank transactions, so it's disabled and says why" => [ default, { disabled: true, hint: "Unfiled bank transactions are listed whatever their date." } ]
+       "An optional range, such as Unfiled and To review start with, so any date is the first preset and the fields start empty" => [ any_date, { hint: "Leave both dates empty for any date." } ]
      }.each do |title, (filter, options)| %>
     <h3 class="font-semibold"><%= title %></h3>
     <% unless filter.valid? %>

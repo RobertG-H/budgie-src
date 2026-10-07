@@ -183,6 +183,26 @@ RSpec.describe "An Account's connection", type: :request do
       expect(connection.reload.synced_at).to be_present
     end
 
+    it "links its notice to the Account's To review state whenever Filing rules filed or ignored anything, which is where it is to review" do
+      account.update!(files_with_rules: true)
+      create(:budget_filing_rule, budget: budget, text: "groceries")
+
+      post account_connection_sync_path(account)
+      follow_redirect!
+
+      assert_select "[role=status]", text: /Filing rules filed 1 of them\. Review them/
+      assert_select "[role=status] a[href='#{bank_transactions_path(filter: { state: "to_review", account: account.id })}']", text: "Review them"
+      expect(Budget::BankTransaction.to_review.pluck(:description)).to eq([ "Groceries" ])
+    end
+
+    it "has no link in its notice when Filing rules did nothing" do
+      post account_connection_sync_path(account)
+      follow_redirect!
+
+      assert_select "[role=status] a", count: 0
+      expect(flash[:review_path]).to be_nil
+    end
+
     it "shows when it synced on the page it goes back to" do
       post account_connection_sync_path(account)
       follow_redirect!

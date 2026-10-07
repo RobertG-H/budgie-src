@@ -18,6 +18,11 @@
 # `adds_up?`, which blocks nothing, ADR 0009). One that's removed and was neither filed nor ignored is none of the three, since it leaves
 # the Unfiled state and can't be filed (`state` says `removed`). It changes only through ignoring and un-ignoring, filing and un-filing,
 # Undo, a sync's update, and deletion through its Account or Budget.
+#
+# What a Filing rule filed or ignored is **to review** until a person has looked at it (ADR 0017): `reviewed_at` is null, and it's only
+# read while a rule is what filed or ignored it (`to_review?`). A rule filing or ignoring it clears `reviewed_at` (`note_filing_rules`),
+# and marking it reviewed, saving an edit to a record filed from it (FiledFromBankTransaction), and un-filing or un-ignoring it (which
+# leaves it no rule's) take it out. The figures never wait for it.
 class Budget::BankTransaction < ApplicationRecord
   # Raised when a bank transaction can't be ignored, un-ignored or un-filed as asked; the message says why, for the person who
   # asked.
@@ -72,6 +77,10 @@ class Budget::BankTransaction < ApplicationRecord
   }
   scope :ignored, -> { where.not(ignored_at: nil) }
 
+  # What a Filing rule filed or ignored, that nobody has looked at since (ADR 0017). A rule is only noted while the bank transaction is filed or
+  # ignored, but deleting its last record by hand leaves the note stale and inert, so one that's neither is left out.
+  scope :to_review, -> { where(reviewed_at: nil).where.not(filing_rule_id: nil).merge(filed.or(ignored)) }
+
   # Ignored, or filed as at least one record: what isn't unfiled. Left joins, so one with several links is still counted once, with `distinct`.
   scope :filed_or_ignored, -> {
     left_joins(:deposit_links, :spend_links, :refund_links)
@@ -105,13 +114,19 @@ class Budget::BankTransaction < ApplicationRecord
 
   # Notes which Filing rule filed or ignored each bank transaction, which is the value for its id in `rule_ids_by_id`, or none (nil) for
   # one that a person did. It's one statement however many there are, and `attributes` are set on them all, such as when they were
-  # ignored.
+  # ignored. Whatever a rule does is to review again, even a bank transaction that had been reviewed before it was un-filed (ADR 0017).
   def self.note_filing_rules(rule_ids_by_id, **attributes)
     return if rule_ids_by_id.empty?
 
     # Cast, since a CASE of nothing but nulls is text to PostgreSQL, which is what it is when a person did them all.
     rule_ids = rule_ids_by_id.reduce(Arel::Nodes::Case.new(arel_table[:id])) { |node, (id, rule_id)| node.when(id).then(rule_id) }
-    where(id: rule_ids_by_id.keys).update_all(attributes.merge(filing_rule_id: Arel::Nodes::NamedFunction.new("CAST", [ rule_ids.as("bigint") ]), updated_at: Time.current))
+    where(id: rule_ids_by_id.keys).update_all(attributes.merge(filing_rule_id: Arel::Nodes::NamedFunction.new("CAST", [ rule_ids.as("bigint") ]), reviewed_at: nil, updated_at: Time.current))
+  end
+
+  # Marks the bank transactions in `transactions` that are to review as reviewed, which is what a person saying they've looked at them does, and
+  # says how many were. Lenient: one that isn't to review any more, such as one un-filed in another tab, is left as it is and isn't counted.
+  def self.mark_reviewed(transactions)
+    to_review.where(id: transactions.select(:id)).update_all(reviewed_at: Time.current, updated_at: Time.current)
   end
 
   # The four columns a sync ever writes on a bank transaction it already has, and their types, which a CASE of nothing but nulls needs said.
@@ -207,6 +222,11 @@ class Budget::BankTransaction < ApplicationRecord
     filing_rule if filed? || ignored?
   end
 
+  # Whether a Filing rule filed or ignored it and nobody has looked at it since (ADR 0017).
+  def to_review?
+    reviewed_at.nil? && filing_rule_id.present? && (filed? || ignored?)
+  end
+
   def state
     if ignored? then :ignored
     elsif filed? then :filed
@@ -251,6 +271,16 @@ class Budget::BankTransaction < ApplicationRecord
     older_first = Arel.sql(self.class.sanitize_sql_array([ "(budget_bank_transactions.date, budget_bank_transactions.id) < (?, ?) DESC", date, id ]))
 
     scope.unfiled.where.not(id: id).order(older_first).newest_first.first
+  end
+
+  # Says a person has looked at what a Filing rule did with it, so it's no longer to review. Judged once it's locked, so one un-filed in another tab
+  # is refused, which `mark_reviewed` on a set of them isn't.
+  def mark_reviewed
+    with_lock do
+      raise Refused, "This bank transaction isn't to review." unless to_review?
+
+      update!(reviewed_at: Time.current)
+    end
   end
 
   # Won't be filed: sets when it was ignored, such as for a card payment between a person's own accounts. Only an unfiled bank

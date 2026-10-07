@@ -83,9 +83,9 @@ class Budget::Month
       [ carried_over, ZERO ].max + assigned + refunded + [ reallocated, ZERO ].max
     end
 
-    # How Available the envelope is, from this line's own figures, for the bar under Available: :overspent (below zero, even
-    # when it had nothing to spend), :none (nothing to spend, no Spends: no bar), :little (under a quarter of what it had to
-    # spend, so everything spent is a little) or :plenty.
+    # How Available the envelope is, from this line's own figures, for the bar under its name and the pill around Available:
+    # :overspent (below zero, even when it had nothing to spend), :none (nothing to spend, no Spends: no bar), :little (under a
+    # quarter of what it had to spend, so everything spent is a little) or :plenty.
     def available_level
       return :overspent if overspent?
       return :none if had_to_spend.zero? && spent.zero?

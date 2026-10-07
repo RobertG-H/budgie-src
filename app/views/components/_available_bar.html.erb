@@ -1,10 +1,13 @@
 <%# locals: (line:) %>
-<%# How much of what an envelope had to spend is Available, as a bar under its Available figure: success for plenty, warning for a little, a full bar in error for Overspent, and none at all when it had nothing to spend. It has no word, since the figure beside it is the text, and the bar's length and colour tell plenty from a little, so it's hidden from assistive technology. A native <progress> because its length is a value, where a styled div's would need an inline style attribute. Overspent keeps its word, in the badge on a line under the bar, so the figure stays right-aligned. %>
+<%# How much of what an envelope had to spend is Available, as a bar under its name on the month view, as wide as the name's column: primary for plenty, warning for a little, a dashed line in error for Overspent, and none at all when it had nothing to spend. It has no word, since the Available figure is the text (components/available_pill), so it's hidden from assistive technology. %>
+<%# Plenty is blue and not green, so it's never told from Overspent's red by hue alone, which someone who can't tell red from green can't do, and each level has a shape of its own as well: Overspent is dashed, and the pill around Available has an icon. A native <progress> because its length is a value, where a styled div's would need an inline style attribute; Overspent is always a full line, so it's an SVG of dashes, clipped to the bar's rounded ends wherever the last dash falls. %>
+<%# The slot is the same height at every level, even with no bar, and as tall as the word Overspent under the pill, so no level changes a row's height. %>
 <% level = line.available_level %>
-<% unless level == :none %>
-  <% color = { plenty: "progress-success", little: "progress-warning", overspent: "progress-error" }.fetch(level) %>
-  <progress class="progress <%= color %> ml-auto block w-16" value="<%= line.available_percent %>" max="100" aria-hidden="true"></progress>
-<% end %>
-<% if level == :overspent %>
-  <div class="mt-1 leading-none"><%= render "components/overspent_badge" %></div>
-<% end %>
+<div class="flex h-3 items-center" aria-hidden="true">
+  <% case level %>
+  <% when :plenty, :little %>
+    <progress class="progress <%= level == :plenty ? "progress-primary" : "progress-warning" %> block w-full" value="<%= line.available_percent %>" max="100" aria-hidden="true"></progress>
+  <% when :overspent %>
+    <svg class="block h-2 w-full overflow-hidden rounded-box text-error" aria-hidden="true"><line x1="0" y1="4" x2="100%" y2="4" stroke="currentColor" stroke-width="8" stroke-dasharray="12 4" /></svg>
+  <% end %>
+</div>

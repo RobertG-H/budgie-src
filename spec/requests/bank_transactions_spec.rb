@@ -134,34 +134,58 @@ RSpec.describe "The Bank transactions page", type: :request do
     end
 
     describe "Unfiled" do
-      it "lists every unfiled bank transaction whatever its date, and nothing filed or ignored" do
+      it "lists every unfiled bank transaction whatever its date, and nothing filed or ignored, until it's given a range" do
         make(:unfiled, "Old", date: Date.new(2020, 1, 1))
         make(:unfiled, "Recent", date: Date.new(2026, 10, 1))
         make(:filed, "Filed", date: Date.new(2026, 10, 1))
         make(:ignored, "Ignored", date: Date.new(2026, 10, 1))
 
-        get bank_transactions_path(filter: { state: "unfiled", date_from: "2026-01-01", date_to: "2026-01-31" })
+        get bank_transactions_path(filter: { state: "unfiled" })
 
         expect(rows.map { |row| row[/Old|Recent|Filed|Ignored/] }).to eq([ "Recent", "Old" ])
       end
 
-      it "shows the dates disabled, with a hint that says why, and no presets, which have nothing to set" do
+      it "lists the unfiled ones in the range when it's given one" do
+        make(:unfiled, "Old", date: Date.new(2020, 1, 1))
+        make(:unfiled, "January", date: Date.new(2026, 1, 15))
+
+        get bank_transactions_path(filter: { state: "unfiled", date_from: "2026-01-01", date_to: "2026-01-31" })
+
+        expect(rows.map { |row| row[/Old|January/] }).to eq([ "January" ])
+      end
+
+      it "starts with any date: empty optional date fields, Any date marked first among the presets, and the state it was showing" do
         get bank_transactions_path(filter: { state: "unfiled" })
 
-        assert_select "input[type=date][name='filter[date_from]'][disabled]"
-        assert_select "input[type=date][name='filter[date_to]'][disabled]"
-        assert_select "p#filter_date_range_hint", text: "Unfiled bank transactions are listed whatever their date."
-        assert_select "input[name='filter[date_from]'][aria-describedby~=filter_date_range_hint]"
-        assert_select "form a", count: 0
+        assert_select "input[type=date][name='filter[date_from]']:not([value]):not([required]):not([disabled])"
+        assert_select "input[type=date][name='filter[date_to]']:not([value]):not([required]):not([disabled])"
+        expect(css_select("form a.btn").map { |link| link.text.squish }).to eq([ "Any date", "This month", "Last month", "Last 3 months" ])
+        assert_select "form a[aria-current=true]", text: "Any date"
+        assert_select "form a", text: "Any date" do |links|
+          expect(links.first["href"]).to eq(bank_transactions_path(filter: { state: "unfiled" }))
+        end
+        assert_select "form a", text: "This month" do |links|
+          expect(links.first["href"]).to eq(bank_transactions_path(filter: { state: "unfiled", date_from: "2026-10-01", date_to: "2026-10-31" }))
+        end
+        assert_select "input[type=hidden][name='filter[from_state]'][value=unfiled]"
         assert_select "input[type=submit][value=Apply]"
       end
 
-      it "doesn't say a range is unusable, since it doesn't use one" do
-        make(:unfiled, "One")
+      it "doesn't bring this month along from the state it came from, which the form says it was showing" do
+        make(:unfiled, "Old", date: Date.new(2020, 1, 1))
+
+        get bank_transactions_path(filter: { state: "unfiled", from_state: "all", date_from: "2026-10-01", date_to: "2026-10-31" })
+
+        expect(rows.map { |row| row[/Old/] }).to eq([ "Old" ])
+        assert_select "form a[aria-current=true]", text: "Any date"
+      end
+
+      it "says a range that can't be used is, as an alert, and lists any date instead" do
+        make(:unfiled, "One", date: Date.new(2020, 1, 1))
 
         get bank_transactions_path(filter: { state: "unfiled", date_from: "2026-10-31", date_to: "2026-10-01" })
 
-        assert_select "[role=alert]", count: 0
+        assert_select "[role=alert]", text: /Choose a From and a To date, with From first. Showing any date instead./
         expect(rows.size).to eq(1)
       end
 
@@ -245,7 +269,7 @@ RSpec.describe "The Bank transactions page", type: :request do
       it "has State and Account selects, with the filters in them" do
         get bank_transactions_path(filter: { state: "filed", account: visa.id.to_s })
 
-        expect(css_select("select[name='filter[state]'] option").map { |option| option.text.squish }).to eq([ "All", "Unfiled", "Filed", "Ignored" ])
+        expect(css_select("select[name='filter[state]'] option").map { |option| option.text.squish }).to eq([ "All", "Unfiled", "To review", "Filed", "Ignored" ])
         expect(css_select("select[name='filter[account]'] option").map { |option| option.text.squish }).to eq([ "All accounts", "Chequing", "Visa" ])
         assert_select "select[name='filter[state]'] option[selected][value=filed]"
         assert_select "select[name='filter[account]'] option[selected][value='#{visa.id}']"
@@ -448,7 +472,7 @@ RSpec.describe "The Bank transactions page", type: :request do
 
         expect(response).to have_http_status(:ok)
         assert_select "p", text: "There are no more bank transactions."
-        assert_select "a[href='#{bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", state: "unfiled" })}']", text: "Back to the first page"
+        assert_select "a[href='#{bank_transactions_path(filter: { state: "unfiled" })}']", text: "Back to the first page"
       end
 
       it "treats a page that isn't a number as the first" do
@@ -471,7 +495,7 @@ RSpec.describe "The Bank transactions page", type: :request do
 
         expect(rows.size).to eq(50)
         older = css_select("nav[aria-label=Pages] a[rel=next]").first["href"]
-        expect(older).to eq(bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31", state: "unfiled", account: chequing.id.to_s }, page: 2))
+        expect(older).to eq(bank_transactions_path(filter: { state: "unfiled", account: chequing.id.to_s }, page: 2))
 
         get older
 

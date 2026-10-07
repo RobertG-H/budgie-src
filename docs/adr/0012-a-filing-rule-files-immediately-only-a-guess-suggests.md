@@ -17,4 +17,4 @@ An Account can be set to keep Filing rules off it (`files_with_rules`), for one 
 
 ## Consequences
 
-A wrong or too-broad rule misfiles every bank transaction it fits in the next Import until someone notices. The rule's text is shown, and editable, when it is made, so it can be trimmed then, and a bank transaction shows which rule filed it. Editing or deleting a rule never changes what it already filed (ADR 0002), so fixing those means un-filing and filing again.
+A wrong or too-broad rule misfiles every bank transaction it fits in the next Import until someone notices. Everything a rule files or ignores is to review until a person has looked at it (ADR 0017), because the Import summary's count never said which rows they were. The rule's text is shown, and editable, when it is made, so it can be trimmed then, and a bank transaction shows which rule filed it. Editing or deleting a rule never changes what it already filed (ADR 0002), so fixing those means un-filing and filing again.
