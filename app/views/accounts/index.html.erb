@@ -2,6 +2,10 @@
 
 <%= render "components/page_header", title: "Accounts",
       description: "The real bank and card accounts your bank transactions come from. Budgie doesn't track what's in them." do %>
+  <%# Only where Splitwise is set up: a host without its client id and secret has no way to sign in to it. %>
+  <% if Splitwise.configured? %>
+    <%= link_to "Connect Splitwise", new_splitwise_connection_path, class: "btn" %>
+  <% end %>
   <%= link_to "New account", new_account_path, class: "btn btn-primary" %>
 <% end %>
 
@@ -9,9 +13,8 @@
   <% if @accounts.any? %>
     <%= render "components/record_list" do %>
       <% @accounts.each do |account| %>
-        <% count = @transaction_counts.fetch(account.id, 0) %>
         <%= render "components/link_row", href: account_path(account), name: account.name,
-              detail: (count.zero? ? "No bank transactions yet." : pluralize(count, "bank transaction")) %>
+              detail: account_detail(account, @transaction_counts.fetch(account.id, 0)) %>
       <% end %>
     <% end %>
   <% else %>

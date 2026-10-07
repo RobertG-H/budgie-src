@@ -94,6 +94,23 @@ FactoryBot.define do
   factory :budget_account, class: "Budget::Account" do
     budget
     sequence(:name) { |n| "Account #{n}" }
+
+    # Synced from a Splitwise connection of its budget, as connecting makes it: its external id is the Splitwise user's id, and its Filing rules start off.
+    trait :synced do
+      bank_connection { association :budget_bank_connection, budget: budget }
+      external_account_id { bank_connection.login_id }
+      files_with_rules { false }
+    end
+  end
+
+  # A Splitwise sign-in of a budget, with a token that works and the date its Account reads expenses from.
+  factory :budget_bank_connection, class: "Budget::BankConnection" do
+    budget
+    provider { "splitwise" }
+    sequence(:login_id) { |n| (1000 + n).to_s }
+    login_name { "Robert G." }
+    access_token { "splitwise-access-token" }
+    read_from { Date.new(2026, 10, 1) }
   end
 
   # Of an Account, with a CSV format of its budget unless given another. The file is gone, so only its name is kept.
@@ -103,6 +120,10 @@ FactoryBot.define do
     sequence(:file_name) { |n| "import-#{n}.csv" }
     duplicates_skipped { 0 }
     zero_rows_skipped { 0 }
+
+    # A synced Account takes no Import, which the model refuses. But a bank transaction can't be made without one until Splitwise's sync makes them
+    # (`import_id` stops being required then), so a spec that needs a synced Account to have bank transactions is let past that one refusal.
+    to_create { |import| import.save!(validate: !import.account&.synced?) }
   end
 
   # Money out of $10 by default, which is the sign a Spend would be filed from, in the Account of its Import.

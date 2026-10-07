@@ -18,6 +18,8 @@ class Budget < ApplicationRecord
   # read into them. An Import and a bank transaction belong to the budget through their Account, so these are only for reading.
   has_many :csv_formats, dependent: :destroy
   has_many :accounts, dependent: :destroy
+  # What its Accounts are synced through, such as a Splitwise sign-in. Declared after the Accounts, which go first and take their connection with them.
+  has_many :bank_connections, dependent: :destroy
   # Standing instructions for filing the bank transactions that come in, such as "anything from Loblaws goes to Groceries".
   has_many :filing_rules, dependent: :destroy
   has_many :imports, through: :accounts
@@ -69,13 +71,13 @@ class Budget < ApplicationRecord
     CURRENCIES.fetch(currency)[:unit]
   end
 
-  # Whether there's something to guess an Import with: at least one CSV format and one Account. The header's Import button asks on every page, so
-  # it's one query whatever the answer.
+  # Whether there's something to guess an Import with: at least one CSV format and one Account that a CSV file can be imported into, which leaves out the
+  # ones synced from a connection. The header's Import button asks on every page, so it's one query whatever the answer.
   def importable?
     return @importable if defined?(@importable)
 
     @importable = self.class.connection.select_value(self.class.sanitize_sql_array([
-      "SELECT EXISTS (SELECT 1 FROM budget_csv_formats WHERE budget_id = :id) AND EXISTS (SELECT 1 FROM budget_accounts WHERE budget_id = :id)", { id: id }
+      "SELECT EXISTS (SELECT 1 FROM budget_csv_formats WHERE budget_id = :id) AND EXISTS (SELECT 1 FROM budget_accounts WHERE budget_id = :id AND bank_connection_id IS NULL)", { id: id }
     ])) == true
   end
 
@@ -109,16 +111,17 @@ class Budget < ApplicationRecord
     end
 
     # In the order that each one's foreign keys allow: the records that bank transactions were filed as, with their links, then
-    # the bank transactions, then the Imports they came from and the Filing rules that filed them, then the Accounts and CSV formats
-    # those were in, and the rules' envelopes are only reached afterwards. Deleted straight from the tables in one statement each. The
-    # records go here, with their links, because a link keeps its record from being deleted, which `delete_envelope_records` and the
-    # Deposits would run into.
+    # the bank transactions, then the Imports they came from and the Filing rules that filed them, then the Accounts, then the
+    # connections they were synced from and the CSV formats they were read with, and the rules' envelopes are only reached
+    # afterwards. Deleted straight from the tables in one statement each. The records go here, with their links, because a link
+    # keeps its record from being deleted, which `delete_envelope_records` and the Deposits would run into.
     def delete_importer_records
       Budget::BankTransaction.delete_filed_records(Budget::BankTransaction.where(account: accounts))
       Budget::BankTransaction.where(account: accounts).delete_all
       Budget::Import.where(account: accounts).delete_all
       Budget::FilingRule.where(budget: self).delete_all
       Budget::Account.where(budget: self).delete_all
+      Budget::BankConnection.where(budget: self).delete_all
       Budget::CsvFormat.where(budget: self).delete_all
     end
 

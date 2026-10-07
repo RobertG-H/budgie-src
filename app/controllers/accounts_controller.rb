@@ -5,7 +5,7 @@ class AccountsController < ApplicationController
 
 
   def index
-    @accounts = Current.budget.accounts.alphabetical
+    @accounts = Current.budget.accounts.includes(:bank_connection).alphabetical
     @transaction_counts = Current.budget.bank_transactions.group(:account_id).count
   end
 

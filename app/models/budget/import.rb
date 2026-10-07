@@ -25,6 +25,7 @@ class Budget::Import < ApplicationRecord
   validates :duplicates_skipped, :zero_rows_skipped, :money_in_count, :money_out_count, :filed_by_rules, :ignored_by_rules,
     numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :csv_format_is_in_the_accounts_budget
+  validate :account_takes_csv_imports
 
   scope :latest_first, -> { order(created_at: :desc, id: :desc) }
 
@@ -178,6 +179,12 @@ class Budget::Import < ApplicationRecord
 
         { account_id: account_id, date: row.date, description: row.description, amount: row.amount, content_key: key, occurrence: last + seen[key] - count }
       end
+    end
+
+    # An Account that's synced from a connection, such as Splitwise's, gets its bank transactions from there, and a CSV file read into it would count some of
+    # them twice (ADR 0016). The UI doesn't offer one, and this refuses it from any other way in.
+    def account_takes_csv_imports
+      errors.add(:account, "is synced from #{account.bank_connection.provider_name}, so it takes no Import") if account&.synced?
     end
 
     # Which budget an Account is in, and so which CSV formats it can be read with, is up to the model: no foreign key can say.

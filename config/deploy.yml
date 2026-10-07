@@ -64,6 +64,12 @@ env:
     - GOOGLE_CLIENT_SECRET
     - SMTP_USERNAME
     - SMTP_PASSWORD
+    # Splitwise's app, which connecting an Account to it signs in with, and the keys its tokens are encrypted with. All four may be empty, which
+    # leaves Connect Splitwise out of the app. See docs/splitwise.md.
+    - SPLITWISE_CLIENT_ID
+    - SPLITWISE_CLIENT_SECRET
+    - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY
+    - ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT
   clear:
     # Run the Solid Queue supervisor inside Puma. There's one server per destination, and invites are
     # sent with deliver_now, so the only jobs are the hourly ones in config/recurring.yml.

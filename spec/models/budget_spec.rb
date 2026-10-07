@@ -8,6 +8,7 @@ RSpec.describe Budget, type: :model do
   it { is_expected.to have_many(:deposits).class_name("Budget::Deposit").dependent(:destroy) }
   it { is_expected.to have_many(:csv_formats).class_name("Budget::CsvFormat").dependent(:destroy) }
   it { is_expected.to have_many(:accounts).class_name("Budget::Account").dependent(:destroy) }
+  it { is_expected.to have_many(:bank_connections).class_name("Budget::BankConnection").dependent(:destroy) }
   it { is_expected.to have_many(:filing_rules).class_name("Budget::FilingRule").dependent(:destroy) }
   it { is_expected.to have_many(:imports).through(:accounts) }
   it { is_expected.to have_many(:bank_transactions).through(:accounts) }
@@ -26,6 +27,16 @@ RSpec.describe Budget, type: :model do
       expect(Budget.find(budget.id)).not_to be_importable
 
       create(:budget_csv_format, budget: budget)
+      expect(Budget.find(budget.id)).not_to be_importable
+
+      create(:budget_account, budget: budget)
+      expect(Budget.find(budget.id)).to be_importable
+    end
+
+    it "doesn't count an Account that's synced from a connection, which takes no Import, so it's false with only those" do
+      create(:budget_csv_format, budget: budget)
+      create(:budget_account, :synced, budget: budget)
+
       expect(Budget.find(budget.id)).not_to be_importable
 
       create(:budget_account, budget: budget)
@@ -363,6 +374,8 @@ RSpec.describe Budget, type: :model do
       # Accounts' default CSV formats, which keep a CSV format from being deleted before the Accounts are.
       busy.update!(default_csv_format: budget.csv_formats.last)
       quiet.update!(default_csv_format: budget.csv_formats.first)
+      # An Account synced from a Splitwise connection, which keeps the connection from being deleted before the Account is.
+      create(:budget_account, :synced, budget: budget)
       # A bank transaction filed as a Spend and another as a Deposit, whose records keep them from being deleted first.
       filed_out, filed_in = import.bank_transactions.first(2)
       filed_out.update_column(:amount, -10)
@@ -388,7 +401,8 @@ RSpec.describe Budget, type: :model do
         .and change(Budget::ReadyToAssignReallocation, :count).by(-3)
         .and change(Budget::Deposit, :count).by(-2)
         .and change(Budget::CsvFormat, :count).by(-2)
-        .and change(Budget::Account, :count).by(-2)
+        .and change(Budget::Account, :count).by(-3)
+        .and change(Budget::BankConnection, :count).by(-1)
         .and change(Budget::Import, :count).by(-3)
         .and change(Budget::BankTransaction, :count).by(-3)
         .and change(Budget::SpendLink, :count).by(-1)
@@ -405,6 +419,15 @@ RSpec.describe Budget, type: :model do
       expect(Budget::CsvFormat.where(budget_id: budget.id)).to be_empty
     end
 
+    it "deletes its Accounts before its bank connections, since an Account's connection keeps the connection from being deleted" do
+      expect(budget.accounts.where.not(bank_connection_id: nil).count).to eq(1)
+
+      expect { budget.destroy! }.not_to raise_error
+
+      expect(Budget::Account.where(budget_id: budget.id)).to be_empty
+      expect(Budget::BankConnection.where(budget_id: budget.id)).to be_empty
+    end
+
     it "leaves another budget's records alone" do
       others = create(:budget_assignment)
       others_spend = create(:budget_spend)
@@ -412,6 +435,7 @@ RSpec.describe Budget, type: :model do
       others_reallocation = create(:budget_envelope_reallocation)
       others_to_ready_to_assign = create(:budget_ready_to_assign_reallocation)
       others_csv_format = create(:budget_csv_format)
+      others_connection = create(:budget_account, :synced).bank_connection
       others_transaction = create(:budget_bank_transaction, :filed)
       others_rule = create(:budget_filing_rule, text: "loblaws")
       others_transaction.update_column(:filing_rule_id, others_rule.id)
@@ -425,6 +449,7 @@ RSpec.describe Budget, type: :model do
       expect(Budget::ReadyToAssignReallocation.all).to contain_exactly(others_to_ready_to_assign)
       expect(Budget::CsvFormat.all).to contain_exactly(others_csv_format, others_transaction.import.csv_format)
       expect(Budget::BankTransaction.all).to contain_exactly(others_transaction)
+      expect(Budget::BankConnection.all).to contain_exactly(others_connection)
       expect(Budget::FilingRule.all).to contain_exactly(others_rule)
       expect(others_transaction.reload.filing_rule_id).to eq(others_rule.id)
       expect(Budget::SpendLink.count).to eq(1)

@@ -46,6 +46,10 @@ RSpec.describe "db/seeds.rb" do
     expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
   end
 
+  it "creates no bank connections outside development" do
+    expect { run_seeds }.not_to change(Budget::BankConnection, :count)
+  end
+
   context "in development" do
     before { allow(Rails.env).to receive(:development?).and_return(true) }
 
@@ -240,14 +244,14 @@ RSpec.describe "db/seeds.rb" do
       let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
 
       it "is Chequing, with one Import of the sample file, read with the seeded CSV format" do
-        account = budget.accounts.sole
+        account = budget.accounts.find_by!(name: "Chequing")
 
         expect(account.name).to eq("Chequing")
         expect(account.imports.sole).to have_attributes(file_name: "signed-sample.csv", csv_format: budget.csv_formats.sole, duplicates_skipped: 0, zero_rows_skipped: 1)
       end
 
       it "has the sample's five bank transactions, money in and money out, all of them as the file had them" do
-        expect(budget.accounts.sole.bank_transactions.order(:id).pluck(:date, :description, :amount)).to eq([
+        expect(budget.accounts.find_by!(name: "Chequing").bank_transactions.order(:id).pluck(:date, :description, :amount)).to eq([
           [ Date.new(2026, 9, 1), "Paycheck", 2800 ], [ Date.new(2026, 9, 2), "Loblaws", BigDecimal("-82.45") ],
           [ Date.new(2026, 9, 3), "Hydro", BigDecimal("-65.50") ], [ Date.new(2026, 9, 5), "Coffee shop", BigDecimal("-4.25") ],
           [ Date.new(2026, 9, 9), "Hydro rebate", BigDecimal("12.25") ]
@@ -255,7 +259,7 @@ RSpec.describe "db/seeds.rb" do
       end
 
       it "files Loblaws as a Spend from Groceries, ignores Coffee shop, and leaves the other three unfiled, in the Unfiled list" do
-        bank_transactions = budget.accounts.sole.bank_transactions.index_by(&:description)
+        bank_transactions = budget.accounts.find_by!(name: "Chequing").bank_transactions.index_by(&:description)
 
         expect(bank_transactions["Loblaws"]).to be_filed
         expect(bank_transactions["Loblaws"].spend_links.sole.spend).to have_attributes(
@@ -284,10 +288,35 @@ RSpec.describe "db/seeds.rb" do
       end
 
       it "changes nothing when it's run again, and leaves a bank transaction the developer has changed" do
-        budget.accounts.sole.bank_transactions.first.update!(description: "Changed")
+        budget.accounts.find_by!(name: "Chequing").bank_transactions.first.update!(description: "Changed")
 
         expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count ] }
-        expect(budget.accounts.sole.bank_transactions.first.description).to eq("Changed")
+        expect(budget.accounts.find_by!(name: "Chequing").bank_transactions.first.description).to eq("Changed")
+      end
+    end
+
+    describe "the Splitwise Account" do
+      let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
+
+      it "is synced from a connection whose token isn't real, with its Filing rules off and no bank transactions" do
+        account = budget.accounts.find_by!(name: "Splitwise (sample)")
+
+        expect(account).to be_synced
+        expect(account).to have_attributes(files_with_rules: false, external_account_id: "1000000")
+        expect(account.bank_connection).to have_attributes(provider: "splitwise", login_name: "Dev B.", access_token: "development-token-not-real", budget: budget)
+        expect(account.bank_connection).to be_connected
+        expect(account.bank_transactions).to be_empty
+      end
+
+      it "leaves Chequing the only Account a file can be imported into" do
+        expect(budget.accounts.importable.pluck(:name)).to eq([ "Chequing" ])
+      end
+
+      it "changes nothing when it's run again, and leaves what the developer changed" do
+        budget.accounts.find_by!(name: "Splitwise (sample)").bank_connection.disconnect!
+
+        expect { run_seeds }.not_to change { [ Budget::Account.count, Budget::BankConnection.count ] }
+        expect(budget.accounts.find_by!(name: "Splitwise (sample)").bank_connection).to be_disconnected
       end
     end
 
@@ -360,7 +389,7 @@ RSpec.describe "db/seeds.rb" do
       expect { run_seeds }.not_to change {
         [ Budget::SpendLink.count, Budget::Spend.count, Budget::BankTransaction.where.not(ignored_at: nil).count, User.count, Budget.count, Budget::Envelope.count, Budget::Deposit.count, Budget::Assignment.count, Budget::Spend.count,
           Budget::Refund.count, Budget::EnvelopeReallocation.count, Budget::ReadyToAssignReallocation.count, Budget::CsvFormat.count, Budget::Account.count, Budget::Import.count, Budget::BankTransaction.count,
-          Budget::FilingRule.count ]
+          Budget::FilingRule.count, Budget::BankConnection.count ]
       }
     end
 

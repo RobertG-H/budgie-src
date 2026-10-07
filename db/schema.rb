@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_06_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_06_140100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -21,8 +21,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_120000) do
     t.datetime "updated_at", null: false
     t.bigint "default_csv_format_id"
     t.boolean "files_with_rules", default: true, null: false
+    t.bigint "bank_connection_id"
+    t.string "external_account_id"
     t.index "budget_id, lower((name)::text)", name: "index_budget_accounts_on_budget_id_and_lower_name", unique: true
+    t.index ["bank_connection_id", "external_account_id"], name: "index_budget_accounts_on_connection_and_external_id", unique: true
     t.index ["default_csv_format_id"], name: "index_budget_accounts_on_default_csv_format_id"
+    t.check_constraint "(bank_connection_id IS NULL) = (external_account_id IS NULL)", name: "budget_accounts_connection_with_external_id"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_accounts_name_not_blank"
   end
 
@@ -35,6 +39,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_120000) do
     t.index ["envelope_id", "month"], name: "index_budget_assignments_on_envelope_id_and_month", unique: true
     t.check_constraint "EXTRACT(day FROM month) = 1::numeric", name: "budget_assignments_month_first_of_month"
     t.check_constraint "amount > 0::numeric", name: "budget_assignments_amount_positive"
+  end
+
+  create_table "budget_bank_connections", force: :cascade do |t|
+    t.bigint "budget_id", null: false
+    t.string "provider", null: false
+    t.string "login_id", null: false
+    t.string "login_name", null: false
+    t.text "access_token"
+    t.boolean "needs_reconnect", default: false, null: false
+    t.date "read_from", null: false
+    t.string "sync_cursor"
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["budget_id", "provider", "login_id"], name: "index_budget_bank_connections_on_login", unique: true
+    t.check_constraint "NOT needs_reconnect OR access_token IS NOT NULL", name: "budget_bank_connections_needs_reconnect_has_token"
+    t.check_constraint "btrim(login_id::text) <> ''::text AND btrim(login_name::text) <> ''::text", name: "budget_bank_connections_login_not_blank"
+    t.check_constraint "provider::text = 'splitwise'::text", name: "budget_bank_connections_provider_known"
   end
 
   create_table "budget_bank_transactions", force: :cascade do |t|
@@ -306,9 +328,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_06_120000) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "budget_accounts", "budget_bank_connections", column: "bank_connection_id", on_delete: :restrict
   add_foreign_key "budget_accounts", "budget_csv_formats", column: "default_csv_format_id", on_delete: :restrict
   add_foreign_key "budget_accounts", "budgets", on_delete: :restrict
   add_foreign_key "budget_assignments", "budget_envelopes", column: "envelope_id", on_delete: :restrict
+  add_foreign_key "budget_bank_connections", "budgets", on_delete: :restrict
   add_foreign_key "budget_bank_transactions", "budget_accounts", column: "account_id", on_delete: :restrict
   add_foreign_key "budget_bank_transactions", "budget_filing_rules", column: "filing_rule_id", on_delete: :restrict
   add_foreign_key "budget_bank_transactions", "budget_imports", column: "import_id", on_delete: :restrict

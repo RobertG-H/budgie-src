@@ -3,6 +3,7 @@
 # Either way the file is read in the request, and what it did is the Import's summary.
 class ImportsController < ApplicationController
   before_action :set_account, only: %i[ new create ]
+  before_action :refuse_synced_account, only: %i[ new create ]
   before_action :set_import, only: %i[ show destroy ]
 
   # The CSV format of the Account's most recent Import is chosen to start with, since it's most likely the same bank's, and before its
@@ -49,6 +50,14 @@ class ImportsController < ApplicationController
       else
         Current.budget.accounts.find_by(id: submitted_account_id)
       end
+    end
+
+    # A synced Account, such as Splitwise's, takes no Import, whichever way it's asked for: its page has none and the form's Account select leaves it out, so this
+    # is only for a crafted request. The model refuses it too (Budget::Import).
+    def refuse_synced_account
+      return unless @account&.synced?
+
+      redirect_to account_path(@account), alert: "#{@account.name} is synced from #{@account.bank_connection.provider_name}, so it takes no Import."
     end
 
     # What the whole form sends as the Account, which is only ever an id of the budget's own, and nothing at all for a form that isn't sent.

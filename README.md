@@ -54,6 +54,7 @@ Deploys run in CI — a merge to `main` deploys testing once the checks pass, an
 | [Infrastructure from scratch](docs/infrastructure.md) | The ordered path from nothing to two running hosts |
 | [Operating Budgie](docs/operations.md) | Invites, deleting users, changing a currency, and reaching a running host |
 | [Google OAuth setup](docs/google-oauth.md) | The Google Cloud project, the consent screen and one OAuth client per environment |
+| [Splitwise setup](docs/splitwise.md) | One Splitwise app per environment, the keys a connection's token is kept under, and checking Connect Splitwise works |
 | [Email](docs/email.md) | Reading mail in development, and Zedmail's SMTP relay in testing and production |
 | [Provisioning the hosts](docs/provisioning.md) | Ordering the OVHcloud VPS instances, `script/provision.sh` and the checks |
 | [Cloudflare](docs/cloudflare.md) | The domain, the zone settings, the tunnels, and keeping the hosts off the public internet |

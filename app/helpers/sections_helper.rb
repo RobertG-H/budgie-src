@@ -5,7 +5,7 @@ module SectionsHelper
     "Budget" => %r{\A(/|/(months|envelopes)(/.*)?)\z},
     "Records" => %r{\A/records(/.*)?\z},
     "Bank transactions" => %r{\A/(bank_transactions|unfiled)(/.*)?\z},
-    "Accounts" => %r{\A/(accounts|imports)(/.*)?\z},
+    "Accounts" => %r{\A/(accounts|imports|splitwise)(/.*)?\z},
     "Filing rules" => %r{\A/filing_rules(/.*)?\z},
     "CSV formats" => %r{\A/csv_formats(/.*)?\z}
   }.freeze

@@ -60,11 +60,11 @@ The balance brought forward from the previous month. Nothing resets at month end
 ## Importing
 
 **Account**:
-A real bank or card account that bank transactions come from. Budgie doesn't track what's in it; that's the user's business.
+A real bank or card account that bank transactions come from. Budgie doesn't track what's in it; that's the user's business. It's either imported into from CSV files or synced from a connection: a Splitwise Account holds the user's share of each Splitwise expense, and takes no Import.
 _Avoid_: Wallet
 
 **Bank transaction**:
-The bank's record of money moving in or out of an account, before Budgie has filed it as one or more Deposits, Spends or Refunds, or ignored it.
+The bank's record of money moving in or out of an account, before Budgie has filed it as one or more Deposits, Spends or Refunds, or ignored it. For a Splitwise Account it's Splitwise's record of the user's share of an expense: what they paid less what they owe, positive when friends owe them.
 _Avoid_: Transaction, statement line, import row
 
 **CSV format**:
@@ -82,6 +82,10 @@ _Avoid_: Categorising, matching, assigning
 **Ignored bank transaction**:
 A bank transaction Budgie won't file, such as a card payment between the user's own accounts. It can be un-ignored.
 _Avoid_: Hidden, skipped
+
+**Settle-up**:
+Money paid between friends to settle what Splitwise says they owe, which Budgie ignores. It's a transfer between the user's own accounts, so both the Splitwise payment and the e-transfer that settles it are ignored.
+_Avoid_: Payment, repayment
 
 **Filing rule**:
 A standing instruction, such as "anything from Loblaws goes to Groceries", that files the bank transactions it fits the same way each time, or ignores them. It acts on bank transactions as they come in, and on the unfiled ones when it's saved, never on ones already filed or ignored, and never on those in an Account that has Filing rules off. It ignores numbers and symbols in a description, so "Loblaws #1029" and "Loblaws #1031" are the same to it.

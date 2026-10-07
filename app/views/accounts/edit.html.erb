@@ -2,7 +2,7 @@
 
 <div class="mx-auto max-w-md">
   <%= render "components/page_header", title: "Edit account" do %>
-    <%= render "components/delete_button", path: account_path(@account), confirm: "Delete the #{@account.name_was} account?#{filing_rules_deleted_with(@account)}" %>
+    <%= render "components/delete_button", path: account_path(@account), confirm: account_delete_question(@account) %>
   <% end %>
 
   <%= render "form", account: @account, cancel_path: account_path(@account) %>
