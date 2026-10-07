@@ -88,8 +88,12 @@ Money paid between friends to settle what Splitwise says they owe, which Budgie 
 _Avoid_: Payment, repayment
 
 **Filing rule**:
-A standing instruction, such as "anything from Loblaws goes to Groceries", that files the bank transactions it fits the same way each time, or ignores them. It acts on bank transactions as they come in, and on the unfiled ones when it's saved, never on ones already filed or ignored, and never on those in an Account that has Filing rules off. It ignores numbers and symbols in a description, so "Loblaws #1029" and "Loblaws #1031" are the same to it.
+A standing instruction, such as "anything from Loblaws goes to Groceries", that files the bank transactions it fits the same way each time, or ignores them. It acts on bank transactions as they come in, and on the unfiled ones when it's saved, never on ones already filed or ignored, and never on those in an Account that has Filing rules off. It ignores numbers and symbols in a description, so "Loblaws #1029" and "Loblaws #1031" are the same to it. Whatever it files or ignores is to review.
 _Avoid_: Category rule, mapping, auto-categorisation
+
+**To review**:
+A bank transaction that a filing rule filed or ignored and that no person has looked at yet. It counts in the budget's figures straight away and stays to review until it's marked reviewed, a record filed from it is edited, or it's un-filed or un-ignored. A rule filing it again makes it to review again.
+_Avoid_: Unconfirmed, unchecked, pending, to check
 
 **Guess**:
 The envelope and kind Budgie proposes for an unfiled bank transaction that no filing rule that can act on it fits, from how similar ones were filed. It only suggests, and filing stays the user's.
