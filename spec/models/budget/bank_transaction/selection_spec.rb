@@ -177,7 +177,6 @@ RSpec.describe Budget::BankTransaction::Selection do
 
       expect(chosen.mark_reviewed).to eq(2)
 
-      expect(chosen.reviewed_count).to eq(2)
       expect([ first, second ].map { |row| row.reload.to_review? }).to all(be(false))
       expect(first.reviewed_at).to be_present
     end

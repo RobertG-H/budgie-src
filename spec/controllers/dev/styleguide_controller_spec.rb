@@ -62,11 +62,10 @@ RSpec.describe Dev::StyleguideController, type: :controller do
       it "shows the date range filter with a preset marked, and one for a range that can't be used, with its alert" do
         with_development_routes { get :show }
 
-        assert_select "#date-range-filter form[method=get] input[type=date]", count: 10
+        assert_select "#date-range-filter form[method=get] input[type=date]", count: 8
         assert_select "#date-range-filter a[aria-current=true]", text: "This month"
-        assert_select "#date-range-filter input[type=submit][value=Apply]", count: 5
+        assert_select "#date-range-filter input[type=submit][value=Apply]", count: 4
         assert_select "#date-range-filter [role=alert]", text: /Choose a From and a To date/
-        assert_select "#date-range-filter input[type=date][disabled]", count: 2
         assert_select "#date-range-filter a[aria-current=true]", text: "Any date"
         assert_select "#date-range-filter p", text: "Leave both dates empty for any date."
       end

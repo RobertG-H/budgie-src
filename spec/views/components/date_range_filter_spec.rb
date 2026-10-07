@@ -63,29 +63,19 @@ RSpec.describe "components/_date_range_filter", type: :view do
     assert_select "a[aria-current]", count: 0
   end
 
-  describe "for a state that doesn't use the range" do
-    it "shows the fields disabled, so they send nothing, with the hint that says why, and the fields described by it" do
-      render_filter nil, nil, disabled: true, hint: "Unfiled bank transactions are listed whatever their date."
+  describe "a hint" do
+    it "is said in words the fields are described by" do
+      render_filter nil, nil, optional: true, hint: "Leave both dates empty for any date."
 
-      assert_select "input[type=date][name='filter[date_from]'][disabled]:not([required])"
-      assert_select "input[type=date][name='filter[date_to]'][disabled]"
-      assert_select "p#filter_date_range_hint", text: "Unfiled bank transactions are listed whatever their date."
+      assert_select "p#filter_date_range_hint", text: "Leave both dates empty for any date."
       assert_select "input[name='filter[date_from]'][aria-describedby=filter_date_range_hint]"
       assert_select "input[name='filter[date_to]'][aria-describedby=filter_date_range_hint]"
     end
 
-    it "leaves the presets out, which have nothing to set, and keeps Apply, which sends the other filters" do
-      render_filter nil, nil, disabled: true, hint: "Why."
-
-      assert_select "a", count: 0
-      assert_select "input[type=submit][value=Apply]"
-    end
-
-    it "has no hint, and enabled fields, otherwise" do
+    it "is nothing otherwise, and the fields are required" do
       render_filter nil, nil
 
       assert_select "p#filter_date_range_hint", count: 0
-      assert_select "input[type=date][disabled]", count: 0
       assert_select "input[type=date][required]", count: 2
       assert_select "input[type=date][aria-describedby]", count: 0
     end

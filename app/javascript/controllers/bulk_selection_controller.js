@@ -34,10 +34,6 @@ export default class extends Controller {
     this.update()
   }
 
-  change() {
-    this.update()
-  }
-
   update() {
     const ticked = this.rowTargets.filter((row) => row.checked)
     const none = ticked.length === 0

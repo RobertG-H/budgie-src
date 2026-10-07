@@ -22,7 +22,7 @@
       <div class="min-w-0 grow sm:max-w-xs">
         <%= render "components/field", form: form, attribute: :envelope_id, label: "File to", control: :select, hide_label: true do |field| %>
           <%= form.select :envelope_id, envelope_options, { prompt: "Choose an envelope", selected: chosen_envelope_id.to_s }, required: true,
-                **field.merge(data: { bulk_selection_target: "envelope", action: "bulk-selection#change" }) %>
+                **field.merge(data: { bulk_selection_target: "envelope", action: "bulk-selection#update" }) %>
         <% end %>
       </div>
       <%= form.button "File selected", name: nil, class: "#{action_class} btn-primary", data: { bulk_selection_target: "action", kind: "file" } %>

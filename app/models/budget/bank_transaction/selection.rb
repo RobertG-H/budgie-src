@@ -11,7 +11,7 @@
 #
 # Each makes the same number of queries for 5 rows as for 50.
 class Budget::BankTransaction::Selection
-  attr_reader :bank_transactions, :refusal, :reviewed_count
+  attr_reader :bank_transactions, :refusal
 
   def initialize(budget, ids)
     @budget = budget
@@ -57,7 +57,7 @@ class Budget::BankTransaction::Selection
 
   # Marks reviewed the ones that are still to review, and says how many that was.
   def mark_reviewed
-    @reviewed_count = Budget::BankTransaction.mark_reviewed(Budget::BankTransaction.where(id: @bank_transactions.map(&:id)))
+    Budget::BankTransaction.mark_reviewed(Budget::BankTransaction.where(id: @bank_transactions.map(&:id)))
   end
 
   private

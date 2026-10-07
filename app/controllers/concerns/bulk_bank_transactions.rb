@@ -46,7 +46,7 @@ module BulkBankTransactions
       return refuse(message) if message
 
       notice = yield selection
-      notice ? redirect_to(return_path, status: :see_other, notice: notice) : refuse(selection.refusal)
+      notice ? redirect_to(return_path, status: :see_other, notice: notice) : refuse(selection.refusal || "Nothing was changed.")
     end
 
     # The same page, as it is, with the reason and what was ticked.

@@ -13,8 +13,7 @@
        "This month, which is the default" => [ default, {} ],
        "A range that equals no preset" => [ chosen, {} ],
        "A range that can't be used, so it's the current month with an alert" => [ invalid, {} ],
-       "An optional range, such as Unfiled and To review start with, so any date is the first preset and the fields start empty" => [ any_date, { hint: "Leave both dates empty for any date." } ],
-       "A range the state doesn't use, so it's disabled and says why" => [ default, { disabled: true, hint: "Unfiled bank transactions are listed whatever their date." } ]
+       "An optional range, such as Unfiled and To review start with, so any date is the first preset and the fields start empty" => [ any_date, { hint: "Leave both dates empty for any date." } ]
      }.each do |title, (filter, options)| %>
     <h3 class="font-semibold"><%= title %></h3>
     <% unless filter.valid? %>

@@ -20,7 +20,7 @@
 <% to_review = bank_transaction.to_review? %>
 <% checkbox = check_box_tag("ids[]", bank_transaction.id, selected, id: dom_id(bank_transaction, :select), form: "bulk-bank-transactions", class: "checkbox checkbox-primary",
       aria: { label: "Select #{bank_transaction.description}" },
-      data: { bulk_selection_target: "row", action: "click->bulk-selection#toggle", direction: (bank_transaction.amount.negative? ? "out" : "in"), state: state, records: records.size }) if selectable %>
+      data: { bulk_selection_target: "row", action: "click->bulk-selection#toggle", direction: (bank_transaction.amount.negative? ? "out" : "in"), records: records.size }) if selectable %>
 
 <%= render "components/record_row", href: (new_bank_transaction_filing_path(bank_transaction, **origin_params) if state == :unfiled),
       date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount, budget: budget, with_year: true,
