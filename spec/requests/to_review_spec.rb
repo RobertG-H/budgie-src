@@ -95,6 +95,16 @@ RSpec.describe "Bank transactions to review", type: :request do
       expect(rows.map { |row| row[/In Chequing|In Visa/] }).to eq([ "In Visa" ])
     end
 
+    it "refreshes in place, keeping the scroll position, so Mark reviewed doesn't send the person back to the top" do
+      by_rule("Filed by a rule", :filed)
+
+      get bank_transactions_path(filter: { state: "to_review" })
+
+      assert_select "head meta[name=turbo-refresh-method][content=morph]"
+      assert_select "head meta[name=turbo-refresh-scroll][content=preserve]"
+      assert_select "div[data-controller=bulk-selection][data-action*='turbo:morph@document->bulk-selection#restore']"
+    end
+
     it "is in the State select, after Unfiled" do
       get bank_transactions_path(filter: { state: "to_review" })
 

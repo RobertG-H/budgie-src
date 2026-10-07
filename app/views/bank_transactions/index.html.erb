@@ -1,4 +1,6 @@
 <% content_for :title, "Bank transactions · Budgie" %>
+<%# Mark reviewed, Un-file and the like send the person back to this same address, so Turbo morphs the page in place and keeps the scroll position, and they keep their place in a long list. %>
+<% turbo_refreshes_with method: :morph, scroll: :preserve %>
 <% budget = Current.budget %>
 <% range = @list.date_range %>
 <% other_filters = @list.to_params.except(:date_from, :date_to) %>
@@ -38,7 +40,7 @@
 <div class="mt-8">
   <% if @bank_transactions.any? %>
     <%# The bar and the list are one thing to the bulk-selection controller, which keeps the bar's buttons in step with what's ticked. %>
-    <%= tag.div data: (selectable ? { controller: "bulk-selection" } : {}) do %>
+    <%= tag.div data: (selectable ? { controller: "bulk-selection", action: "turbo:before-render@document->bulk-selection#remember turbo:morph@document->bulk-selection#restore" } : {}) do %>
       <% if selectable %>
         <%= render "bank_transactions/bulk_bar", list: @list, rows: @bank_transactions, page: page_param, chosen_envelope_id: @chosen_envelope_id %>
       <% end %>

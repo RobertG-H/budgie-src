@@ -7,12 +7,25 @@ import { Controller } from "@hotwired/stimulus"
 // un-filing would delete when it asks first.
 //
 // Selection is within the page only: there's no way to choose across pages.
+
+// What was ticked when the page was about to be morphed, kept outside the controller because a morph can replace the element it's on.
+let ticked = null
+
 export default class extends Controller {
   static targets = [ "row", "all", "allLabel", "count", "action", "envelope" ]
 
   connect() {
+    this.sync()
+  }
+
+  // Reveals select-all (a morph draws it hidden again), ticks again what was ticked before a morph, and brings the bar in step.
+  sync() {
+    if (!this.hasAllTarget) return
+
     this.last = null
     this.allLabelTarget.hidden = false
+    if (ticked) this.rowTargets.forEach((row) => { row.checked = ticked.has(row.value) })
+    ticked = null
     this.update()
   }
 
@@ -32,6 +45,19 @@ export default class extends Controller {
   toggleAll() {
     this.rowTargets.forEach((row) => { row.checked = this.allTarget.checked })
     this.update()
+  }
+
+  // The page is morphed in place when a row's Mark reviewed or Un-file sends it back to the same address, which would untick what's ticked (a morph sets the
+  // checked state the server drew), so the ticked rows are remembered before it and ticked again after it.
+  remember(event) {
+    if (event.detail.renderMethod !== "morph") return
+
+    ticked = new Set(this.rowTargets.filter((row) => row.checked).map((row) => row.value))
+  }
+
+  // Once Stimulus has seen the morphed page, which is after the event.
+  restore() {
+    requestAnimationFrame(() => this.sync())
   }
 
   update() {
