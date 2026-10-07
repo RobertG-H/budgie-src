@@ -1,0 +1,19 @@
+<%# locals: (line:, budget:) %>
+<%# An envelope's Available on the month view, in a pill tinted for its level, so it stands out from the figures beside it: blue with a tick for plenty, amber with a quarter-filled circle for a little, red with a warning triangle for Overspent, and plain grey with no icon when it had nothing to spend. The icon is a shape for each level, so the pill's colour is never the only cue; it has no word for plenty or a little, as the bar under the name has none, so it's hidden from assistive technology. %>
+<%# Overspent also says so in a word, under the pill, on the line the bar under the name takes up, so it never makes a row taller. The text on each tint is the role's -content colour, or the error colour that `money` gives a negative, never warning as text. It's an inline-flex lined up on the figure's baseline, so the figure stays on the row's line with the others. %>
+<% level = line.available_level %>
+<% tint = { plenty: "bg-info/40 text-info-content", little: "bg-warning/30 text-warning-content", overspent: "bg-error/15", none: "bg-base-300/60" }.fetch(level) %>
+<span class="inline-flex items-baseline gap-0.5 rounded-full px-1.5 leading-6 sm:gap-1 sm:px-2 <%= tint %>">
+  <% case level %>
+  <% when :plenty %>
+    <svg class="size-3 self-center sm:size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.061 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" /></svg>
+  <% when :little %>
+    <svg class="size-3 self-center sm:size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm0-1.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z" clip-rule="evenodd" /><path d="M10 10V5a5 5 0 0 1 5 5Z" /></svg>
+  <% when :overspent %>
+    <svg class="size-3 self-center sm:size-3.5 text-error" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" /></svg>
+  <% end %>
+  <%= render "components/money", amount: line.available, budget: budget %>
+</span>
+<% if level == :overspent %>
+  <span class="block text-xs leading-3 font-semibold text-error">Overspent</span>
+<% end %>

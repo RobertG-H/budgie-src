@@ -196,13 +196,15 @@ shows a Refunded column behind Show details (as is Reallocated, below) and has n
 has "New refund" beside "New spend", its Refunded, and a Refunds section when the month has any. With Refunds, the core
 of the month view is complete, and every balance on it, in a fixed number of grouped queries, comes from `Budget::Month`.
 
-The month view's table also shows, under each envelope's Available figure, a bar for how much of what it had to spend is left,
+The month view's table also shows, under each envelope's name, a bar for how much of what it had to spend is left,
 and hides Carried over, Refunded and Reallocated behind one Show details toggle. The bar's figures are on
 `Budget::Month::EnvelopeLine`, so views do no arithmetic and no query is added: what the envelope had to spend is the positive part
 of Carried over + Assigned + Refunded + the positive part of Reallocated, its share is Available over that (never over 100%), and
 its level is plenty, a little (strictly under a quarter), Overspent (a full bar, even with nothing to spend) or none (no bar). The
-bar is a native `<progress aria-hidden="true">` with no word for its level, in `progress-success`, `progress-warning` or
-`progress-error`, and the Overspent badge sits on a line under it so every Available figure stays right-aligned. The toggle's
+bar is a native `<progress aria-hidden="true">` with no word for its level, in `progress-primary` or `progress-warning`, or a
+dashed `text-error` line for Overspent: plenty is blue and not green, so red-green colour blindness never has to tell it from
+Overspent by hue. The Available figure is in a pill tinted for the level, with an icon for each, and Overspent says so in a
+word under the pill, on the line the bar takes up, so every row is the same height whatever its level. The toggle's
 state is `data-details="on|off"` on `<html>`, outside the `<body>` that Turbo morphs, so saving an Assigned amount doesn't reset
 it; it's remembered per browser in `localStorage`, applied before the first paint by a script in the layout's `<head>`, and kept
 in step with the button by the `month-details` Stimulus controller. The markup reads it with Tailwind's `in-data-[details=on]:`

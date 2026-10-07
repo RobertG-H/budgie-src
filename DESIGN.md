@@ -73,19 +73,28 @@ shrink to fit. Content width is `max-w-3xl` by default, with `px-4 sm:px-6`. Spa
 steps of 2, 4, 6 and 8 (`gap-4`, `space-y-6`, `mt-8`) — no arbitrary values like `mt-[13px]`. No horizontal
 page scroll at 375px: tables are the one place content can outgrow a phone, so they scroll in their own
 `overflow-x-auto` wrapper rather than the page, and their cell padding drops to a quarter of daisyUI's below `sm:` so
-three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven (with Show details on) fit the page. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row, a list row or a row of links, as the Assigned cell's, a bank transaction's Un-file and the month links' do, or is a small secondary action under a form's fields, as the filing form's "Add another record" is).
+three money columns fit without that, and to three quarters from `sm:` up, so the month view's seven (with Show details on) fit the page. The month view's table, which has no border, also drops the padding at its outer edges below `sm:` (`max-sm:pl-0` on the first column, `max-sm:pr-0` on the last), so its names and pills line up with the page's text and the pill's room comes out of the gutter. Tap targets stay comfortable at 375px (daisyUI's default button and field heights; `btn-sm` only where a button sits in a table row, a list row or a row of links, as the Assigned cell's, a bank transaction's Un-file and the month links' do, or is a small secondary action under a form's fields, as the filing form's "Add another record" is).
 
 ## Money and numbers
 
 - Amounts go through the `components/money` partial, which wraps `money(amount, budget:)` (itself
   `number_to_currency`). It turns a negative amount's text red and, when passed `overspent: true`, adds an
   "Overspent" badge — colour is never the only cue.
-- An envelope's Available on the month view has a bar under its figure (`components/available_bar`): a native
-  `<progress aria-hidden="true">`, `w-16` and right-aligned, with no word for it, since the figure beside it is the text and
-  its colour (`progress-success` for plenty, `progress-warning` for a little) and its length say which. Overspent is a full
-  `progress-error` bar, and keeps its word in the badge on a line under it (`components/overspent_badge`), so the figure
-  stays right-aligned; `money`'s `overspent:` puts the same badge beside a figure elsewhere. An envelope with nothing to
-  spend has no bar. It's a `<progress>` and not a styled `div`, since its length would need a `style=` attribute.
+- An envelope on the month view has a bar under its name (`components/available_bar`), as wide as the Envelope column,
+  and its Available figure in a pill (`components/available_pill`). The bar is a native `<progress aria-hidden="true">`
+  with no word for it, since the figure is the text, and its colour (`progress-primary` for plenty, `progress-warning` for a
+  little) and its length say which; it's a `<progress>` and not a styled `div`, since its length would need a `style=`
+  attribute. Overspent is always full, so it's a dashed `text-error` line, an inline SVG clipped to the bar's rounded ends.
+  The pill is `rounded-full`, tinted for the level (`bg-info/40` with `text-info-content`, `bg-warning/30` with
+  `text-warning-content`, `bg-error/15` with `money`'s `text-error`, and `bg-base-300/60` with no icon for an envelope with
+  nothing to spend, which has no bar), with an icon for each level: a tick for plenty, a quarter-filled circle for a little
+  and a warning triangle for Overspent, hidden from assistive technology as the bar is. Overspent also says so in a word, a
+  `text-xs leading-3` line in the error colour under the pill, which is on the line the bar takes up under the name; the
+  bar's slot is `h-3` at every level, even with no bar, so every row is the same height whatever its level.
+  `money`'s `overspent:` puts the Overspent badge beside a figure elsewhere.
+- **Plenty is blue, never green**, so it's never told from Overspent's red by hue alone, which red-green colour blindness
+  (the commonest kind) can't do: blue, amber and red stay apart for it, and every level has a shape of its own as well, the
+  pill's icon and Overspent's dashes.
 - Amount columns and cells are right-aligned with `tabular-nums` (`text-right tabular-nums`).
 - Negatives always carry a sign (`-$30.00`); overspending also says so in words.
 - The currency code appears once, in the header (`Budget in USD`).
@@ -106,8 +115,9 @@ second use turns it into a partial. The partials:
 | `_page_header` | A page's `h1`, optional `badge` beside it, optional description, and actions block (e.g. the "New envelope" button). |
 | `_archived_badge` | The "Archived" badge beside an archived envelope's name, on the month view's row and by the title on its page (`_page_header`'s `badge`). A `badge-neutral badge-sm` word, never only a colour, as Overspent isn't. |
 | `_money` | An amount in the budget's currency; red and signed when negative, optionally badged Overspent beside it. |
-| `_overspent_badge` | The "Overspent" badge, the one place its markup lives: beside a figure through `_money`, and on a line under the Available bar. |
-| `_available_bar` | The month view's bar under an envelope's Available figure, and the Overspent badge under it for an Overspent one. It has no word, so it's hidden from assistive technology; its colour and length are the level. |
+| `_overspent_badge` | The "Overspent" badge, the one place its markup lives, beside a figure through `_money`. The month view says Overspent in a plain word under the Available pill instead, which fits the bar's line. |
+| `_available_bar` | The month view's bar under an envelope's name, as wide as the Envelope column, in a slot of the same height at every level. It has no word, so it's hidden from assistive technology; its colour and length are the level, and Overspent is a dashed line. |
+| `_available_pill` | The month view's Available figure in a pill tinted for its level, with an icon for each (tick, quarter-filled circle, warning triangle), and the word Overspent under it for an Overspent one. |
 | `_field` | A labelled form control (`:input`, `:select`, `:textarea`, `:file`, `:checkbox`, or `:radios`, a group of radio buttons under a legend) with an optional hint and error, wired up with matching `aria-describedby`/`aria-invalid`. The block renders the actual `form.*` control and is given the classes and aria attributes to splat onto it. `hide_label` takes the label out of sight but not away from assistive technology, for a control whose place makes its purpose clear, such as an amount inside a table cell. |
 | `_empty_state` | What a list shows when it has nothing in it, with an optional title and next action. |
 | `_stat_card` | One headline number with a label (e.g. an envelope's Available) and an optional description under it, built on daisyUI's `stats`. It's a plain card: not a link, and it has no word of its own for what's wrong with the number, which is `months/_ready_to_assign`'s job where it matters. |
@@ -133,7 +143,7 @@ The month view's Ready to Assign card (`months/_ready_to_assign`) is the one hea
 
 "Import" in the header (`layouts/_import_button`) is the one primary action that is on every page: a `btn btn-primary btn-sm` beside Sign out whenever there's a budget, which fits at 375px next to the app name and Sign out. It's a link to the whole Import form, so it works without JavaScript; with a CSV format and an Account to import into, JavaScript makes it open the file chooser at once instead, and the form is only seen when Budgie isn't certain which CSV format and Account the file is for. That form says what was guessed in a `role="status"` `alert-warning` (what to check), or a `role="alert"` `alert-error` with a "Why" `<details>` (a file no format reads), and "Choose the file again." where the browser couldn't put the file back; a file is never kept.
 
-A table's least-used columns can go behind one toggle, as the month view's Carried over, Refunded and Reallocated do (`months/_details_toggle`): a `btn btn-sm` above the table, right-aligned, with `aria-pressed` and "Show details" / "Hide details", and a muted hint beside it, left, that says what hiding them means. **The table never moves when the toggle changes**: every hint and label is rendered, stacked in one grid cell with the one that doesn't apply `invisible`, so the row is as tall and wide as the longer in either state. From `sm:` the hidden figures are columns; below it each envelope is its own `<tbody>` with a second full-width row of labelled `text-xs` figures (a `dl`, three columns), there only while details are on, and the first row's bottom border goes while it is. The state is `data-details="on|off"` on `<html>`, read with `in-data-[details=on]:` variants. Every figure in an envelope's row sits on the row's first line (`align-top leading-8`, a line as tall as the Assigned button), so the bar and badge under Available don't pull the others off it.
+A table's least-used columns can go behind one toggle, as the month view's Carried over, Refunded and Reallocated do (`months/_details_toggle`): a `btn btn-sm` above the table, right-aligned, with `aria-pressed` and "Show details" / "Hide details", and a muted hint beside it, left, that says what hiding them means. **The table never moves when the toggle changes**: every hint and label is rendered, stacked in one grid cell with the one that doesn't apply `invisible`, so the row is as tall and wide as the longer in either state. From `sm:` the hidden figures are columns; below it each envelope is its own `<tbody>` with a second full-width row of labelled `text-xs` figures (a `dl`, three columns), there only while details are on, and the first row's bottom border goes while it is. The state is `data-details="on|off"` on `<html>`, read with `in-data-[details=on]:` variants. Every figure in an envelope's row sits on the row's first line (`align-top leading-8`, a line as tall as the Assigned button), with the envelope's name (`text-base font-medium`, a step up from the table's text) and the Available pill, so the bar under the name and the word Overspent under the pill, which share the second line, don't pull the others off it.
 
 A table of what a list of rules does (the Filing rules page) puts one section's rules in one `_table`, with the section's name as the heading and not repeated in a row. Its **Filed count** is a right-aligned number, `0` when none, of the things a rule acted on that still are filed or ignored, said once in the page's description. A row that's inactive keeps an "Inactive" `_label_badge` after its name, and the reason, "Inactive while its envelope is archived.", is said once under the section's heading and not in each row. A rule pinned to an Account that has Filing rules off is inactive too, and since that's about one rule's own Account, its reason, "Inactive while its Account's Filing rules are off.", is a muted line in that row's Account cell, in the table's own size, never under the heading. A delete from a row asks first, names the thing and says what stays ("Delete the Filing rule for 'loblaws'? The 3 bank transactions it filed or ignored stay as they are."), and the page refreshes in place (`turbo_refreshes_with method: :morph, scroll: :preserve`) so the person keeps their place in a long list.
 
@@ -158,7 +168,7 @@ they do the job, instead of a JS-built equivalent. No new JS libraries without a
 An amount edited in place, such as an envelope's Assigned on the month view (`app/views/assignments/`), is a Turbo
 Frame that swaps a button showing the amount for an input with Save and Cancel. The button is a `btn btn-sm
 text-base font-normal` chip, so it reads as tappable at rest and its figure is the size of the column's others, nudged
-with `-mr-2 px-2` so it still lines up with them. The input is `components/field` with `hide_label`. Its form submits to the whole page
+with `-mr-2 px-2` (`-mr-1 px-1` below `sm:`, where the month view's four columns are tight) so it still lines up with them. The input is `components/field` with `hide_label`. Its form submits to the whole page
 (`data-turbo-frame="_top"`) so that saving refreshes every figure on the page with a morph that keeps the scroll
 position, and an amount that's refused comes back as a Turbo Stream into the frame.
 

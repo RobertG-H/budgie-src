@@ -346,13 +346,13 @@ RSpec.describe "Months", type: :request do
     it "marks only February Overspent in the Groceries example" do
       set_up_the_groceries_example
 
-      [ [ "2026-01", 0 ], [ "2026-02", 1 ], [ "2026-03", 0 ] ].each do |month, badges|
+      [ [ "2026-01", 0 ], [ "2026-02", 1 ], [ "2026-03", 0 ] ].each do |month, words|
         get month_path(month)
 
-        assert_select ".badge", text: "Overspent", count: badges
+        assert_select "table span", text: "Overspent", count: words
       end
       get month_path("2026-02")
-      assert_select "tr#envelope_#{groceries.id} td:nth-child(7) .badge", text: "Overspent"
+      assert_select "tr#envelope_#{groceries.id} td:nth-child(7) span", text: "Overspent"
       assert_select "tr#envelope_#{groceries.id} td:nth-child(7) .text-error", text: "-$30.00"
     end
 
@@ -1105,7 +1105,7 @@ RSpec.describe "Months", type: :request do
         assert_select "tr#envelope_#{bills.id} td:nth-child(7)", text: /\A-\$30\.00\s+Overspent\z/
         assert_select "tr#envelope_#{bills.id} td:nth-child(7) .text-error", text: "-$30.00"
         assert_select "tr#envelope_#{fuel.id} td:nth-child(7)", text: "$0.00"
-        assert_select ".badge", text: "Overspent", count: 1
+        assert_select "table span", text: "Overspent", count: 1
       end
     end
 
@@ -1267,7 +1267,7 @@ RSpec.describe "Months", type: :request do
     end
   end
 
-  describe "the Available bar" do
+  describe "the Available bar and pill" do
     let(:month) { Date.new(2026, 9, 1) }
 
     # An envelope with $100 assigned in September, and `spent` of it spent.
@@ -1278,28 +1278,47 @@ RSpec.describe "Months", type: :request do
       end
     end
 
-    # The Available cell of an envelope's row.
+    # The Envelope cell of an envelope's row, which has the bar under the name.
+    def name_cell(envelope)
+      "tr#envelope_#{envelope.id} td:nth-child(1)"
+    end
+
+    # The Available cell of an envelope's row, which has the pill.
     def available_cell(envelope)
       "tr#envelope_#{envelope.id} td:nth-child(7)"
     end
 
-    it "is a success bar under the figure when most of what the envelope had is left, with its share as the value" do
+    it "is a primary bar under the name when most of what the envelope had is left, with its share as the value, and a blue pill with an icon" do
       groceries = envelope_with("Groceries", spent: 20)
 
       get month_path("2026-09")
 
-      assert_select "#{available_cell(groceries)} progress.progress.progress-success[value='80'][max='100'][aria-hidden=true]"
+      assert_select "#{name_cell(groceries)} progress.progress.progress-primary.w-full[value='80'][max='100'][aria-hidden=true]"
+      assert_select "#{available_cell(groceries)} span.rounded-full[class~='bg-info/40'] svg[aria-hidden=true]", count: 1
+      assert_select "#{available_cell(groceries)} progress", count: 0
       assert_select "#{available_cell(groceries)} .badge", count: 0
     end
 
-    it "is a warning bar when under a quarter is left, and an empty one when it's all spent" do
+    it "never uses green, so plenty is never told from Overspent's red by hue alone" do
+      envelope_with("Groceries", spent: 20)
+      envelope_with("Dining out", spent: 130)
+
+      get month_path("2026-09")
+
+      assert_select "table [class*='success']", count: 0
+    end
+
+    it "is a warning bar when under a quarter is left, and an empty one when it's all spent, with an amber pill" do
       dining_out = envelope_with("Dining out", spent: 76)
       rent = envelope_with("Rent", spent: 100)
 
       get month_path("2026-09")
 
-      assert_select "#{available_cell(dining_out)} progress.progress-warning[value='24']"
-      assert_select "#{available_cell(rent)} progress.progress-warning[value='0']"
+      assert_select "#{name_cell(dining_out)} progress.progress-warning[value='24']"
+      assert_select "#{name_cell(rent)} progress.progress-warning[value='0']"
+      [ dining_out, rent ].each do |envelope|
+        assert_select "#{available_cell(envelope)} span.rounded-full[class~='bg-warning/30'] svg", count: 1
+      end
     end
 
     it "counts exactly a quarter as plenty" do
@@ -1307,49 +1326,68 @@ RSpec.describe "Months", type: :request do
 
       get month_path("2026-09")
 
-      assert_select "#{available_cell(fuel)} progress.progress-success[value='25']"
+      assert_select "#{name_cell(fuel)} progress.progress-primary[value='25']"
+      assert_select "#{available_cell(fuel)} span.rounded-full[class~='bg-info/40']"
     end
 
-    it "is a full error bar with the Overspent badge on a line under it, however much it had to spend" do
+    it "is a dashed error line when Overspent, however much it had to spend, and the pill says Overspent in a word under it" do
       dining_out = envelope_with("Dining out", spent: 130)
       bills = create(:budget_envelope, budget: budget, name: "Bills", starting_balance: -30)
 
       get month_path("2026-09")
 
       [ dining_out, bills ].each do |envelope|
-        assert_select "#{available_cell(envelope)} progress.progress-error[value='100'][aria-hidden=true]"
-        assert_select "#{available_cell(envelope)} div .badge.badge-error", text: "Overspent", count: 1
-        assert_select "#{available_cell(envelope)} span .badge", count: 0
+        assert_select "#{name_cell(envelope)} svg.text-error[aria-hidden=true] line[stroke-dasharray]", count: 1
+        assert_select "#{name_cell(envelope)} progress", count: 0
+        assert_select "#{available_cell(envelope)} span.rounded-full[class~='bg-error/15'] svg", count: 1
+        assert_select "#{available_cell(envelope)} > span.text-error", text: "Overspent", count: 1
+        assert_select "#{available_cell(envelope)} .badge", count: 0
       end
     end
 
-    it "is no bar for a new envelope with nothing to spend and no Spends" do
+    it "is no bar for a new envelope with nothing to spend and no Spends, and a plain pill with no icon" do
       new_envelope = create(:budget_envelope, budget: budget, name: "New", starting_balance: 0)
 
       get month_path("2026-09")
 
       assert_select "tr#envelope_#{new_envelope.id}", count: 1
       assert_select "tr#envelope_#{new_envelope.id} progress", count: 0
+      assert_select "tr#envelope_#{new_envelope.id} svg", count: 0
       assert_select "tr#envelope_#{new_envelope.id} .badge", count: 0
+      assert_select "#{available_cell(new_envelope)} span.rounded-full", text: "$0.00"
     end
 
-    it "has no word for the level: Overspent is the only word, and a bar is hidden from assistive technology" do
+    it "keeps the same slot under every name, with or without a bar, as tall as the word Overspent under the pill, so no level makes a row taller" do
+      envelope_with("Groceries", spent: 20)
+      envelope_with("Dining out", spent: 130)
+      create(:budget_envelope, budget: budget, name: "New", starting_balance: 0)
+
+      get month_path("2026-09")
+
+      slots = css_select("tbody tr[id] td:nth-child(1) > div[aria-hidden=true]")
+      expect(slots.map { |slot| slot["class"] }).to eq([ "flex h-3 items-center" ] * 3)
+      assert_select "tbody tr[id] td:nth-child(7) > span.leading-3", text: "Overspent", count: 1
+    end
+
+    it "has no word for the level: Overspent is the only word, and a bar and an icon are hidden from assistive technology" do
       envelope_with("Groceries", spent: 20)
       envelope_with("Dining out", spent: 76)
 
       get month_path("2026-09")
 
       assert_select "progress:not([aria-hidden=true])", count: 0
+      assert_select "table svg:not([aria-hidden=true])", count: 0
       expect(css_select("table").sole.text).not_to match(/\b(plenty|a little)\b/i)
     end
 
-    it "is under the figure in the Available column, which stays right-aligned" do
+    it "keeps the figure right-aligned in the Available column, with the name and nothing else in the Envelope column" do
       groceries = envelope_with("Groceries", spent: 130)
 
       get month_path("2026-09")
 
-      assert_select "#{available_cell(groceries)}.text-right progress.ml-auto"
+      assert_select "#{available_cell(groceries)}.text-right .text-error", text: "-$30.00"
       expect(css_select(available_cell(groceries)).sole.text.squish).to eq("-$30.00 Overspent")
+      expect(css_select(name_cell(groceries)).sole.text.squish).to eq("Groceries")
     end
 
     it "doesn't change the query count with envelopes" do

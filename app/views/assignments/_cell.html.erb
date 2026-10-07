@@ -2,7 +2,7 @@
 <%# An envelope's Assigned for the month, as the button that swaps in the input for it (assignments/form). It's a Turbo Frame, so the swap changes nothing else on the page. The month view renders one for each envelope, and the show action renders the same one again for Cancel to go back to. %>
 <%# The button's name says what it's for and which envelope and month, since an amount on its own doesn't. `from` is the page the cell is on, which the input remembers so that saving can go back to it (ReturnsToOrigin). %>
 <%= turbo_frame_tag dom_id(line.envelope, :assigned) do %>
-  <%= button_to edit_month_envelope_assignment_path(month, line.envelope), method: :get, params: { from: from }.compact, class: "btn btn-sm -mr-2 px-2 text-base font-normal" do %>
+  <%= button_to edit_month_envelope_assignment_path(month, line.envelope), method: :get, params: { from: from }.compact, class: "btn btn-sm -mr-1 px-1 text-base font-normal sm:-mr-2 sm:px-2" do %>
     <span class="sr-only"><%= assigned_to(line.envelope, month) %>:</span>
     <%= render "components/money", amount: line.assigned, budget: month.budget %>
   <% end %>
