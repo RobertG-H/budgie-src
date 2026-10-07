@@ -330,6 +330,98 @@ RSpec.describe "Navigation", type: :request do
     end
   end
 
+  describe "the count of bank transactions to review" do
+    let(:account) { create(:budget_account, budget: budget) }
+
+    before { sign_in_as budget.user }
+
+    def make_to_review(count, *traits)
+      create_list(:budget_bank_transaction, count, :by_rule, *traits, account: account)
+    end
+
+    def item
+      css_select("nav[aria-label=Sections] li").find { |li| li.at_css("a").text.squish == "Bank transactions" }
+    end
+
+    def links
+      item.css("a").map { |link| [ link.text.squish, link["href"] ] }
+    end
+
+    it "follows the count of unfiled ones, in words, and is a link to the To review state" do
+      create(:budget_bank_transaction, account: account)
+      make_to_review(8, :filed)
+
+      get root_path
+
+      expect(links).to eq([ [ "Bank transactions", bank_transactions_path ], [ "1 unfiled", bank_transactions_path(filter: { state: "unfiled" }) ],
+                            [ "8 to review", bank_transactions_path(filter: { state: "to_review" }) ] ])
+      expect(item.css("a").last["class"]).to include("text-base-content/70")
+    end
+
+    it "counts what rules filed and what they ignored, until it's looked at, and nothing a person did" do
+      make_to_review(2, :filed)
+      make_to_review(1, :ignored)
+      make_to_review(3, :filed, :reviewed)
+      create(:budget_bank_transaction, :filed, account: account)
+      create(:budget_bank_transaction, :ignored, account: account)
+
+      get root_path
+
+      expect(links.map(&:first)).to eq([ "Bank transactions", "3 to review" ])
+    end
+
+    it "is left out when there are none, and is there on every page that has the header" do
+      get root_path
+      expect(links.map(&:first)).to eq([ "Bank transactions" ])
+
+      make_to_review(2, :filed)
+      [ root_path, records_path, accounts_path, bank_transactions_path, csv_formats_path ].each do |path|
+        get path
+
+        expect(links.map(&:first)).to eq([ "Bank transactions", "2 to review" ])
+      end
+    end
+
+    it "is capped as the count of unfiled ones is: 99 is 99 and a hundred or more is 99+" do
+      make_to_review(99, :filed)
+      get root_path
+      expect(links.last.first).to eq("99 to review")
+
+      make_to_review(3, :filed)
+      get root_path
+      expect(links.last.first).to eq("99+ to review")
+    end
+
+    it "counts the whole budget's, across its Accounts, and not another budget's" do
+      make_to_review(1, :filed)
+      create(:budget_bank_transaction, :filed, :by_rule, account: create(:budget_account, budget: budget))
+      create(:budget_bank_transaction, :filed, :by_rule, account: create(:budget_account, budget: create(:budget)))
+
+      get root_path
+
+      expect(links.last.first).to eq("2 to review")
+    end
+
+    it "marks Bank transactions as the current page, and not by itself" do
+      make_to_review(2, :filed)
+
+      get bank_transactions_path(filter: { state: "to_review" })
+
+      assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1, text: "Bank transactions"
+    end
+
+    it "costs the header the one query it always did, for both counts, however many there are" do
+      make_to_review(30, :filed)
+      create_list(:budget_bank_transaction, 30, account: account)
+      statements = []
+      collector = ->(*, payload) { statements << payload[:sql] if payload[:sql].include?("budget_bank_transactions") }
+
+      ActiveSupport::Notifications.subscribed(collector, "sql.active_record") { get csv_formats_path }
+
+      expect(statements.size).to eq(1)
+    end
+  end
+
   it "has Import beside Sign out in the main navigation, whenever the person has a budget, as the primary button" do
     sign_in_as budget.user
 

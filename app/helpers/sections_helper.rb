@@ -42,6 +42,16 @@ module SectionsHelper
 
   # What the count of unfiled bank transactions says, which is capped: counting stops a little past the cap, so "99+" is as exact as it gets.
   def unfiled_count_text(count)
-    "#{count > Current::UNFILED_COUNT_CAP ? "#{Current::UNFILED_COUNT_CAP}+" : count} unfiled"
+    "#{capped_count(count)} unfiled"
   end
+
+  # The same for how many are to review, which a Filing rule filed or ignored and nobody has looked at since (ADR 0017): "8 to review".
+  def to_review_count_text(count)
+    "#{capped_count(count)} to review"
+  end
+
+  private
+    def capped_count(count)
+      count > Current::UNFILED_COUNT_CAP ? "#{Current::UNFILED_COUNT_CAP}+" : count
+    end
 end

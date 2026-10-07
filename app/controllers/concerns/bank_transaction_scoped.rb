@@ -4,8 +4,9 @@
 #
 # "And next" is working through the unfiled bank transactions of the list a form was opened from without going back to it after each one: the
 # next is the first unfiled one older than this one in that list's order, and when none is older the newest one left (Budget::BankTransaction#next_unfiled).
-# The list is the Bank transactions page's, in the Account it was filtered to if it was, or the Account's page's, in that Account. A form that wasn't
-# opened from either has no list, so no next.
+# The list is the Bank transactions page's, in the Account it was filtered to if it was, and for Unfiled and To review in the range of dates it was given, so it
+# stops at the end of the range and doesn't wrap to one outside it, or the Account's page's, in that Account. A form that wasn't opened from either has no list,
+# so no next.
 module BankTransactionScoped
   extend ActiveSupport::Concern
 
@@ -36,15 +37,26 @@ module BankTransactionScoped
     end
 
     # The bank transactions "and next" goes through, found through the budget so another user's are never reached: every Account's, or the one the
-    # Bank transactions page was filtered to, or the Account's own for its page. The state and the dates don't matter to the unfiled ones.
+    # Bank transactions page was filtered to, or the Account's own for its page. The unfiled ones are listed whatever their date, except in Unfiled and To
+    # review, which can be given a range, and then it's the unfiled ones in it.
     def next_scope
       return @next_scope if defined?(@next_scope)
 
       @next_scope = case origin
       when "bank_transactions"
-        account = origin_bank_transaction_list.account
-        account ? Current.budget.bank_transactions.where(account_id: account.id) : Current.budget.bank_transactions
+        origin_bank_transaction_list.next_scope
       when "account" then @bank_transaction.account.bank_transactions
+      end
+    end
+
+    # Where it goes after a bank transaction was un-filed or un-ignored: back to where it was opened from, except from To review, where the only reason to do it
+    # is that the rule got it wrong, so it goes straight to its filing form with the same way back. One that isn't unfiled afterwards, such as one that's gone
+    # from Splitwise, goes back to the list.
+    def redirect_after_undoing(notice)
+      if origin == "bank_transactions" && origin_bank_transaction_list.state == "to_review" && @bank_transaction.reload.unfiled?
+        redirect_to new_bank_transaction_filing_path(@bank_transaction, origin_params(nil)), status: :see_other, notice: notice
+      else
+        redirect_to origin_path, status: :see_other, notice: notice
       end
     end
 

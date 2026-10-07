@@ -3,8 +3,8 @@ require "rails_helper"
 RSpec.describe "components/_date_range_filter", type: :view do
   let(:today) { Date.new(2026, 10, 14) }
 
-  def render_filter(from, to, path: ->(dates) { "/records?#{dates.to_query}" }, **options)
-    filter = DateRangeFilter.new(from: from, to: to, today: today)
+  def render_filter(from, to, path: ->(dates) { "/records?#{dates.to_query}" }, optional: false, **options)
+    filter = DateRangeFilter.new(from: from, to: to, today: today, optional: optional)
     render inline: <<~ERB, locals: { filter: filter, path: path, options: options }
       <%= form_with url: "/records", method: :get, scope: :filter do |form| %>
         <%= render "components/date_range_filter", form: form, filter: filter, path: path, **options %>
@@ -88,6 +88,34 @@ RSpec.describe "components/_date_range_filter", type: :view do
       assert_select "input[type=date][disabled]", count: 0
       assert_select "input[type=date][required]", count: 2
       assert_select "input[type=date][aria-describedby]", count: 0
+    end
+  end
+
+  describe "an optional range" do
+    it "starts with empty fields that aren't required, and Any date marked first among the presets, which sets no dates" do
+      render_filter nil, nil, optional: true
+
+      assert_select "input[type=date][name='filter[date_from]']:not([value]):not([required])"
+      assert_select "input[type=date][name='filter[date_to]']:not([value]):not([required])"
+      expect(css_select("a.btn").map { |link| link.text.squish }).to eq([ "Any date", "This month", "Last month", "Last 3 months" ])
+      assert_select "a.btn-neutral[aria-current=true]", text: "Any date"
+      assert_select "a", text: "Any date" do |links|
+        expect(links.first["href"]).to eq("/records?")
+      end
+    end
+
+    it "starts on the dates it's given, with those required fields' values and no preset marked when it equals none" do
+      render_filter "2026-09-02", "2026-09-30", optional: true
+
+      assert_select "input[type=date][name='filter[date_from]'][value='2026-09-02']:not([required])"
+      assert_select "a[aria-current=true]", count: 0
+    end
+
+    it "leaves Any date out of a range that isn't optional" do
+      render_filter nil, nil
+
+      assert_select "a", text: "Any date", count: 0
+      assert_select "input[type=date][required]", count: 2
     end
   end
 end

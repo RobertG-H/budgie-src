@@ -58,8 +58,17 @@ Rails.application.routes.draw do
   # Filing a bank transaction, as the Deposits, Spends and Refunds it was (create), taking that back (destroy), and ignoring
   # it (and un-ignoring it). Every bank transaction, in any state, across the Accounts, is the index, which can be narrowed to the
   # unfiled ones, the filed ones or the ignored ones.
+  # Several of them at once, ticked on the Bank transactions page (it comes first so "bulk" isn't read as a bank transaction's id): filed to one envelope
+  # (create) or un-filed (destroy), ignored or un-ignored, or marked reviewed, each all or none except Mark reviewed, which marks the ones still to review.
+  scope path: "bank_transactions/bulk", as: :bulk_bank_transaction do
+    resource :filing, only: [ :create, :destroy ], controller: "bulk_bank_transaction_filings"
+    resource :ignore, only: [ :create, :destroy ], controller: "bulk_bank_transaction_ignores"
+    resource :review, only: :create, controller: "bulk_bank_transaction_reviews"
+  end
   resources :bank_transactions, only: :index do
     resource :filing, only: [ :new, :create, :destroy ], controller: "bank_transaction_filings"
+    # Saying a person has looked at what a Filing rule did with it (ADR 0017), so it's no longer to review.
+    resource :review, only: :create, controller: "bank_transaction_reviews"
     # What "Always file like this" would do with the text as it stands on the filing form, which the form asks for as the text is edited.
     resource :rule_preview, only: :show, path: "filing/rule", controller: "bank_transaction_rule_previews"
     resource :ignore, only: [ :create, :destroy ], controller: "bank_transaction_ignores"

@@ -44,8 +44,12 @@
           description: "#{pluralize(@import.money_out_count, "bank transaction")} in the file" %>
   <% end %>
   <%# What the budget's Filing rules did with the rows as they came in, which they do straight away, so it's here to be noticed, and Undo takes it back with the rest. It's as the Import did it. %>
-  <%= render "components/stat_card", title: "Filed by Filing rules", value: @import.filed_by_rules, description: "bank transaction".pluralize(@import.filed_by_rules) %>
-  <%= render "components/stat_card", title: "Ignored by Filing rules", value: @import.ignored_by_rules, description: "bank transaction".pluralize(@import.ignored_by_rules) %>
+  <%# Everything a rule filed or ignored is to review until a person has looked at it (ADR 0017), so each figure links to the Account's To review state, which is where they are. %>
+  <% review_link = link_to("Review", bank_transactions_path(filter: { state: "to_review", account: @import.account_id }), class: "link") %>
+  <%= render "components/stat_card", title: "Filed by Filing rules", value: @import.filed_by_rules,
+        description: safe_join([ "bank transaction".pluralize(@import.filed_by_rules), (review_link if @import.filed_by_rules.positive?) ].compact, " · ") %>
+  <%= render "components/stat_card", title: "Ignored by Filing rules", value: @import.ignored_by_rules,
+        description: safe_join([ "bank transaction".pluralize(@import.ignored_by_rules), (review_link if @import.ignored_by_rules.positive?) ].compact, " · ") %>
   <%= render "components/stat_card", title: "Duplicates skipped", value: @import.duplicates_skipped, description: "Already in this account" %>
   <%= render "components/stat_card", title: "Rows of 0 skipped", value: @import.zero_rows_skipped, description: "Not kept" %>
 </div>

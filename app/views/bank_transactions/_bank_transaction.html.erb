@@ -1,10 +1,12 @@
-<%# locals: (bank_transaction:, budget:, origin_params:, show_account: false, show_state: true, guess: nil) %>
+<%# locals: (bank_transaction:, budget:, origin_params:, show_account: false, show_state: true, guess: nil, selectable: false, selected: false) %>
 <%# One bank transaction in a list, as a record row: its date, its description, which Account it's in when the list has several, and its signed amount, money out red. What happens to it depends on its state: %>
 <%# - unfiled: the whole row opens the filing form, which comes back to the page the list is on (`origin_params`: its `from`, and for the Bank transactions page its `filter` and `page`) %>
 <%# - filed: the records it was filed as, which are ordinary and open where they're edited, a flag when they no longer add up to it, and Un-file %>
 <%# - ignored: Un-ignore %>
 <%# A filed or ignored one says which Filing rule did it, when one did and not a person: the rule's text and what it sets. Preload the rule and its envelope too. %>
 <%# An unfiled one with a `guess` says what it was like and what it would be filed as, in a muted line, which is only a suggestion: choosing the row opens the form, which starts on it. %>
+<%# One that a Filing rule filed or ignored and nobody has looked at since is to review (ADR 0017): a "To review" badge in words, and Mark reviewed beside what can be done to it, which says a person has looked. Un-filing, un-ignoring or editing a record filed from it takes it out too. %>
+<%# A `selectable` row has a checkbox in a cell of its own at the start, outside its link, for the Bank transactions page's bulk bar (it joins that form by its `form` attribute, since a row holds forms of its own and they can't nest); `selected` is for a page that comes back with what was ticked. %>
 <%# One that a sync brought in, and then went from Splitwise (the expense was deleted, or the person has no share of it now), says so in a "Deleted in Splitwise" badge, whatever else it is, and is never opened to be filed. A filed one has it beside Un-file: its records stay until the person un-files it or keeps them. %>
 <%# The state is said in a word, so it isn't only in what's offered. A list of nothing but unfiled ones, such as the Bank transactions page in its Unfiled state, leaves it out with `show_state: false`. Preload the links and records of every one, so a list runs the same number of queries however long it is. %>
 <% state = bank_transaction.state %>
@@ -14,14 +16,19 @@
 <%# A removed one that was neither filed nor ignored has no state to say, which `state` says as :removed, so it has only its badge. A filed one has the badge below, beside Un-file. %>
 <% state_label = state.to_s.capitalize unless state == :removed %>
 <% flag_in_state_line = removed && state != :filed %>
-<% action_class = "btn btn-ghost btn-sm -ml-3" %>
+<% action_class = "btn btn-ghost btn-sm whitespace-nowrap" %>
+<% to_review = bank_transaction.to_review? %>
+<% checkbox = check_box_tag("ids[]", bank_transaction.id, selected, id: dom_id(bank_transaction, :select), form: "bulk-bank-transactions", class: "checkbox checkbox-primary",
+      aria: { label: "Select #{bank_transaction.description}" },
+      data: { bulk_selection_target: "row", action: "click->bulk-selection#toggle", direction: (bank_transaction.amount.negative? ? "out" : "in"), state: state, records: records.size }) if selectable %>
 
 <%= render "components/record_row", href: (new_bank_transaction_filing_path(bank_transaction, **origin_params) if state == :unfiled),
       date: bank_transaction.date, description: bank_transaction.description, amount: bank_transaction.amount, budget: budget, with_year: true,
-      counterpart: (bank_transaction.account.name if show_account) do %>
-  <% if (show_state && state_label) || flag_in_state_line %>
+      counterpart: (bank_transaction.account.name if show_account), checkbox: checkbox do %>
+  <% if (show_state && state_label) || flag_in_state_line || to_review %>
     <span class="mt-1 flex flex-wrap items-center gap-2">
       <%= render "components/label_badge", text: state_label if show_state && state_label %>
+      <%= render "components/warning_badge", text: "To review" if to_review %>
       <%= render "components/warning_badge", text: "Deleted in Splitwise" if flag_in_state_line %>
     </span>
   <% end %>
@@ -51,7 +58,8 @@
 
     <span class="mt-1 flex flex-wrap items-center gap-2">
       <%= button_to "Un-file", bank_transaction_filing_path(bank_transaction), method: :delete, params: origin_params,
-            form: { class: "inline", data: { turbo_confirm: "Un-file this bank transaction? This deletes the records it was filed as." } }, class: action_class %>
+            form: { class: "inline", data: { turbo_confirm: "Un-file this bank transaction? This deletes the records it was filed as." } }, class: "#{action_class} -ml-3" %>
+      <%= render "bank_transactions/mark_reviewed", bank_transaction: bank_transaction, origin_params: origin_params, button_class: action_class if to_review %>
       <% if removed %>
         <%= render "components/warning_badge", text: "Deleted in Splitwise" %>
         <span class="text-base-content/70">Un-file it, or keep its records.</span>
@@ -59,9 +67,10 @@
     </span>
   <% elsif state == :ignored %>
     <%= render "bank_transactions/filing_rule", rule: rule if rule %>
-    <span class="mt-1 block">
+    <span class="mt-1 flex flex-wrap items-center gap-2">
       <%= button_to "Un-ignore", bank_transaction_ignore_path(bank_transaction), method: :delete, params: origin_params,
-            form: { class: "inline" }, class: action_class %>
+            form: { class: "inline" }, class: "#{action_class} -ml-3" %>
+      <%= render "bank_transactions/mark_reviewed", bank_transaction: bank_transaction, origin_params: origin_params, button_class: action_class if to_review %>
     </span>
   <% end %>
 <% end %>

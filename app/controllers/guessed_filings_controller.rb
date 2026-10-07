@@ -27,20 +27,23 @@ class GuessedFilingsController < ApplicationController
       Budget::Filing::Entry.new(bank_transaction: bank_transaction, drafts: [ Budget::Filing::Draft.for(bank_transaction, **Budget::Guess.draft_attributes_from(reviewed[bank_transaction.id.to_s])) ])
     end
 
-    if Budget::Filing.new(Current.budget).file(entries)
+    filing = Budget::Filing.new(Current.budget)
+
+    if filing.file(entries)
       redirect_to unfiled_path, notice: "#{helpers.pluralize(entries.size, "bank transaction")} filed as guessed."
     else
-      redirect_to review_path, alert: refusal(entries)
+      redirect_to review_path, alert: filing.refusal
     end
   end
 
   private
-    # The unfiled bank transactions the review is about: the Account's that was chosen, if one was, and never another budget's.
+    # The unfiled bank transactions the review is about: the Account's that was chosen, if one was, and never another budget's, in the range of dates the
+    # page that offered it was showing, so it's the same rows as the page that counted them.
     def unfiled_list
-      @unfiled_list ||= Budget::BankTransactionList.parse(Current.budget, params[:filter]).unfiled
+      @unfiled_list ||= Budget::BankTransactionList.parse(Current.budget, params[:filter], state: "unfiled")
     end
 
-    # The Account chosen, as the params that say so, which the review and where it goes back to carry.
+    # The Account and dates chosen, as the params that say so, which the review and where it goes back to carry.
     def account_params
       unfiled_list.account_params
     end
@@ -50,7 +53,7 @@ class GuessedFilingsController < ApplicationController
       new_guessed_filing_path(filter: account_params, page: page_param)
     end
 
-    # The Unfiled state of the Bank transactions page, for the same Account and at the page the review was for.
+    # The Unfiled state of the Bank transactions page, for the same Account and dates and at the page the review was for.
     def unfiled_path
       bank_transactions_path(filter: account_params.merge(state: "unfiled"), page: page_param)
     end
@@ -59,12 +62,5 @@ class GuessedFilingsController < ApplicationController
     # at, so the page it was opened from isn't reported as unpermitted.
     def reviewed_outcomes
       params.slice(:guessed).permit(guessed: {})[:guessed].to_h
-    end
-
-    # Why nothing was filed, for the first row that was refused, in the words filing by hand uses.
-    def refusal(entries)
-      entry = entries.find(&:refused?)
-
-      "Nothing was filed. #{entry.bank_transaction.description}: #{entry.full_messages.map { |message| message.end_with?(".") ? message : "#{message}." }.join(" ")}"
     end
 end

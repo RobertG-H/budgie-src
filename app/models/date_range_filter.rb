@@ -3,49 +3,65 @@
 # that can't be used, with one end blank, an end that isn't a date, or From after To, is never an empty page because of a typo: it
 # has an `error` that says so, and its dates are the current month instead.
 #
+# A list that doesn't need a range, such as the Bank transactions page's Unfiled and To review states, asks for an `optional` one: both ends blank is
+# then **any date** (`any?`, no dates at all) and not the current month, which is its first preset, and a range that can't be used is any date too.
+#
 # A year has one to six digits, because a date field takes up to 275760, and none is outside 1 to 275760.
 class DateRangeFilter
   MIN_YEAR = 1
   MAX_YEAR = 275760
   DATE = /\A(\d{4,6})-(\d{2})-(\d{2})\z/
   ERROR = "Choose a From and a To date, with From first. Showing this month instead.".freeze
+  OPTIONAL_ERROR = "Choose a From and a To date, with From first. Showing any date instead.".freeze
 
-  # A range a link can ask for, with the params that spell it.
+  # A range a link can ask for, with the params that spell it. Any date has no dates, so it has no params.
   Preset = Data.define(:key, :label, :from, :to) do
     def params
-      { date_from: DateRangeFilter.spell(from), date_to: DateRangeFilter.spell(to) }
+      from ? { date_from: DateRangeFilter.spell(from), date_to: DateRangeFilter.spell(to) } : {}
     end
   end
 
   attr_reader :from, :to, :error
 
   # `from` and `to` are what came in: strings, or anything at all, such as nil or the array a hand-made query can send.
-  def initialize(from:, to:, today: Date.current)
+  def initialize(from:, to:, today: Date.current, optional: false)
     @today = today
+    @optional = optional
     @from, @to, @error = resolve(from, to)
   end
 
   # A date as a date field spells it: four digits or more of year, so 1 is "0001" and 275760 is "275760".
   def self.spell(date)
-    date.strftime("%Y-%m-%d")
+    date&.strftime("%Y-%m-%d")
   end
 
   def valid?
     error.nil?
   end
 
+  # Whether there's no range at all, which only an optional one can be: every date.
+  def any?
+    from.nil?
+  end
+
+  def optional?
+    @optional
+  end
+
   def range
-    from..to
+    from..to unless any?
   end
 
-  # Whether it's the range a page starts on, the current month.
+  # Whether it's the range a page starts on: the current month, or for an optional one any date.
   def default?
-    [ from, to ] == [ default_from, default_to ]
+    optional? ? any? : [ from, to ] == [ default_from, default_to ]
   end
 
-  # This month, Last month and Last 3 months (the current month and the two before it), in the order they're offered.
+  # This month, Last month and Last 3 months (the current month and the two before it), in the order they're offered, after Any date for an
+  # optional range.
   def presets
     @presets ||= [
+      *(Preset.new(key: :any, label: "Any date", from: nil, to: nil) if optional?),
       Preset.new(key: :this_month, label: "This month", from: default_from, to: default_to),
       Preset.new(key: :last_month, label: "Last month", from: default_from.prev_month, to: default_from.prev_month.end_of_month),
       Preset.new(key: :last_3_months, label: "Last 3 months", from: default_from.prev_month.prev_month, to: default_to)
@@ -59,7 +75,7 @@ class DateRangeFilter
 
   # The range as the params that spell it, such as in a link or a hidden field: the dates actually in use.
   def to_params
-    { date_from: self.class.spell(from), date_to: self.class.spell(to) }
+    any? ? {} : { date_from: self.class.spell(from), date_to: self.class.spell(to) }
   end
 
   private
@@ -76,13 +92,13 @@ class DateRangeFilter
     # [from, to, error]: the dates asked for when they make a range, and the current month, with why, when they don't. Both blank
     # is the current month and no error.
     def resolve(from, to)
-      return [ default_from, default_to, nil ] if blank?(from) && blank?(to)
+      return optional? ? [ nil, nil, nil ] : [ default_from, default_to, nil ] if blank?(from) && blank?(to)
 
       from_date = parse(from)
       to_date = parse(to)
       return [ from_date, to_date, nil ] if from_date && to_date && from_date <= to_date
 
-      [ default_from, default_to, ERROR ]
+      optional? ? [ nil, nil, OPTIONAL_ERROR ] : [ default_from, default_to, ERROR ]
     end
 
     def blank?(value)

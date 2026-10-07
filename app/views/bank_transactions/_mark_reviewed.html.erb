@@ -1,0 +1,3 @@
+<%# locals: (bank_transaction:, origin_params:, button_class:) %>
+<%# Mark reviewed, for a bank transaction a Filing rule filed or ignored that a person has now looked at (ADR 0017): its own form, which goes back to the page the row was on. %>
+<%= button_to "Mark reviewed", bank_transaction_review_path(bank_transaction), params: origin_params, form: { class: "inline" }, class: button_class %>

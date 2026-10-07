@@ -48,6 +48,14 @@ class Budget::Filing
     entries.present? ? entries.none?(&:refused?) : true
   end
 
+  # Why nothing was filed, for the first entry that was refused: "Nothing was filed. COSTCO #99: Envelope is archived." Nothing when it was filed.
+  def refusal
+    entry = entries&.find(&:refused?)
+    return unless entry
+
+    "Nothing was filed. #{entry.bank_transaction.description}: #{entry.full_messages.map { |message| message.end_with?(".") ? message : "#{message}." }.join(" ")}"
+  end
+
   private
     # Everything that can be said without locking anything: what's wrong with each record, whether the kinds fit the money, and
     # whether the records add up to the amount.

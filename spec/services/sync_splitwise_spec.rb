@@ -465,6 +465,17 @@ RSpec.describe SyncSplitwise do
       expect(result.notice).to eq("Synced from Splitwise: 1 new. 1 settle-up ignored. Filing rules filed 1 of them.")
     end
 
+    it "leave what they file to review, and what they ignore, until a person has looked at it (ADR 0017)" do
+      account.update!(files_with_rules: true)
+      create(:budget_filing_rule, :ignore, budget: budget, text: "paid me back")
+      splitwise.expense(3, "Jane paid me back again", net_balance: "-30.00")
+
+      sync
+
+      expect(Budget::BankTransaction.to_review.pluck(:external_id)).to contain_exactly("1", "3")
+      expect(transaction(2)).not_to be_to_review
+    end
+
     it "never act on a settle-up, which arrives ignored with no rule noted" do
       account.update!(files_with_rules: true)
 

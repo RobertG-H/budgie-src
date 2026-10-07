@@ -27,4 +27,16 @@
     <%= render "components/record_row", href: nil, date: Date.new(2025, 9, 12), description: "Paycheck", counterpart: "Money in",
           amount: 2800, budget: budget, with_year: true %>
   <% end %>
+
+  <h3 class="font-semibold">With a checkbox</h3>
+  <p class="text-base-content/70">A row for choosing, as on the Bank transactions page: the checkbox has a cell of its own at the start, outside the row's link and 3rem wide, so it's a tap target of its own, and the rest of the row still opens it.</p>
+
+  <%= render "components/record_list" do %>
+    <%= render "components/record_row", href: "#", date: Date.new(2026, 9, 12), description: "Loblaws", amount: -82.45, budget: budget, with_year: true,
+          checkbox: check_box_tag("styleguide_ids[]", "1", true, id: nil, class: "checkbox checkbox-primary", aria: { label: "Select Loblaws" }) %>
+    <%= render "components/record_row", href: "#", date: Date.new(2026, 9, 11), description: "Costco", amount: -120, budget: budget, with_year: true,
+          checkbox: check_box_tag("styleguide_ids[]", "2", false, id: nil, class: "checkbox checkbox-primary", aria: { label: "Select Costco" }) do %>
+      <span class="mt-1 block"><%= render "components/warning_badge", text: "To review" %></span>
+    <% end %>
+  <% end %>
 </section>

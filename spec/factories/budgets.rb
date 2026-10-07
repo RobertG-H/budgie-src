@@ -143,6 +143,16 @@ FactoryBot.define do
       ignored_at { Time.zone.local(2026, 9, 16, 10) }
     end
 
+    # What a Filing rule filed or ignored, with `:filed` or `:ignored`: it's to review (ADR 0017) until `:reviewed`, or until it's marked.
+    trait :by_rule do
+      filing_rule { association :budget_filing_rule, budget: account.budget }
+    end
+
+    # A person has looked at what a Filing rule did with it.
+    trait :reviewed do
+      reviewed_at { Time.zone.local(2026, 9, 18, 10) }
+    end
+
     # Gone from the provider it was synced from, such as a Splitwise expense that was deleted.
     trait :removed do
       removed_at { Time.zone.local(2026, 9, 17, 10) }

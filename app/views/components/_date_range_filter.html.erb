@@ -1,13 +1,14 @@
 <%# locals: (form:, filter:, path:, disabled: false, hint: nil) %>
 <%# A range of dates to filter a list by, for a page's GET form: From and To as date fields, the presets as links and an Apply button. `filter` is a DateRangeFilter, and its dates are what the fields start as (the current month, when it couldn't use what was sent). The fields are named `filter[date_from]` and `filter[date_to]`, so the form's scope is `filter`, and the page's other filters are fields of the same form, or hidden ones. %>
 <%# A preset is a link to the same page with the other filters kept and these two dates set: `path` turns a preset's params into the address. The one the range equals is marked with aria-current and filled dark, and not only coloured. Nothing is submitted until Apply is, so there's no JavaScript. %>
+<%# An `optional` range (a list that doesn't need one, such as Unfiled bank transactions) starts with both fields empty and not required, any date, which is its first preset; with a date in one and not the other it's an alert and any date, never an empty page. %>
 <%# `disabled` is for a page whose state doesn't use the range, such as the unfiled bank transactions, which are listed whatever their date: the fields are shown disabled, so they send nothing, the presets have nothing to set and are left out, and `hint` says why, in words the fields are described by. %>
 <% hint_id = form.field_id(:date_range, :hint) if hint %>
 <div class="space-y-4">
   <div class="grid grid-cols-2 gap-4">
     <% { date_from: [ "From", filter.from ], date_to: [ "To", filter.to ] }.each do |attribute, (label, date)| %>
       <%= render "components/field", form: form, attribute: attribute, label: label do |field| %>
-        <%= form.date_field attribute, value: DateRangeFilter.spell(date), required: !disabled, disabled: disabled,
+        <%= form.date_field attribute, value: DateRangeFilter.spell(date), required: !disabled && !filter.optional?, disabled: disabled,
               **field.merge(aria: field[:aria].merge(describedby: [ field.dig(:aria, :describedby), hint_id ].compact.join(" ").presence)) %>
       <% end %>
     <% end %>

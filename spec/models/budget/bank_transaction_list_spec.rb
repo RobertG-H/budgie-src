@@ -21,7 +21,7 @@ RSpec.describe Budget::BankTransactionList do
   end
 
   def state_traits(state)
-    { unfiled: [], filed: [ :filed ], ignored: [ :ignored ] }.fetch(state)
+    { unfiled: [], filed: [ :filed ], ignored: [ :ignored ], to_review: [ :filed, :by_rule ] }.fetch(state)
   end
 
   describe "a bank transaction a sync found gone from Splitwise, which was neither filed nor ignored" do
@@ -101,13 +101,39 @@ RSpec.describe Budget::BankTransactionList do
       expect(before_range).not_to be_nil
     end
 
-    it "are the unfiled ones only, whatever their dates, in Unfiled, which the range doesn't apply to" do
+    it "are the unfiled ones only, whatever their dates, in Unfiled, which starts with any date" do
       old = transaction(:unfiled, Date.new(2020, 1, 1))
       recent = transaction(:unfiled, Date.new(2026, 10, 1))
       transaction(:filed, Date.new(2026, 10, 1))
       transaction(:ignored, Date.new(2026, 10, 1))
 
-      expect(listed(list_for(state: "unfiled", date_from: "2026-01-01", date_to: "2026-01-31"))).to eq([ recent, old ])
+      expect(listed(list_for(state: "unfiled"))).to eq([ recent, old ])
+    end
+
+    it "are the unfiled ones in the range, in Unfiled, when it's given one" do
+      transaction(:unfiled, Date.new(2020, 1, 1))
+      january = transaction(:unfiled, Date.new(2026, 1, 15))
+      transaction(:unfiled, Date.new(2026, 10, 1))
+
+      expect(listed(list_for(state: "unfiled", date_from: "2026-01-01", date_to: "2026-01-31"))).to eq([ january ])
+    end
+
+    it "are the ones a Filing rule filed or ignored that nobody has looked at, whatever their dates, in To review" do
+      old = transaction(:to_review, Date.new(2020, 1, 1))
+      ignored = create(:budget_bank_transaction, :ignored, :by_rule, account: chequing, date: Date.new(2026, 10, 1))
+      create(:budget_bank_transaction, :filed, :by_rule, :reviewed, account: chequing)
+      transaction(:filed, Date.new(2026, 10, 1))
+      transaction(:unfiled, Date.new(2026, 10, 1))
+
+      expect(listed(list_for(state: "to_review"))).to eq([ ignored, old ])
+    end
+
+    it "are the ones to review in the range, in To review, when it's given one, and in the Account when one is chosen" do
+      transaction(:to_review, Date.new(2020, 1, 1))
+      january = transaction(:to_review, Date.new(2026, 1, 15))
+      transaction(:to_review, Date.new(2026, 1, 20), account: visa)
+
+      expect(listed(list_for(state: "to_review", date_from: "2026-01-01", date_to: "2026-01-31", account: chequing.id.to_s))).to eq([ january ])
     end
 
     it "are the filed ones in the range, in Filed" do
@@ -191,11 +217,56 @@ RSpec.describe Budget::BankTransactionList do
       expect(list_for(date_from: "2026-09-01", date_to: "2026-09-30").date_range.to_params).to eq(date_from: "2026-09-01", date_to: "2026-09-30")
     end
 
-    it "is used by every state but Unfiled" do
+    it "is always used by All, Filed and Ignored, and by Unfiled and To review only when it's given" do
       expect(list_for(state: "all")).to be_range_applies
       expect(list_for(state: "filed")).to be_range_applies
       expect(list_for(state: "ignored")).to be_range_applies
       expect(list_for(state: "unfiled")).not_to be_range_applies
+      expect(list_for(state: "to_review")).not_to be_range_applies
+      expect(list_for(state: "unfiled", date_from: "2026-10-01", date_to: "2026-10-31")).to be_range_applies
+      expect(list_for(state: "to_review", date_from: "2026-10-01", date_to: "2026-10-31")).to be_range_applies
+    end
+
+    it "is any date, which is no dates at all, in Unfiled and To review when it's given none" do
+      %w[ unfiled to_review ].each do |state|
+        list = list_for(state: state)
+
+        expect(list.date_range).to be_any
+        expect(list.to_params).to eq(state: state)
+      end
+    end
+
+    it "is any date and an error, and not the current month, in Unfiled and To review when it can't be used" do
+      list = list_for(state: "unfiled", date_from: "2026-10-31", date_to: "2026-10-01")
+
+      expect(list.date_range).to be_any
+      expect(list.date_range.error).to eq("Choose a From and a To date, with From first. Showing any date instead.")
+      expect(list.bank_transactions).to be_empty
+    end
+
+    it "drops the dates the form sent when it changes the state to Unfiled or To review, so this month doesn't come along from All or Filed" do
+      %w[ unfiled to_review ].each do |state|
+        list = list_for(state: state, from_state: "all", date_from: "2026-10-01", date_to: "2026-10-31")
+
+        expect(list.date_range).to be_any
+        expect(list.to_params).to eq(state: state)
+      end
+    end
+
+    it "keeps the dates the form sent when the state wasn't changed, or when it's changed to a state that always has them" do
+      expect(list_for(state: "unfiled", from_state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30").to_params)
+        .to eq(state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30")
+      expect(list_for(state: "filed", from_state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30").to_params)
+        .to eq(state: "filed", date_from: "2026-09-01", date_to: "2026-09-30")
+      expect(list_for(state: "all", from_state: "unfiled").to_params).to eq(date_from: "2026-10-01", date_to: "2026-10-31")
+    end
+
+    it "keeps the dates a link gives, which says no state it came from" do
+      expect(list_for(state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30").to_params).to eq(state: "unfiled", date_from: "2026-09-01", date_to: "2026-09-30")
+    end
+
+    it "never hands back the state it came from" do
+      expect(list_for(state: "unfiled", from_state: "all").to_params).not_to have_key(:from_state)
     end
 
     it "is an error that falls back to this month when it can't be used" do
@@ -226,11 +297,33 @@ RSpec.describe Budget::BankTransactionList do
       expect(list_for([ "x" ]).to_params).to eq(date_from: "2026-10-01", date_to: "2026-10-31")
     end
 
-    it "can be limited to the Account alone, which is all that filing as guessed carries" do
+    it "can be limited to the Account and the dates, which is all that filing as guessed carries" do
       list = list_for(date_from: "2026-09-01", date_to: "2026-09-30", state: "filed", account: visa.id.to_s)
 
-      expect(list.account_params).to eq(account: visa.id.to_s)
-      expect(list_for.account_params).to eq({})
+      expect(list.account_params).to eq(account: visa.id.to_s, date_from: "2026-09-01", date_to: "2026-09-30")
+      expect(list_for(state: "unfiled").account_params).to eq({})
+    end
+
+    it "can be made as the Unfiled state whatever the filter says, which is what the review for filing as guessed is about" do
+      list = Budget::BankTransactionList.parse(budget, { account: visa.id.to_s }, state: "unfiled")
+
+      expect(list.state).to eq("unfiled")
+      expect(list.date_range).to be_any
+      expect(list.account).to eq(visa)
+    end
+  end
+
+  describe "the bank transactions that \"and next\" goes through" do
+    it "are the Account's when one is chosen, and the range's only for Unfiled and To review when it's given one" do
+      inside = transaction(:unfiled, Date.new(2026, 9, 10))
+      outside = transaction(:unfiled, Date.new(2026, 1, 10))
+      other = transaction(:unfiled, Date.new(2026, 9, 11), account: visa)
+      range = { date_from: "2026-09-01", date_to: "2026-09-30" }
+
+      expect(list_for(state: "unfiled", **range).next_scope.unfiled).to match_array([ inside, other ])
+      expect(list_for(state: "unfiled", account: chequing.id.to_s, **range).next_scope.unfiled).to eq([ inside ])
+      expect(list_for(state: "unfiled").next_scope.unfiled).to match_array([ inside, outside, other ])
+      expect(list_for(state: "filed", **range).next_scope.unfiled).to match_array([ inside, outside, other ])
     end
   end
 end

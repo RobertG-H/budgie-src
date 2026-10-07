@@ -78,4 +78,34 @@ RSpec.describe "components/_record_row", type: :view do
       assert_select "span", text: "Dec 5"
     end
   end
+
+  describe "with a checkbox for choosing the row" do
+    let(:checkbox) { '<input type="checkbox" name="ids[]" value="7" class="checkbox" aria-label="Select Paycheck">'.html_safe }
+
+    it "is in a cell of its own outside the row's link, which still opens the record, with room for it at the start of the row" do
+      render_row checkbox: checkbox
+
+      assert_select "li.relative" do
+        assert_select "label.absolute.w-12 input[type=checkbox][name='ids[]']"
+        assert_select "a.list-row.pl-12[href='/deposits/7/edit']"
+        assert_select "a input", count: 0
+      end
+    end
+
+    it "is also for a row that isn't a link, which keeps its place" do
+      render_row href: nil, checkbox: checkbox
+
+      assert_select "li.relative label.absolute input[type=checkbox]"
+      assert_select "li div.list-row.pl-12"
+      assert_select "li a", count: 0
+    end
+
+    it "makes no difference to a row without one" do
+      render_row
+
+      assert_select "li.relative", count: 0
+      assert_select "label", count: 0
+      assert_select "a.list-row.pl-12", count: 0
+    end
+  end
 end

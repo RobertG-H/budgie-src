@@ -143,4 +143,61 @@ RSpec.describe DateRangeFilter do
       expect(filter("2026-08-01", "2026-10-30").preset).to be_nil
     end
   end
+
+  describe "an optional range, for a list that doesn't need one" do
+    def optional(from, to)
+      DateRangeFilter.new(from: from, to: to, today: today, optional: true)
+    end
+
+    it "is any date, with no dates at all, when both ends are blank, with no error" do
+      [ [ nil, nil ], [ "", "" ], [ "  ", nil ] ].each do |from, to|
+        range = optional(from, to)
+
+        expect(range).to be_valid
+        expect(range).to be_any
+        expect(range).to be_default
+        expect([ range.from, range.to, range.range ]).to eq([ nil, nil, nil ])
+        expect(range.to_params).to eq({})
+        expect(range.preset).to eq(:any)
+      end
+    end
+
+    it "is the dates it's given, when they make a range, as a range that isn't optional is" do
+      range = optional("2026-09-02", "2026-09-30")
+
+      expect(range).not_to be_any
+      expect(range).not_to be_default
+      expect(range.range).to eq(Date.new(2026, 9, 2)..Date.new(2026, 9, 30))
+      expect(range.to_params).to eq(date_from: "2026-09-02", date_to: "2026-09-30")
+      expect(range.preset).to be_nil
+    end
+
+    it "is any date, with an error that says so, and not the current month, when it can't be used" do
+      [ [ "2026-09-30", "2026-09-01" ], [ "2026-09-01", nil ], [ nil, "2026-09-01" ], [ "nonsense", "2026-09-01" ] ].each do |from, to|
+        range = optional(from, to)
+
+        expect(range).not_to be_valid
+        expect(range.error).to eq("Choose a From and a To date, with From first. Showing any date instead.")
+        expect(range).to be_any
+      end
+    end
+
+    it "offers Any date first, with no params, and then the presets" do
+      presets = optional(nil, nil).presets
+
+      expect(presets.map(&:label)).to eq([ "Any date", "This month", "Last month", "Last 3 months" ])
+      expect(presets.first.params).to eq({})
+      expect(presets.second.params).to eq(date_from: "2026-10-01", date_to: "2026-10-31")
+      expect(optional("2026-10-01", "2026-10-31").preset).to eq(:this_month)
+    end
+
+    it "isn't any date when it isn't optional, and has no Any date among its presets" do
+      expect(filter(nil, nil)).not_to be_any
+      expect(filter(nil, nil).presets.map(&:label)).to eq([ "This month", "Last month", "Last 3 months" ])
+    end
+
+    it "spells no date as nothing, so a field starts empty" do
+      expect(DateRangeFilter.spell(nil)).to be_nil
+    end
+  end
 end
