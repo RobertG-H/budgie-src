@@ -102,6 +102,20 @@ RSpec.describe "Navigation", type: :request do
     end
   end
 
+  it "says Accounts is the one they're on in the form that connects Splitwise, and when it comes back refused" do
+    sign_in_as budget.user
+
+    get new_splitwise_connection_path
+
+    assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
+    assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+
+    post splitwise_connection_path, params: { account: { name: "" }, bank_connection: { read_from: "2026-10-01" } }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
+  end
+
   describe "the section a form belongs to, which is where it was opened from" do
     let(:envelope) { create(:budget_envelope, budget: budget, name: "Groceries") }
     let(:other_envelope) { create(:budget_envelope, budget: budget, name: "Household") }

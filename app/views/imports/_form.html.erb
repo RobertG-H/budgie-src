@@ -20,7 +20,7 @@
   <% unless account %>
     <%= render "components/field", form: form, attribute: :account_id, control: :select, label: "Account",
           hint: "Which account the file is from.", error: import.errors.full_messages_for(:account).to_sentence.presence do |field| %>
-      <%= form.select :account_id, Current.budget.accounts.alphabetical.pluck(:name, :id), { prompt: "Choose an account" }, required: true, **field %>
+      <%= form.select :account_id, Current.budget.accounts.importable.alphabetical.pluck(:name, :id), { prompt: "Choose an account" }, required: true, **field %>
     <% end %>
   <% end %>
 

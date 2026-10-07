@@ -83,7 +83,7 @@ Two copies, under the same names:
   creates `.env.kamal`, `.env.testing` and `.env.production`, generates the values that are only random, and
   checks that nothing is left empty.
 - **In GitHub**, for CI: [the environments and their secrets](deployment.md#ci-deploys). Create the `testing`
-  and `production` environments, limit both to the `main` branch, and add each one's nine secrets. The three more
+  and `production` environments, limit both to the `main` branch, and add each one's thirteen secrets (four of them, for [Splitwise](splitwise.md), can wait). The three more
   for backups come with [step 11](#11-set-up-backups).
 
 The master copy of every value lives in your password manager. The repository is public, so the host IP

@@ -10,9 +10,13 @@
 # come in (ADR 0012). Turned off, no rule acts on them, so each waits unfiled for a person, while a Guess can still help. It's only ever read when a
 # rule would act, which is when a bank transaction arrives and when a rule is saved: turning it on again files nothing that's already there, and turning it
 # off leaves what rules already filed as it is.
+#
+# It's either imported into from CSV files or synced from a connection (`bank_connection`, with the provider's id for it in `external_account_id`), never both:
+# a synced Account takes no Import (see Budget::Import), and a Splitwise connection has exactly one Account, which goes when the Account does (ADR 0016).
 class Budget::Account < ApplicationRecord
   belongs_to :budget
   belongs_to :default_csv_format, class_name: "Budget::CsvFormat", optional: true
+  belongs_to :bank_connection, class_name: "Budget::BankConnection", optional: true
   # An Account with bank transactions can't be deleted: the model refuses with a reason, and the database's ON DELETE
   # RESTRICT is the backstop. Its Imports go with it, which only an Account without any of their bank transactions can
   # reach, so this stays after the check that refuses. Deleting the whole budget deletes them first (see Budget).
@@ -26,11 +30,39 @@ class Budget::Account < ApplicationRecord
 
   validates :name, presence: true, uniqueness: { scope: :budget_id, case_sensitive: false }
   validate :default_csv_format_is_in_this_budget
+  validate :no_default_csv_format_when_synced
+  validate :bank_connection_is_in_this_budget
+  validate :external_account_id_is_the_login
+  validates :external_account_id, presence: true, if: :bank_connection_id
+  validates :external_account_id, absence: { message: "needs a connection" }, unless: :bank_connection_id
+  validates :external_account_id, uniqueness: { scope: :bank_connection_id, message: "is already synced" }, if: :bank_connection_id
+
+  # Its connection goes with it when no other Account is synced from it, which is always so for Splitwise. After the Account's own row has gone,
+  # since its foreign key is what keeps the connection from being deleted, and only reached when nothing refused the delete.
+  after_destroy :delete_connection_nothing_uses
 
   scope :alphabetical, -> { order(Arel.sql("lower(name)"), :id) }
   # Whether Filing rules act on their bank transactions (`files_with_rules`, see the top). One that's off has every bank transaction wait for a person.
   scope :with_filing_rules, -> { where(files_with_rules: true) }
   scope :without_filing_rules, -> { where(files_with_rules: false) }
+  # The Accounts a CSV file can be imported into: the ones that aren't synced from a connection.
+  scope :importable, -> { where(bank_connection_id: nil) }
+
+  # Whether its bank transactions come from a connection, such as Splitwise, rather than from CSV files. It stays so when the connection is
+  # disconnected, since what's there came from it and a CSV file read in would count some of it twice.
+  def synced?
+    bank_connection_id.present?
+  end
+
+  # What it's synced from, as the provider's name ("Splitwise"), or nothing for an Account known only from CSV files.
+  def synced_from
+    bank_connection&.provider_name
+  end
+
+  # Why it takes no Import, which is what a synced Account says when one is asked of it, or nothing for an Account that does.
+  def import_refusal
+    "is synced from #{synced_from}, so it takes no Import" if synced?
+  end
 
   # The Import that ran last, which is the only one that can be undone, and the one whose CSV format the next Import
   # starts with. Imports made at the same moment go by the order they were made in.
@@ -39,6 +71,31 @@ class Budget::Account < ApplicationRecord
   end
 
   private
+    # A synced Account has no files, so no CSV format to read them with. Its form doesn't offer one, and this refuses it from any other way in.
+    def no_default_csv_format_when_synced
+      errors.add(:default_csv_format, "isn't used by an Account that's synced") if synced? && default_csv_format_id.present?
+    end
+
+    # Which budget a connection is in is up to the model too, and a connection that doesn't exist at all is refused the same way. Only the code that makes
+    # a connection's Account sets it, and never a param.
+    def bank_connection_is_in_this_budget
+      return if bank_connection_id.blank?
+
+      errors.add(:bank_connection, "isn't one of this budget's") unless bank_connection&.budget_id == budget_id
+    end
+
+    # For a Splitwise connection the external account is the Splitwise user themselves, so its id is the login's. That's what makes a Splitwise connection have
+    # one Account: the unique index on the connection and the external id can't be satisfied twice.
+    def external_account_id_is_the_login
+      return unless bank_connection&.login_is_the_account? && external_account_id.present?
+
+      errors.add(:external_account_id, "must be the #{bank_connection.provider_name} user's id") unless external_account_id == bank_connection.login_id
+    end
+
+    def delete_connection_nothing_uses
+      bank_connection.destroy! if bank_connection && bank_connection.accounts.none?
+    end
+
     # Which budget a CSV format is in is up to the model: no foreign key can say. A format that doesn't exist at all is refused the same way,
     # rather than left to the database's foreign key.
     def default_csv_format_is_in_this_budget

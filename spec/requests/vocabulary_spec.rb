@@ -919,4 +919,71 @@ RSpec.describe "The words on the pages", type: :request do
       expect(visible_text).not_to match(retired_terms)
     end
   end
+  # Splitwise's own word for what it holds is "expense", which is a retired term for Budgie's own (a Spend). It's allowed on these pages and nowhere else,
+  # since it names something in Splitwise that the person knows by that name: "reading expenses dated from Oct 1, 2026".
+  describe "Splitwise" do
+    let!(:roommates) { create(:budget_account, :synced, budget: budget, name: "Roommates", bank_connection: create(:budget_bank_connection, budget: budget)) }
+
+    def splitwise_text
+      visible_text.gsub(/\bexpenses?\b/, "")
+    end
+
+    {
+      "the form that connects it" => -> { new_splitwise_connection_path },
+      "the Accounts" => -> { accounts_path },
+      "a synced Account's edit form" => -> { edit_account_path(roommates) }
+    }.each do |page, path|
+      it "has no snake_case names and no retired terms in the words on #{page}" do
+        get instance_exec(&path)
+
+        expect(response).to have_http_status(:ok)
+        expect(splitwise_text).not_to match(/\w+_\w+/)
+        expect(splitwise_text).not_to match(retired_terms)
+      end
+    end
+
+    it "says what a synced Account is synced from, in every state it can be in, in words" do
+      get account_path(roommates)
+      expect(visible_text).to include("Synced from Splitwise as Robert G., reading expenses dated from Oct 1, 2026.", "Reconnect", "Disconnect")
+      expect(splitwise_text).not_to match(retired_terms)
+      expect(splitwise_text).not_to match(/\w+_\w+/)
+
+      roommates.bank_connection.update!(needs_reconnect: true)
+      get account_path(roommates)
+      expect(visible_text).to include("Splitwise stopped accepting the sign-in as Robert G., so this Account isn't syncing. Reconnect to start again.")
+      expect(splitwise_text).not_to match(retired_terms)
+
+      roommates.bank_connection.disconnect!
+      get account_path(roommates)
+      expect(visible_text).to include("Disconnected from Splitwise, so this Account isn't syncing. Its bank transactions stay as they are. Reconnect as Robert G. to start again.")
+      expect(splitwise_text).not_to match(retired_terms)
+      expect(splitwise_text).not_to match(/\w+_\w+/)
+    end
+
+    it "says what the form's fields are, and what the date means, in words" do
+      get new_splitwise_connection_path
+
+      expect(visible_text).to include("Connect Splitwise", "Account name", "Read expenses dated from")
+      expect(visible_text).to include("Splitwise expenses dated before this are never read. Starting where your bank transactions start means a shared expense you paid for gets its share back.")
+    end
+
+    it "uses the same words in what's said when connecting is refused or done, and never a term that's retired" do
+      Splitwise.client = SplitwiseFake.new
+      splitwise.signs_in("good-code", as: Splitwise::Person.new(id: "55", name: "Robin B."))
+      post splitwise_connection_path, params: { account: { name: "Housemates" }, bank_connection: { read_from: "2026-10-01" } }
+      state = state_sent_to_splitwise
+
+      get splitwise_callback_path(code: "wrong-code", state: state)
+      follow_redirect!
+      expect(visible_text).to include("Splitwise wasn't connected. Splitwise didn't accept the sign-in (400). Nothing was kept. Try again.")
+      expect(splitwise_text).not_to match(retired_terms)
+
+      post splitwise_connection_path, params: { account: { name: "Housemates" }, bank_connection: { read_from: "2026-10-01" } }
+      get splitwise_callback_path(code: "good-code", state: state_sent_to_splitwise)
+      follow_redirect!
+      expect(visible_text).to include("Connected Splitwise as Robin B.")
+      expect(splitwise_text).not_to match(retired_terms)
+      expect(splitwise_text).not_to match(/\w+_\w+/)
+    end
+  end
 end

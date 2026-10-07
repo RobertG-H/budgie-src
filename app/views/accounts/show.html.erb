@@ -5,13 +5,18 @@
 
 <div class="mt-4">
   <%= render "components/page_header", title: @account.name do %>
-    <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>
+    <%# A synced Account takes no Import: its bank transactions come from its connection. %>
+    <% unless @account.synced? %>
+      <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>
+    <% end %>
     <%= link_to "Edit", edit_account_path(@account), class: "btn" %>
   <% end %>
 </div>
 
-<%# Which CSV format its bank's files use, when it has one. %>
-<% if @account.default_csv_format %>
+<%# What it's synced from, when it is. Otherwise which CSV format its bank's files use, when it has one. %>
+<% if @account.synced? %>
+  <%= render "connection", account: @account %>
+<% elsif @account.default_csv_format %>
   <p class="mt-2 text-base-content/70">Default CSV format: <%= @account.default_csv_format.name %></p>
 <% end %>
 
@@ -45,6 +50,8 @@
     <%= render "components/empty_state", message: "There are no more bank transactions." do %>
       <%= link_to "Back to the first page", account_path(@account), class: "btn" %>
     <% end %>
+  <% elsif @account.synced? %>
+    <%= render "components/empty_state", message: "No bank transactions yet. Expenses from #{@account.synced_from} appear here once they're synced." %>
   <% else %>
     <%= render "components/empty_state", message: "No bank transactions yet." do %>
       <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>

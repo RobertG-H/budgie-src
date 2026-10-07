@@ -71,7 +71,7 @@ A fresh runner's `~/.ssh/known_hosts` is empty, so without pinning the host key,
 
 ### The environment secrets
 
-Each environment has twelve secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's copy](#the-secrets-on-your-laptop) for what the first nine are:
+Each environment has sixteen secrets, named the same way `.env.testing` and `.env.production` are, because `.kamal/secrets-common` and `.kamal/secrets.<destination>` read the same names either way — see [the laptop's copy](#the-secrets-on-your-laptop) for what the first thirteen are:
 
 | Secret | What it is |
 | --- | --- |
@@ -84,19 +84,23 @@ Each environment has twelve secrets, named the same way `.env.testing` and `.env
 | `TESTING_GOOGLE_CLIENT_SECRET` / `PRODUCTION_GOOGLE_CLIENT_SECRET` | That destination's Google OAuth client secret |
 | `TESTING_SMTP_USERNAME` / `PRODUCTION_SMTP_USERNAME` | The Zedmail login email address |
 | `TESTING_SMTP_PASSWORD` / `PRODUCTION_SMTP_PASSWORD` | That destination's Zedmail API key |
+| `TESTING_SPLITWISE_CLIENT_ID` / `PRODUCTION_SPLITWISE_CLIENT_ID` | That destination's Splitwise app's Consumer Key. May be empty: Connect Splitwise isn't offered then |
+| `TESTING_SPLITWISE_CLIENT_SECRET` / `PRODUCTION_SPLITWISE_CLIENT_SECRET` | The same app's Consumer Secret |
+| `TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` / `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` | The key that destination encrypts a Splitwise token under |
+| `TESTING_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` / `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` | The salt its keys are derived with |
 | `TESTING_BACKUP_R2_ENDPOINT` / `PRODUCTION_BACKUP_R2_ENDPOINT` | The R2 endpoint of that destination's backup bucket |
 | `TESTING_BACKUP_R2_ACCESS_KEY_ID` / `PRODUCTION_BACKUP_R2_ACCESS_KEY_ID` | That destination's **read-only** R2 token, its access key ID |
 | `TESTING_BACKUP_R2_SECRET_ACCESS_KEY` / `PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY` | The same token's secret access key |
 
 The last three aren't read by a deploy at all, and aren't in `.kamal/secrets*`: only [`backup-checks.yml`](../.github/workflows/backup-checks.yml) reads them, to check that the newest backup is fresh. They're the read-only token, which can only fetch ciphertext. See [Backups](backups.md#5-github-the-freshness-check).
 
-`KAMAL_REGISTRY_PASSWORD` isn't one of the twelve: each deploy job sets it directly in its `env:` from `secrets.GITHUB_TOKEN`, the run's own built-in token, rather than storing it. `deploy_testing` has `packages: write`, so Kamal can push; `deploy`'s `packages: read` only lets it pull. Kamal logs each host in to `ghcr.io` with it too, so the credential that ends up in `/home/deploy/.docker/config.json` expires with the job rather than being a long-lived token.
+`KAMAL_REGISTRY_PASSWORD` isn't one of the sixteen: each deploy job sets it directly in its `env:` from `secrets.GITHUB_TOKEN`, the run's own built-in token, rather than storing it. `deploy_testing` has `packages: write`, so Kamal can push; `deploy`'s `packages: read` only lets it pull. Kamal logs each host in to `ghcr.io` with it too, so the credential that ends up in `/home/deploy/.docker/config.json` expires with the job rather than being a long-lived token.
 
 ### Recreating one
 
 - **A compromised or rotated deploy key:** generate a new `ed25519` key pair, authorise the public half with `provision.sh`'s extra-key argument on that key's own host, replace `TESTING_SSH_PRIVATE_KEY` or `PRODUCTION_SSH_PRIVATE_KEY` in that environment's secrets, then remove the old key's line from the host's `authorized_keys` the way [revoking Kamal's own key](#kamals-ssh-key) works.
 - **A rebuilt host:** see [Rebuilding a host](#rebuilding-a-host). Both the `_HOST_IP` and `_SSH_KNOWN_HOSTS` secrets change.
-- **Any of the other nine:** update the value in **Settings → Environments → (testing or production) → Environment secrets**, the same value you'd put in `.env.testing` or `.env.production`. Update your password manager's copy too, since it's still the master copy.
+- **Any of the other thirteen:** update the value in **Settings → Environments → (testing or production) → Environment secrets**, the same value you'd put in `.env.testing` or `.env.production`. Update your password manager's copy too, since it's still the master copy.
 
 ## Deploying by hand (break-glass)
 
@@ -204,8 +208,8 @@ Deploys read their secrets from three files in the repo root, next to your devel
 | File | What's in it |
 | --- | --- |
 | `.env.kamal` | The registry token, which both destinations share |
-| `.env.testing` | Testing's six secrets and its host's IP address, each named `TESTING_...` |
-| `.env.production` | Production's six secrets and its host's IP address, each named `PRODUCTION_...` |
+| `.env.testing` | Testing's ten secrets and its host's IP address, each named `TESTING_...` |
+| `.env.production` | Production's ten secrets and its host's IP address, each named `PRODUCTION_...` |
 
 Git ignores all three, as it does `.env`, but they're separate from it.
 `.env` is development's, holding the development Google client from [Google OAuth setup](google-oauth.md), and only the `web` container loads it.
@@ -227,7 +231,11 @@ Every file is loaded into every run, which is why each destination's names carry
     "TESTING_GOOGLE_CLIENT_ID=" \
     "TESTING_GOOGLE_CLIENT_SECRET=" \
     "TESTING_SMTP_USERNAME=" \
-    "TESTING_SMTP_PASSWORD=" > .env.testing
+    "TESTING_SMTP_PASSWORD=" \
+    "TESTING_SPLITWISE_CLIENT_ID=" \
+    "TESTING_SPLITWISE_CLIENT_SECRET=" \
+    "TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=" \
+    "TESTING_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=" > .env.testing
   printf '%s\n' \
     "PRODUCTION_HOST_IP=" \
     "PRODUCTION_SECRET_KEY_BASE=$(openssl rand -hex 64)" \
@@ -235,13 +243,18 @@ Every file is loaded into every run, which is why each destination's names carry
     "PRODUCTION_GOOGLE_CLIENT_ID=" \
     "PRODUCTION_GOOGLE_CLIENT_SECRET=" \
     "PRODUCTION_SMTP_USERNAME=" \
-    "PRODUCTION_SMTP_PASSWORD=" > .env.production
+    "PRODUCTION_SMTP_PASSWORD=" \
+    "PRODUCTION_SPLITWISE_CLIENT_ID=" \
+    "PRODUCTION_SPLITWISE_CLIENT_SECRET=" \
+    "PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=" \
+    "PRODUCTION_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=" > .env.production
   chmod 600 .env.kamal .env.testing .env.production
 )
 ```
 
 It fills in the values that are only random: each destination's `SECRET_KEY_BASE`, the same kind of value `bin/rails secret` prints, and its database password. Everything else starts empty, and only you can read the files.
 `set -C` makes it refuse to overwrite a file that already exists. That matters once a destination is running: a new `SECRET_KEY_BASE` signs everyone out, and a new database password locks the app out of its database.
+If you created the files before Splitwise was added, add its four lines to each yourself: `set -C` means the commands above refuse to overwrite them.
 
 **2. Fill in the rest** in your editor, as each one becomes available:
 
@@ -253,6 +266,10 @@ It fills in the values that are only random: each destination's `SECRET_KEY_BASE
 | `PRODUCTION_GOOGLE_CLIENT_ID` and `PRODUCTION_GOOGLE_CLIENT_SECRET` | The **Budgie production** OAuth client |
 | `TESTING_SMTP_USERNAME` and `PRODUCTION_SMTP_USERNAME` | The email address you log in to Zedmail with, the same in both files. See [Email](email.md#the-settings) |
 | `TESTING_SMTP_PASSWORD` and `PRODUCTION_SMTP_PASSWORD` | That environment's Zedmail API key, which starts with `ses_` |
+| `TESTING_SPLITWISE_CLIENT_ID` and `TESTING_SPLITWISE_CLIENT_SECRET` | The **Budgie testing** Splitwise app's Consumer Key and Secret, not the development one in `.env`. See [Splitwise setup](splitwise.md#1-register-a-splitwise-app-for-each-environment) |
+| `PRODUCTION_SPLITWISE_CLIENT_ID` and `PRODUCTION_SPLITWISE_CLIENT_SECRET` | The **Budgie production** Splitwise app's |
+| `TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `TESTING_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` | A set of encryption keys for testing, from `bin/rails db:encryption:init`. See [Splitwise setup](splitwise.md#2-generate-the-encryption-keys) |
+| `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` | A different set for production |
 
 Write values without quotes, unless one contains a `$`: Compose expands `$` in unquoted and double-quoted values, so that one needs single quotes.
 
@@ -267,6 +284,7 @@ docker compose run --rm -T kamal secrets print -d production | grep -E '^[A-Z_]+
 
 Both print nothing. A line names a secret that's empty, usually because of a typo in its env file.
 The pipe keeps the values themselves off your screen.
+The four Splitwise secrets can show up here until [Splitwise is set up](splitwise.md): empty means Connect Splitwise isn't offered, and nothing else.
 The IP addresses aren't secrets, so this doesn't list them. If one isn't set, every command for that destination stops with `key not found` and the variable's name.
 
 Each destination has its own `SECRET_KEY_BASE`, so a cookie or signed ID from one is useless on the other.

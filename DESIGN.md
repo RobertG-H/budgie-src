@@ -91,7 +91,7 @@ three money columns fit without that, and to three quarters from `sm:` up, so th
 - The currency code appears once, in the header (`Budget in USD`).
 - Budgeting copy uses only the terms `CLAUDE.md` lists: Budget, Envelope, Deposit, Assigned, Spend, Spent,
   Refund, Reallocation, Record, Archive, Account, Bank transaction, CSV format, Import, File, Filing rule, Guess, Ignore,
-  Available, Overspent, Ready to Assign, Carried over, Starting balance, and other forms of them (Records, Deposited,
+  Available, Overspent, Ready to Assign, Carried over, Settle-up, Starting balance, and other forms of them (Records, Deposited,
   Refunded, Reallocate, Reallocated, Archived, Unarchive, Assign, Filed, Unfiled, Ignored, Imported, Guessed).
 
 ## Components

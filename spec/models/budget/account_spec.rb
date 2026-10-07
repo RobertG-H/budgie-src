@@ -7,6 +7,7 @@ RSpec.describe Budget::Account, type: :model do
   it { is_expected.to have_many(:bank_transactions).class_name("Budget::BankTransaction").dependent(:restrict_with_error) }
   it { is_expected.to have_many(:imports).class_name("Budget::Import").dependent(:destroy) }
   it { is_expected.to belong_to(:default_csv_format).class_name("Budget::CsvFormat").optional }
+  it { is_expected.to belong_to(:bank_connection).class_name("Budget::BankConnection").optional }
 
   it "uses the budget_accounts table, and is named without the Budget prefix in routes and params" do
     expect(Budget::Account.table_name).to eq("budget_accounts")
@@ -14,7 +15,7 @@ RSpec.describe Budget::Account, type: :model do
   end
 
   it "has no balance, currency, kind or last four digits, since Budgie doesn't track what's in it" do
-    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "created_at", "updated_at")
+    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "bank_connection_id", "external_account_id", "created_at", "updated_at")
   end
 
   describe "name" do
@@ -93,6 +94,129 @@ RSpec.describe Budget::Account, type: :model do
       create(:budget_account, budget: budget, default_csv_format: csv_format)
 
       expect { Budget::CsvFormat.where(id: csv_format.id).delete_all }.to raise_error(ActiveRecord::StatementInvalid, /RestrictViolation|violates foreign key/)
+    end
+  end
+
+  describe "being synced from a connection" do
+    let(:budget) { create(:budget) }
+    let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "4321") }
+
+    it "is something an Account may or may not be: one known only from CSV files has neither a connection nor an external id" do
+      account = create(:budget_account, budget: budget)
+
+      expect(account).not_to be_synced
+      expect(account.reload).to have_attributes(bank_connection: nil, external_account_id: nil)
+    end
+
+    it "is synced once it has a connection, whatever state the connection is in" do
+      account = create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+
+      expect(account).to be_synced
+      connection.disconnect!
+      expect(account.reload).to be_synced
+    end
+
+    it "needs its external id, which for Splitwise is the Splitwise user's id, and has no use for one without a connection" do
+      without_id = build(:budget_account, budget: budget, bank_connection: connection)
+      without_connection = build(:budget_account, budget: budget, external_account_id: "4321")
+
+      expect(without_id).not_to be_valid
+      expect(without_id.errors[:external_account_id]).to eq([ "can't be blank" ])
+      expect(without_connection).not_to be_valid
+      expect(without_connection.errors[:external_account_id]).to eq([ "needs a connection" ])
+    end
+
+    it "is refused when the connection is another budget's, with the error on the connection, worded as a default CSV format's is" do
+      account = build(:budget_account, budget: budget, bank_connection: create(:budget_bank_connection), external_account_id: "1")
+
+      expect(account).not_to be_valid
+      expect(account.errors[:bank_connection]).to eq([ "isn't one of this budget's" ])
+    end
+
+    it "has one Account for each external id of a connection" do
+      create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+
+      same = build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+
+      expect(same).not_to be_valid
+      expect(same.errors[:external_account_id]).to eq([ "is already synced" ])
+    end
+
+    it "has the Splitwise user's id as its external id when it's synced from Splitwise, which is why a Splitwise connection has one Account" do
+      other_id = build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "8765")
+
+      expect(other_id).not_to be_valid
+      expect(other_id.errors[:external_account_id]).to eq([ "must be the Splitwise user's id" ])
+      expect(build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")).to be_valid
+    end
+
+    it "can't have a second Account made on a Splitwise connection, since the only id it can have is the one that's taken" do
+      create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+
+      second = build(:budget_account, budget: budget, name: "Another", bank_connection: connection, external_account_id: "8765")
+
+      expect(second).not_to be_valid
+    end
+
+    it "has no default CSV format, since it has no files, which is refused from any way in and not only by its form" do
+      account = create(:budget_account, :synced, budget: budget)
+      account.default_csv_format = create(:budget_csv_format, budget: budget)
+
+      expect(account).not_to be_valid
+      expect(account.errors[:default_csv_format]).to eq([ "isn't used by an Account that's synced" ])
+    end
+
+    it "is found among the Accounts a CSV file can be imported into only when it isn't synced" do
+      csv = create(:budget_account, budget: budget)
+      create(:budget_account, :synced, budget: budget)
+
+      expect(Budget::Account.importable).to eq([ csv ])
+    end
+
+    it "has a connection and an external id together or not at all, which the database checks too" do
+      account = create(:budget_account, budget: budget)
+
+      [ { external_account_id: "4321" }, { bank_connection_id: connection.id } ].each do |assignments|
+        expect { Budget::Account.transaction(requires_new: true) { Budget::Account.where(id: account.id).update_all(assignments) } }
+          .to raise_error(ActiveRecord::CheckViolation, /budget_accounts_connection_with_external_id/)
+      end
+    end
+
+    it "has a connection that the database keeps from being deleted from under it" do
+      create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+
+      expect { Budget::BankConnection.where(id: connection.id).delete_all }.to raise_error(ActiveRecord::StatementInvalid, /PG::RestrictViolation/)
+    end
+
+    it "takes its connection with it when it's deleted, since a Splitwise connection has no other Account" do
+      account = create(:budget_account, :synced, budget: budget)
+
+      expect { account.destroy! }.to change(Budget::Account, :count).by(-1).and change(Budget::BankConnection, :count).by(-1)
+    end
+
+    it "leaves a connection that another Account is synced from, as a provider with several accounts to a connection would" do
+      account = create(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321")
+      # Splitwise's connection has only the one, so this is made past the validation that says so, which is what a provider with several would be.
+      other = build(:budget_account, budget: budget, name: "Another", bank_connection: connection, external_account_id: "8765").tap { |another| another.save!(validate: false) }
+
+      expect { account.destroy! }.not_to change(Budget::BankConnection, :count)
+      expect { other.destroy! }.to change(Budget::BankConnection, :count).by(-1)
+    end
+
+    it "keeps its connection when it's refused for having bank transactions" do
+      account = create(:budget_account, :synced, budget: budget)
+      create(:budget_bank_transaction, account: account)
+
+      expect(account.destroy).to be(false)
+
+      expect(Budget::BankConnection.exists?(account.bank_connection_id)).to be(true)
+    end
+
+    it "takes a disconnected connection with it, as it would any other" do
+      account = create(:budget_account, :synced, budget: budget)
+      account.bank_connection.disconnect!
+
+      expect { account.destroy! }.to change(Budget::BankConnection, :count).by(-1)
     end
   end
 

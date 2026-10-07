@@ -19,9 +19,10 @@ Everything runs in Docker Compose, so your machine needs no Ruby, no PostgreSQL 
 | --- | --- |
 | [Docker](https://docs.docker.com/get-started/get-docker/) with Compose v2 | Everything |
 | A [Google OAuth client](google-oauth.md) | Signing in. Every page but the sign-in page needs it |
+| A [Splitwise app](splitwise.md), with its callback `http://localhost:3000/splitwise/callback` | Connecting Splitwise to an Account. Skip it unless you're working on that: without it "Connect Splitwise" isn't offered |
 | Node | Playwright MCP only, through `npx`. Skip it unless you're working on the UI |
 
-The specs need neither Google nor Node. Email is never delivered in development, so there's nothing to set
+The specs need neither Google, Splitwise nor Node. Email is never delivered in development, so there's nothing to set
 up for it.
 
 ## Setting up
@@ -59,13 +60,18 @@ open it to sign in.
 **5. Sign in** at http://localhost:3000 with Google, as the address you invited. The first time, you choose
 your budget's currency, and then you land on the month view.
 
-**6. Optionally, load the sample data.**
+**6. Optionally, connect Splitwise.** Register a development app with the callback `http://localhost:3000/splitwise/callback`, put its Consumer Key and Consumer
+Secret in `.env` as `SPLITWISE_CLIENT_ID` and `SPLITWISE_CLIENT_SECRET`, restart the app, and open http://localhost:3000 (not `127.0.0.1`, which isn't the registered address). The Accounts page then has "Connect Splitwise". Follow
+[Splitwise setup](splitwise.md). The token is encrypted under fixed throwaway keys in development, which are in the repo and protect nothing, so nothing else needs setting up to try it out; set the `ACTIVE_RECORD_ENCRYPTION_…` variables in `.env` as well (see [Splitwise setup](splitwise.md#2-generate-the-encryption-keys)) if you connect your real Splitwise account. The sample data
+below already has a Splitwise Account with a made-up token, for looking at its page without signing in to Splitwise.
+
+**7. Optionally, load the sample data.**
 
 ```sh
 docker compose run --rm web bin/rails db:seed
 ```
 
-This creates a development user with a budget, a few envelopes, two Paycheck Deposits and an Assigned amount for most envelopes in each of those two months. It's what [`/dev/sign_in`](#working-on-the-ui)
+This creates a development user with a budget, a few envelopes, two Paycheck Deposits and an Assigned amount for most envelopes in each of those two months, and an Account synced from Splitwise. It's what [`/dev/sign_in`](#working-on-the-ui)
 signs in as, and it only ever runs in development.
 
 ## Everyday commands

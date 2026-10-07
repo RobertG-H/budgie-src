@@ -1,0 +1,28 @@
+<%# locals: (account:) %>
+<%# What a synced Account is synced from, and what can be done about it: Reconnect, which sends the person to sign in to Splitwise again, and Disconnect, which forgets the token and keeps everything else. Whether it's working is said in words, and a connection that needs reconnecting is a warning. Reconnect needs Splitwise's client id and secret, which not every host has. %>
+<% connection = account.bank_connection %>
+<div class="mt-4 space-y-4">
+  <% if connection.disconnected? %>
+    <p class="text-base-content/70">
+      Disconnected from <%= connection.provider_name %>, so this Account isn't syncing. Its bank transactions stay as they are. Reconnect as <%= connection.login_name %> to start again.
+    </p>
+  <% elsif connection.needs_reconnect? %>
+    <div role="status" class="alert alert-warning">
+      <span><%= connection.provider_name %> stopped accepting the sign-in as <%= connection.login_name %>, so this Account isn't syncing. Reconnect to start again.</span>
+    </div>
+  <% else %>
+    <p class="text-base-content/70">
+      Synced from <%= connection.provider_name %> as <%= connection.login_name %>, reading expenses dated from <%= spelled_date(connection.read_from) %>.
+    </p>
+  <% end %>
+
+  <div class="flex flex-wrap items-center gap-2">
+    <%# Turbo is off: it ends in a redirect to Splitwise's own sign-in, which a fetch can't follow to another site. %>
+    <% if Splitwise.configured? %>
+      <%= button_to "Reconnect", account_connection_path(account), form: { data: { turbo: false } }, class: "btn" %>
+    <% end %>
+    <% unless connection.disconnected? %>
+      <%= render "components/delete_button", path: account_connection_path(account), label: "Disconnect", confirm: disconnect_question(connection) %>
+    <% end %>
+  </div>
+</div>

@@ -28,6 +28,9 @@ RSpec.describe "user rake tasks", type: :task do
       create_list(:budget_bank_transaction, 5, account: accounts.first, import: import)
       create(:budget_import, account: accounts.first, csv_format: csv_formats.last)
       create(:budget_import, account: accounts.last, csv_format: csv_formats.first, zero_rows_skipped: 1)
+      # That Account is synced from a Splitwise connection, which it's made so after its Import, since a synced Account takes none.
+      connection = create(:budget_bank_connection, budget: budget)
+      accounts.last.update!(bank_connection: connection, external_account_id: connection.login_id)
       # Three Filing rules: one for an Account, one for a Deposit and one that ignores.
       create(:budget_filing_rule, :ignore, budget: budget, account: accounts.first, text: "payment thank you")
       create(:budget_filing_rule, :deposit, budget: budget, text: "payroll")
@@ -62,9 +65,10 @@ RSpec.describe "user rake tasks", type: :task do
         .and change(Budget::Account, :count).by(-2)
         .and change(Budget::Import, :count).by(-3)
         .and change(Budget::BankTransaction, :count).by(-5)
+        .and change(Budget::BankConnection, :count).by(-1)
         .and change(Budget::FilingRule, :count).by(-3)
         .and change(Budget::SpendLink, :count).by(-1).and change(Budget::DepositLink, :count).by(-1)
-      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 4 deposits, 4 assignments, 7 spends, 4 refunds, 3 reallocations, 2 CSV formats, 2 accounts, 3 imports, 5 bank transactions and 3 filing rules and their invite", "Deleted robin@example.com.")
+      expect(output).to include("1 identity, 1 session, their budget with 2 envelopes, 4 deposits, 4 assignments, 7 spends, 4 refunds, 3 reallocations, 2 CSV formats, 2 accounts, 1 bank connection, 3 imports, 5 bank transactions and 3 filing rules and their invite", "Deleted robin@example.com.")
     end
 
     it "leaves another user's budget alone" do
@@ -108,7 +112,15 @@ RSpec.describe "user rake tasks", type: :task do
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment, 1 spend, 1 refund, 0 reallocations, 1 CSV format, 1 account, 1 import, 1 bank transaction and 1 filing rule and their invite")
+      expect(output).to include("their budget with 1 envelope, 1 deposit, 1 assignment, 1 spend, 1 refund, 0 reallocations, 1 CSV format, 1 account, 0 bank connections, 1 import, 1 bank transaction and 1 filing rule and their invite")
+    end
+
+    it "counts a single bank connection in the singular" do
+      user.budget.accounts.where.not(bank_connection_id: nil).sole.update!(name: "Splitwise")
+
+      output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
+
+      expect(output).to include("2 accounts, 1 bank connection, 3 imports")
     end
 
     it "counts a single reallocation in the singular" do
@@ -117,7 +129,7 @@ RSpec.describe "user rake tasks", type: :task do
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("4 refunds, 1 reallocation, 2 CSV formats, 2 accounts, 3 imports, 5 bank transactions and 3 filing rules and their invite")
+      expect(output).to include("4 refunds, 1 reallocation, 2 CSV formats, 2 accounts, 1 bank connection, 3 imports, 5 bank transactions and 3 filing rules and their invite")
     end
 
     it "counts a budget that has nothing in it" do
@@ -136,7 +148,7 @@ RSpec.describe "user rake tasks", type: :task do
 
       output = run_task("user:delete", stdin: "robin@example.com\n", "EMAIL" => "robin@example.com")
 
-      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments, 0 spends, 0 refunds, 0 reallocations, 0 CSV formats, 0 accounts, 0 imports, 0 bank transactions and 0 filing rules and their invite")
+      expect(output).to include("their budget with 0 envelopes, 0 deposits, 0 assignments, 0 spends, 0 refunds, 0 reallocations, 0 CSV formats, 0 accounts, 0 bank connections, 0 imports, 0 bank transactions and 0 filing rules and their invite")
     end
 
     it "says when the user has no budget" do

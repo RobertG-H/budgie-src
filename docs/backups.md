@@ -373,7 +373,7 @@ In the repo's **Settings → Environments**, open `testing`, then `production`, 
 | `TESTING_BACKUP_R2_ACCESS_KEY_ID` | `PRODUCTION_BACKUP_R2_ACCESS_KEY_ID` |
 | `TESTING_BACKUP_R2_SECRET_ACCESS_KEY` | `PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY` |
 
-Each environment now has twelve secrets: the nine in [Deploying](deployment.md#the-environment-secrets), and these three.
+Each environment now has sixteen secrets: the thirteen in [Deploying](deployment.md#the-environment-secrets), and these three.
 The read-only token can only fetch ciphertext, and the age private keys are never in GitHub.
 
 One known limit: GitHub disables a scheduled workflow after 60 days without repository activity, and then the alert and the reminder stop together. The repo is active and GitHub emails a warning first, so this is accepted.

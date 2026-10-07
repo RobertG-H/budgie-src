@@ -14,7 +14,7 @@
         <%= link_to "New CSV format", new_csv_format_path, class: "btn btn-primary" %>
       <% end %>
     </div>
-  <% elsif !@account_fixed && Current.budget.accounts.none? %>
+  <% elsif !@account_fixed && Current.budget.accounts.importable.none? %>
     <div class="mt-8">
       <%= render "components/empty_state", message: "You need an Account to import into." do %>
         <%= link_to "New account", new_account_path, class: "btn btn-primary" %>

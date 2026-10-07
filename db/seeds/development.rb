@@ -1,7 +1,7 @@
 # Sample data for local development only, loaded by db/seeds.rb in the development environment. It's the
 # user that /dev/sign_in signs in as, with a budget, a few envelopes, a couple of Deposits, what's assigned from
 # them, what's spent, what came back, what was moved between envelopes and back to Ready to Assign, an archived
-# envelope with history, a CSV format, Filing rules and an Account with an Import, so the real pages have something to show. Running it
+# envelope with history, a CSV format, Filing rules, an Account with an Import and an Account synced from Splitwise, so the real pages have something to show. Running it
 # again changes nothing that's already there.
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
@@ -137,4 +137,14 @@ if chequing.imports.none?
     drafts: [ Budget::Filing::Draft.for(hydro, envelope_id: bills.id, amount: 50), Budget::Filing::Draft.for(hydro, envelope_id: rent.id, amount: 15.5) ])
 
   Budget::Filing.new(budget).file([ hydro_entry ]) or raise "The sample wasn't filed: #{(hydro_entry.errors.full_messages + hydro_entry.drafts.flat_map { |draft| draft.errors.full_messages }).to_sentence}"
+end
+
+# An Account synced from Splitwise, with a connection whose token isn't real: nothing signs in to Splitwise in development unless the app is registered there,
+# and nothing syncs yet, but it gives the Accounts page and an Account's page a synced Account to show. It's only made when there isn't one for its connection, so a
+# developer's changes to it stay, and it has no bank transactions. Its name can't clash with an Account a developer made by hand.
+splitwise = budget.bank_connections.find_or_create_by!(provider: Budget::BankConnection::SPLITWISE, login_id: "1000000") do |connection|
+  connection.assign_attributes(login_name: "Dev B.", access_token: "development-token-not-real", read_from: this_month)
+end
+budget.accounts.find_or_create_by!(bank_connection: splitwise) do |account|
+  account.assign_attributes(name: "Splitwise (sample)", external_account_id: splitwise.login_id, files_with_rules: false)
 end

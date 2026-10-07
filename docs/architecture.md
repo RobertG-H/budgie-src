@@ -282,7 +282,7 @@ month viewed. An archived envelope's page has Unarchive in place of Archive and 
 A person can import the CSV their bank lets them download into an Account, and file each row as the Deposits, Spends and
 Refunds it was, or ignore it. The model is the `roadmap` issue
 [#67](https://github.com/RobertG-H/budgie-src/issues/67), built in slices, and these are the parts that exist so far: CSV
-formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits, then Filing rules.
+formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits, then Filing rules, then Guesses, then Splitwise's connection.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
 columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
@@ -447,8 +447,29 @@ never a newer Guess that wasn't seen, and it goes through the same operation a p
 the review, it refuses, saying which bank transaction and why. It makes no Filing rule, because a Guess isn't one, and what it files is ordinary: Undo and un-filing treat it like anything else. A Guess is
 never filed without that click, at any likeness.
 
+**Splitwise.** Splitwise is synced like a bank, as an Account ([ADR 0016](adr/0016-splitwise-is-synced-as-an-account.md)): each Splitwise expense the person is part of becomes a bank transaction in it, and its signed
+amount is their net share, what they paid less what they owe. A friend owing them is money in, filed as a Refund or a Deposit, and owing a friend is money out, filed as a Spend, so the shared dinner's $100
+card charge is a $100 Spend from the bank's Account and Splitwise's $50 share is a $50 Refund, and the two are never paired. A share counts in the month of its expense, not when it's settled, and a settle-up,
+Splitwise's own payment and the e-transfer that settles it, is ignored as a transfer between the person's own accounts, so what friends owe sits in the Splitwise Account, whose balance Budgie doesn't track. A
+Splitwise Account has its Filing rules off, so every share waits in the Unfiled state for the person. The sync that brings the shares in is a ticket of its own; what's built is the connection.
+
+A connection (`budget_bank_connections`) is a sign-in to a provider that Accounts are synced through: Splitwise first, and a bank-sync provider fits it later. It belongs to its budget, holds the provider's id for the login
+(the Splitwise user's id) and its name for display, the access token, the date to read expenses from, a sync marker and time that stay empty until something syncs, and whether it needs reconnecting. An Account has a
+nullable connection and an id for itself at the provider, which for Splitwise is the Splitwise user's id, so a connection has one Account. The token is encrypted with Active Record encryption, and never appears in a page,
+a log or an error.
+
+"Connect Splitwise" on the Accounts page opens a form for the Account's name and the date to read from, which starts where the budget's bank transactions start, so that a shared expense the person paid for gets its share
+back. Then Budgie's own OAuth 2 flow runs, which isn't signing in to Budgie: the person is sent to Splitwise with a random `state` kept in the session, and the callback refuses one that isn't the one that was sent,
+keeps nothing when they decline, swaps the code for a token, reads who it's for, and makes the connection and its Account in one database transaction. Signing in again as a Splitwise user that's already connected, after
+Disconnect or once the token stops working, gives the same connection a new token and keeps the Account and its bank transactions; a different Splitwise user is a new connection with a new Account, which is decided by who signs in: Connect Splitwise with a user that's already connected reconnects it and says so, and Reconnect on an Account's page, which has no name or date to make another Account with, accepts only that Account's own user. The Account's page says what
+it's synced from ("Synced from Splitwise as Robert G., reading expenses dated from Oct 1, 2026."), or that it needs reconnecting, with Reconnect and Disconnect, which forgets the token and keeps everything else.
+
+An Account that's synced takes no CSV Import: its page has none, the Import form's Account select and the header's guess leave it out, and the server refuses one. Deleting follows the Account's rule, so one with bank transactions
+can't be deleted and one without takes its connection with it. Specs never call Splitwise: everything that asks it questions sits behind `Splitwise.client`, which every spec replaces. Connecting needs Splitwise's client id and
+secret and the keys the token is encrypted with, and without them it isn't offered ([Splitwise setup](splitwise.md)).
+
 The header's top row has Import, the primary button, beside Sign out, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
-bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and Import is a button, so it never marks a section. Bank transactions is followed by a muted
+bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
 count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state: it's one query, counting at most 100 and read once per request, so every page with the header costs one query more.
 
 ### Frontend
@@ -476,6 +497,7 @@ What the running application depends on. Everything here is reached from the app
 | Integration | What it does | Configured by | Without it |
 | --- | --- | --- | --- |
 | [Google OAuth 2.0](google-oauth.md) | The only way to sign in. One OAuth client per environment, in one Google Cloud project | `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` | Nobody can sign in |
+| [Splitwise](splitwise.md) | Where a connected Account's bank transactions will come from. People sign in to it with OAuth 2 from the Accounts page to connect an Account, one Splitwise app per environment | `SPLITWISE_CLIENT_ID` and `SPLITWISE_CLIENT_SECRET`, and `ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` for the token | "Connect Splitwise" isn't offered |
 | [Zedmail SMTP relay](email.md) | Delivers invite email from `budgiebuddie.com` on testing and production | `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `MAILER_FROM` | Invites can't be sent, so nobody new can join |
 | `letter_opener_web` | Catches mail in development at `/letter_opener` instead of delivering it | Mounted in development only | — |
 | PostgreSQL 18 | The primary database, plus the cache, queue and cable databases next to it | `DB_HOST` and `BUDGIE_DATABASE_PASSWORD`; `config/database.yml` | The app won't boot |

@@ -40,7 +40,14 @@ Rails.application.routes.draw do
   # until it's made, and then it's its summary, which is also where it's undone (destroy).
   resources :accounts do
     resources :imports, only: [ :new, :create ]
+    # What a synced Account is synced from: Reconnect (create) sends the person to sign in to Splitwise again, and Disconnect (destroy) forgets its token.
+    resource :connection, only: [ :create, :destroy ], controller: "account_connections"
   end
+  # Connecting Splitwise: a form for the Account's name and the date to read from (new), which sends the person to Splitwise to sign in (create), and
+  # the callback they come back to, which makes the connection and its Account. This is Budgie's own OAuth 2 flow and isn't signing in to Budgie, so it
+  # isn't one of the OmniAuth providers above. The callback URL has to match the one registered with Splitwise exactly (docs/development.md).
+  resource :splitwise_connection, only: [ :new, :create ], path: "splitwise/connection"
+  get "splitwise/callback" => "splitwise_callbacks#show", as: :splitwise_callback
   # An Import from anywhere: the whole form (new, create), with the Account chosen on it, and the file alone (guess), which works out which CSV
   # format reads it and which Account it's for, and imports it straight away only when both are certain (ADR 0014).
   post "imports/guess" => "import_guesses#create", as: :import_guess

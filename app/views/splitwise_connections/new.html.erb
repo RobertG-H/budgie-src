@@ -1,0 +1,24 @@
+<% content_for :title, "Connect Splitwise · Budgie" %>
+
+<div class="mx-auto max-w-md">
+  <%= render "components/page_header", title: "Connect Splitwise",
+        description: "Your share of each Splitwise expense becomes a bank transaction in a new Account, for you to file." %>
+
+  <%# Turbo is off: the form ends in a redirect to Splitwise's own sign-in, which a fetch can't follow to another site. %>
+  <%= form_with model: @account, url: splitwise_connection_path, class: "mt-8 space-y-6", data: { turbo: false } do |form| %>
+    <%= render "form_errors", messages: @account.errors.full_messages_for(:name) + @connection.errors.full_messages_for(:read_from) %>
+
+    <%= render "components/field", form: form, attribute: :name, label: "Account name", hint: "Such as Splitwise. It's an Account like any other." do |field| %>
+      <%= form.text_field :name, required: true, autofocus: true, **field %>
+    <% end %>
+
+    <%= fields_for :bank_connection, @connection do |connection_form| %>
+      <%= render "components/field", form: connection_form, attribute: :read_from, label: "Read expenses dated from",
+            hint: "Splitwise expenses dated before this are never read. Starting where your bank transactions start means a shared expense you paid for gets its share back." do |field| %>
+        <%= connection_form.date_field :read_from, required: true, **field %>
+      <% end %>
+    <% end %>
+
+    <%= render "components/form_actions", form: form, cancel_path: accounts_path, submit: "Continue to Splitwise" %>
+  <% end %>
+</div>

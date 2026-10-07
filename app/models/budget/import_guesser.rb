@@ -54,7 +54,7 @@ class Budget::ImportGuesser
       # Formats that read exactly the same rows are one format to a person, so an Account may have any of them as its default, and the Import
       # is read with the Account's own. Several that read it differently are only the one that's offered.
       same = format_certain ? clean.map(&:first) : [ chosen ]
-      accounts = @budget.accounts.where(default_csv_format_id: same.map(&:id)).alphabetical.to_a
+      accounts = @budget.accounts.importable.where(default_csv_format_id: same.map(&:id)).alphabetical.to_a
       account = choose_account(accounts)
 
       Budget::ImportGuess.new(
