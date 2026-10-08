@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -95,7 +95,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_130000) do
     t.integer "rows_to_skip", default: 0, null: false
     t.integer "column_count", null: false
     t.integer "date_column", null: false
-    t.string "date_format", null: false
+    t.string "date_order", null: false
     t.integer "description_columns", null: false, array: true
     t.string "amount_style", null: false
     t.integer "amount_column"
@@ -116,7 +116,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_130000) do
     t.check_constraint "column_count <= 100", name: "budget_csv_formats_column_count_at_most_100"
     t.check_constraint "column_count >= 1", name: "budget_csv_formats_column_count_positive"
     t.check_constraint "date_column >= 1 AND date_column <= column_count", name: "budget_csv_formats_date_column_within_count"
-    t.check_constraint "date_format::text = ANY (ARRAY['YYYY-MM-DD'::character varying, 'MM/DD/YYYY'::character varying, 'DD/MM/YYYY'::character varying, 'YYYYMMDD'::character varying]::text[])", name: "budget_csv_formats_date_format_known"
+    t.check_constraint "date_order::text = ANY (ARRAY['year_month_day'::character varying, 'month_day_year'::character varying, 'day_month_year'::character varying]::text[])", name: "budget_csv_formats_date_order_known"
     t.check_constraint "rows_to_skip <= 1000", name: "budget_csv_formats_rows_to_skip_at_most_1000"
     t.check_constraint "rows_to_skip >= 0", name: "budget_csv_formats_rows_to_skip_not_negative"
   end

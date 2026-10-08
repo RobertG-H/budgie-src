@@ -29,9 +29,7 @@
       <%= form.number_field :date_column, min: 1, step: 1, required: true, **field %>
     <% end %>
 
-    <%= render "components/field", form: form, attribute: :date_format, control: :select do |field| %>
-      <%= form.select :date_format, Budget::CsvFormat::DATE_FORMATS, { prompt: "Choose a date format" }, required: true, **field %>
-    <% end %>
+    <%= render "csv_formats/date_order", form: form %>
   </div>
 
   <%= render "components/field", form: form, attribute: :description_columns,

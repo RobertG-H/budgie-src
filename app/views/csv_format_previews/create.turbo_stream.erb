@@ -1,6 +1,13 @@
-<%# Both parts of the builder that depend on the sample are replaced, and nothing else, so what's being typed isn't disturbed. %>
+<%# Both parts of the builder that depend on the sample are replaced, and the date order when it was still to choose and the sample chose it, and nothing else, so what's being typed isn't disturbed. %>
 <%= turbo_stream.replace "csv-format-grid" do %>
   <%= render "csv_formats/grid", csv_format: @csv_format, sample: @sample %>
+<% end %>
+<% if @date_order_chosen %>
+  <%= turbo_stream.replace "csv-format-date-order" do %>
+    <%= fields :csv_format, model: @csv_format do |form| %>
+      <%= render "csv_formats/date_order", form: form %>
+    <% end %>
+  <% end %>
 <% end %>
 <%= turbo_stream.replace "csv-format-preview" do %>
   <%= render "csv_formats/preview", preview: @preview %>

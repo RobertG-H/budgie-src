@@ -1,6 +1,6 @@
 module CsvFormatsHelper
-  # How a CSV format reads a file, in a sentence a person can check against their file, such as "Date in column 1 as
-  # MM/DD/YYYY. Description in column 2. Amount in column 3, with money out as a negative amount."
+  # How a CSV format reads a file, in a sentence a person can check against their file, such as "Date in column 1, in month, day,
+  # year order. Description in column 2. Amount in column 3, with money out as a negative amount."
   def csv_format_summary(csv_format)
     columns = csv_format.description_columns
     description = "Description in #{"column".pluralize(columns.size)} #{columns.to_sentence}."
@@ -11,7 +11,14 @@ module CsvFormatsHelper
       "Amount in column #{csv_format.amount_column}, with money in when column #{csv_format.direction_column} says #{csv_format.money_in_value}."
     end
 
-    [ "Date in column #{csv_format.date_column} as #{csv_format.date_format}.", description, amount, ("The sign is inverted." if csv_format.invert_sign) ].compact.join(" ")
+    [ "Date in column #{csv_format.date_column}, in #{Budget::CsvFormat::DateOrder.label(csv_format.date_order).downcase} order.", description, amount, ("The sign is inverted." if csv_format.invert_sign) ].compact.join(" ")
+  end
+
+  # The date orders for the form's select, each with what it looks like: "Month, day, year (10/07/2026)".
+  def date_order_options
+    Budget::CsvFormat::DATE_ORDERS.map do |order|
+      [ "#{Budget::CsvFormat::DateOrder.label(order)} (#{Budget::CsvFormat::DateOrder::EXAMPLES.fetch(order)})", order ]
+    end
   end
 
   # A date as a person reads it, spelled out so that a month can't be mistaken for a day: "Sep 3, 2026".

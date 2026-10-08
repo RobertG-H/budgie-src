@@ -108,7 +108,7 @@ old_gym.archive! if old_gym.previously_new_record?
 # the builder's grid and preview, and import it. It's the bank's header row to skip, then the date, the description and one
 # signed amount. It's only made when there isn't one by its name, so a developer's changes to it stay.
 sample_bank = budget.csv_formats.find_or_create_by!(name: "Sample bank") do |csv_format|
-  csv_format.assign_attributes(rows_to_skip: 1, column_count: 3, date_column: 1, date_format: "YYYY-MM-DD", description_columns: [ 2 ],
+  csv_format.assign_attributes(rows_to_skip: 1, column_count: 3, date_column: 1, date_order: "year_month_day", description_columns: [ 2 ],
     amount_style: "signed", amount_column: 3)
 end
 

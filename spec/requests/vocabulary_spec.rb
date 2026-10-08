@@ -634,7 +634,7 @@ RSpec.describe "The words on the pages", type: :request do
       csv_format_id = Budget::CsvFormat.find_by!(name: "Plain").id
       post account_imports_path(account), params: { import: { csv_format_id: csv_format_id, file: Rack::Test::UploadedFile.new(StringIO.new("2026-13-45,Paycheck,2800.00\n"), "text/csv", original_filename: "bad.csv") } }
 
-      expect(visible_text).to include("Line 1: the date \"2026-13-45\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).to include("Line 1: the date \"2026-13-45\" isn't a date in year, month, day order.")
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
 
@@ -669,7 +669,7 @@ RSpec.describe "The words on the pages", type: :request do
     # A sample sent with the form, which a preview reads without Turbo, so the whole page comes back to be read.
     def preview(text, **choices)
       sample = Rack::Test::UploadedFile.new(StringIO.new(text), "text/csv", original_filename: "sample.csv")
-      format = { rows_to_skip: "1", date_column: "1", date_format: "YYYY-MM-DD", description_columns: "2", amount_style: "signed", amount_column: "3" }
+      format = { rows_to_skip: "1", date_column: "1", date_order: "year_month_day", description_columns: "2", amount_style: "signed", amount_column: "3" }
       post csv_format_preview_path, params: { csv_format: format.merge(choices).merge(sample: sample) }
     end
 
@@ -678,15 +678,15 @@ RSpec.describe "The words on the pages", type: :request do
 
       expect(response.body).not_to match(/budget_/)
       expect(visible_text).not_to match(/\w+_\w+/)
-      expect(visible_text).to include("CIBC", "Date in column 1 as YYYY-MM-DD. Description in columns 2 and 1. Amount in column 3, with money out as a negative amount.")
+      expect(visible_text).to include("CIBC", "Date in column 1, in year, month, day order. Description in columns 2 and 1. Amount in column 3, with money out as a negative amount.")
     end
 
     it "uses the same words for what went wrong when a CSV format is refused" do
-      post csv_formats_path, params: { csv_format: { name: "", rows_to_skip: "-1", date_column: "", date_format: "", description_columns: "", amount_style: "direction", direction_column: "" } }
+      post csv_formats_path, params: { csv_format: { name: "", rows_to_skip: "-1", date_column: "", date_order: "", description_columns: "", amount_style: "direction", direction_column: "" } }
 
       expect(response).to have_http_status(:unprocessable_content)
       expect(visible_text).to include("Name can't be blank", "Rows to skip must be greater than or equal to 0", "Sample file must be chosen, so the columns can be read from it",
-        "Date column can't be blank", "Date format must be chosen", "Description columns can't be blank", "Direction column can't be blank", "Direction for money in can't be blank")
+        "Date column can't be blank", "Date order must be chosen", "Description columns can't be blank", "Direction column can't be blank", "Direction for money in can't be blank")
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
     end
@@ -703,12 +703,12 @@ RSpec.describe "The words on the pages", type: :request do
     it "uses the same words for the row a file would be refused for, and what's still to choose" do
       preview "Date,Description,Amount\n13/45/2026,Paycheck,2800.00\n"
 
-      expect(visible_text).to include("This file would be refused. Line 2: the date \"13/45/2026\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).to include("This file would be refused. Line 2: the date \"13/45/2026\" isn't a date in year, month, day order.")
       expect(visible_text).not_to match(retired_terms)
 
-      preview "Date,Description,Amount\n2026-10-01,Paycheck,2800.00\n", date_format: "", amount_column: ""
+      preview "Date,Description,Amount\n04/09/2026,Paycheck,2800.00\n", date_order: "", amount_column: ""
 
-      expect(visible_text).to include("Finish choosing", "Date format must be chosen", "Amount column can't be blank")
+      expect(visible_text).to include("Finish choosing", "Date order must be chosen", "Amount column can't be blank")
       expect(visible_text).not_to match(/\w+_\w+/)
       expect(visible_text).not_to match(retired_terms)
     end

@@ -287,13 +287,16 @@ Refunds it was, or ignore it. The model is the `roadmap` issue
 formats, then Accounts, Imports and bank transactions, then Undo, then filing and ignoring, then splits, then Filing rules, then Guesses, then Splitwise's connection.
 
 **CSV formats.** A CSV format (`budget_csv_formats`) says how one bank lays out its download: how many rows to skip, which
-columns hold the date and the description, how the date is written, and which of three ways the amount is given: one signed
+columns hold the date and the description, which order the date's day, month and year are in, and which of three ways the amount is given: one signed
 column, separate money in and money out columns, or one unsigned column with another that says which way it went. There are no
 presets, so a person builds each one from a sample of their own file, which is shown as a numbered grid with a live preview of
 how its first rows would be read. Money in is always positive and money out negative once a file is read, whatever the bank's
 convention ([ADR 0009](adr/0009-a-bank-transaction-has-a-signed-amount-and-is-filed-for-its-exact-sum.md)), and the preview
 spells out the date and says "Money in" or "Money out" in words, so a wrong sign or a swapped day and month is noticed before
-anything is imported.
+anything is imported. The order is the one thing about a date a file can't say for itself (03/04/2026 is March 4 or April 3), so
+it's all a format says about its dates: any separator, a month as a word, a two-digit year and a time after the date all read
+whatever they are. The builder chooses the order from the sample when only one reads every date in it, as a day over 12 or a
+year first decides, and leaves it to the person when the file could be read either way.
 
 **One reader.** `Budget::CsvFormat#read` reads a file with a format into rows of a date, a description and a signed amount, or
 refuses it, naming the first bad row by its line and giving the reason, and nothing is read from a file with anything wrong with

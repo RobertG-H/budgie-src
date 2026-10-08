@@ -145,16 +145,16 @@ RSpec.describe Budget::CsvFormat, type: :model do
       expect(format.errors.full_messages_for(:date_column)).to eq([ "Date column must be one of the sample's columns, 1 to 3" ])
     end
 
-    it "is in one of the four formats" do
-      [ "YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "YYYYMMDD" ].each do |date_format|
-        expect(build(:budget_csv_format, date_format: date_format)).to be_valid
+    it "reads its dates in one of the three orders" do
+      %w[ year_month_day month_day_year day_month_year ].each do |date_order|
+        expect(build(:budget_csv_format, date_order: date_order)).to be_valid
       end
 
-      [ nil, "", "DD-MM-YYYY", "yyyy-mm-dd" ].each do |date_format|
-        format = build(:budget_csv_format, date_format: date_format)
+      [ nil, "", "YYYY-MM-DD", "year_day_month" ].each do |date_order|
+        format = build(:budget_csv_format, date_order: date_order)
 
         expect(format).not_to be_valid
-        expect(format.errors[:date_format]).to be_present
+        expect(format.errors.full_messages_for(:date_order)).to eq([ "Date order must be chosen" ])
       end
     end
   end
@@ -339,7 +339,7 @@ RSpec.describe Budget::CsvFormat, type: :model do
     end
 
     it "rejects a date format it doesn't know" do
-      expect { update_format(format, "date_format = 'DD-MM-YYYY'") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_date_format_known/)
+      expect { update_format(format, "date_order = 'YYYY-MM-DD'") }.to raise_error(ActiveRecord::CheckViolation, /budget_csv_formats_date_order_known/)
     end
 
     it "rejects no description columns, or any outside the columns" do
@@ -405,7 +405,7 @@ RSpec.describe Budget::CsvFormat, type: :model do
     end
 
     # One column per example: PostgreSQL aborts the spec's transaction at the first violation.
-    %w[ budget_id name rows_to_skip column_count date_column date_format description_columns amount_style invert_sign ].each do |column|
+    %w[ budget_id name rows_to_skip column_count date_column date_order description_columns amount_style invert_sign ].each do |column|
       it "requires a #{column}" do
         expect { update_format(format, "#{column} = NULL") }.to raise_error(ActiveRecord::NotNullViolation)
       end

@@ -66,7 +66,7 @@ FactoryBot.define do
     rows_to_skip { 0 }
     column_count { 3 }
     date_column { 1 }
-    date_format { "YYYY-MM-DD" }
+    date_order { "year_month_day" }
     description_columns { [ 2 ] }
     amount_style { "signed" }
     amount_column { 3 }

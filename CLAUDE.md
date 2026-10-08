@@ -131,7 +131,7 @@ are namespaced like the rest, and are in the order of the build: CSV formats, th
 `Budget::CsvFormat` (`budget_csv_formats`, `budget_id`, never `user_id`) is how one bank's download is laid out. There are no
 presets: a person builds every one from a sample file. Columns are numbered from 1, as the builder's grid numbers them, and
 `column_count` is the sample's, so every column a format names is within it (a model validation and a check constraint).
-`description_columns` is an integer array, joined with a space. `amount_style` is `signed` (one column, negative for money out),
+`description_columns` is an integer array, joined with a space. `date_order` (`year_month_day`, `month_day_year` or `day_month_year`, a check constraint) is all a format says about its dates, since 03/04/2026 can't say whether it's March or April: `Budget::CsvFormat::DateOrder` reads any separator or none (eight digits), a one- or two-digit day and month, an ordinal day, an English month word (which reads the same in either of the other two orders), a leading weekday, a two-digit year after the day (90 to 99 the 1990s, the rest this century) and a time after the date, which it drops, and a year first is always four digits. The builder chooses the order from the sample when it's still blank (`CsvFormat#choose_date_order`, in the preview and in `save_with_sample`), only when one order reads every date in the date column as one from 1990 to tomorrow, or every order that does reads them the same; then the preview's Turbo Streams also replace `#csv-format-date-order` with it chosen, and never replace a choice. It replaced four exact formats, and every date those read reads as the same date. `amount_style` is `signed` (one column, negative for money out),
 `in_and_out` (`money_in_column` and `money_out_column`) or `direction` (one unsigned `amount_column`, a `direction_column` and
 the `money_in_value` that means money in, anything else being money out); the columns a style doesn't use are null, which
 `before_validation` makes true and one check constraint per style requires. `invert_sign` is for files where money out is
@@ -143,7 +143,7 @@ departs from the core's no-nulls rule.
 file can't preview one way and import another. `file` is anything that reads, such as an uploaded file, or its text. It returns a
 `Reading` with `rows` (each a `Row` of `line`, `date`, `description` and a signed `amount`, positive for money in per ADR 0009),
 `zero_rows` (rows of 0, which are skipped and counted, never refused) and `refusal`, the first thing wrong with the file, which
-has `line` (none for the whole file) and `message` ("Line 7: the date ... isn't a date in the DD/MM/YYYY format."). A refusal means
+has `line` (none for the whole file) and `message` ("Line 7: the date ... isn't a date in day, month, year order."). A refusal means
 no rows. `Budget::CsvFormat::Source` holds what a file is before a format reads it (UTF-8 and at most 2 MB, BOM stripped, rows with
 the physical line each started on), and `Sample` and `Preview` use it too. The refusals are a wrong column count, an unparseable
 date, an unparseable amount (including more than 2 decimal places, never rounded), a date more than a day after today
@@ -270,7 +270,7 @@ What happens: a complete guess runs `Budget::Import#run` (which reads the file a
 Chequing, read with the TD CSV format." (`Undo` is on the summary, ADR 0011, and the summary says "Into Chequing, read with the TD CSV format." for every Import, so a wrong guess is visible at once). A format but several Accounts, or
 no Account having it as its default, renders the whole form (`422`) with the format and the offered Account chosen and a note ("More than one of your Accounts has the TD CSV format as its default, so check the Account the file is for."
 or "None of your Accounts has the TD CSV format as its default, so choose the Account the file is for."); several formats reading it differently say "More than one of your CSV formats reads this file. Check the CSV format." and choose the most
-likely; none reading it renders the form with no format chosen, "No CSV format reads this file.", a `<details>` "Why" listing each format and its first refusal ("TD: Line 2: the date … isn't a date in the DD/MM/YYYY format."), and a "New CSV format"
+likely; none reading it renders the form with no format chosen, "No CSV format reads this file.", a `<details>` "Why" listing each format and its first refusal ("TD: Line 2: the date … isn't a date in day, month, year order."), and a "New CSV format"
 link, or, when the refusal is the file's for every format, that message once. A file with no format isn't carried to the CSV format builder, which reads a sample for the request and never keeps it, and a browser can't fill a file field for it: the message says
 to choose the same file in the builder. A duplicate file is still an Import (ADR 0011), "Nothing new was added.". **The file isn't kept**, so a form that comes back can't hold it: the `import-picker` controller keeps the chosen `File` in module
 state (`controllers/pending_file`) while Turbo renders, and the `import-file` controller puts it back in the form's file field (`DataTransfer`) when the form connects, only for a form that came back from a guess; when it can't, the field is

@@ -11,7 +11,7 @@ RSpec.describe "CSV format previews", type: :request do
 
   # What the form sends for the signed sample file: a header to skip, the date first, then the description and the amount.
   let(:format_params) do
-    { name: "", rows_to_skip: "1", date_column: "1", date_format: "YYYY-MM-DD", description_columns: "2",
+    { name: "", rows_to_skip: "1", date_column: "1", date_order: "year_month_day", description_columns: "2",
       amount_style: "signed", amount_column: "3", invert_sign: "0" }
   end
 
@@ -155,7 +155,7 @@ RSpec.describe "CSV format previews", type: :request do
 
       expect(previewed_rows).to be_empty
       assert_select "turbo-stream[target=csv-format-preview] [role=alert]",
-        text: "This file would be refused. Line 3: the date \"13/45/2026\" isn't a date in the YYYY-MM-DD format."
+        text: "This file would be refused. Line 3: the date \"13/45/2026\" isn't a date in year, month, day order."
     end
 
     it "finds a row to refuse that's past the ones it would show" do
@@ -166,10 +166,11 @@ RSpec.describe "CSV format previews", type: :request do
     end
 
     it "says what's still to choose, when the format can't read a row yet, other than a name" do
-      preview date_format: "", amount_column: "", description_columns: ""
+      preview date_column: "", date_order: "", amount_column: "", description_columns: ""
 
       expect(previewed_rows).to be_empty
-      assert_select "turbo-stream[target=csv-format-preview] li", text: "Date format must be chosen"
+      assert_select "turbo-stream[target=csv-format-preview] li", text: "Date column can't be blank"
+      assert_select "turbo-stream[target=csv-format-preview] li", text: "Date order must be chosen"
       assert_select "turbo-stream[target=csv-format-preview] li", text: "Description columns can't be blank"
       assert_select "turbo-stream[target=csv-format-preview] li", text: "Amount column can't be blank"
       assert_select "turbo-stream[target=csv-format-preview] li", text: /Name/, count: 0
@@ -190,15 +191,52 @@ RSpec.describe "CSV format previews", type: :request do
     end
   end
 
+  describe "choosing the date order" do
+    def date_order_stream
+      css_select("turbo-stream[target=csv-format-date-order]")
+    end
+
+    it "chooses it from the sample when it's still to choose, and replaces the field with it chosen" do
+      preview date_order: ""
+
+      expect(date_order_stream.size).to eq(1)
+      assert_select "turbo-stream[target=csv-format-date-order] select[name='csv_format[date_order]'] option[selected][value=year_month_day]"
+      expect(previewed_rows.first).to eq("2 | Sep 1, 2026 | Paycheck | $2,800.00 Money in")
+    end
+
+    it "chooses day first when a day is over 12, as far down the file as it is" do
+      rows = "Date,Description,Amount\n" + "04/09/2026,Coffee shop,-1.00\n" * 30 + "13/09/2026,Coffee shop,-1.00\n"
+      post csv_format_preview_path, params: { csv_format: format_params.merge(date_order: "", sample: upload_text(rows)) }, headers: turbo_stream
+
+      assert_select "turbo-stream[target=csv-format-date-order] option[selected][value=day_month_year]"
+      expect(previewed_rows.first).to eq("2 | Sep 4, 2026 | Coffee shop | -$1.00 Money out")
+    end
+
+    it "leaves it to choose when the sample's dates read more than one way" do
+      rows = "Date,Description,Amount\n04/09/2026,Coffee shop,-1.00\n05/09/2026,Hydro,-2.00\n"
+      post csv_format_preview_path, params: { csv_format: format_params.merge(date_order: "", sample: upload_text(rows)) }, headers: turbo_stream
+
+      expect(date_order_stream).to be_empty
+      assert_select "turbo-stream[target=csv-format-preview] li", text: "Date order must be chosen"
+    end
+
+    it "never changes one that's chosen, even when the sample's dates don't read in it" do
+      preview date_order: "month_day_year"
+
+      expect(date_order_stream).to be_empty
+      assert_select "turbo-stream[target=csv-format-preview] [role=alert]", text: /isn't a date in month, day, year order/
+    end
+  end
+
   describe "for a format that's being edited" do
-    let!(:format) { create(:budget_csv_format, budget: budget, name: "CIBC", date_format: "MM/DD/YYYY") }
+    let!(:format) { create(:budget_csv_format, budget: budget, name: "CIBC", date_order: "month_day_year") }
 
     it "reads the sample with the choices that were sent, and doesn't save them" do
-      preview csv_format_id: format.id, rows_to_skip: "1", date_format: "YYYY-MM-DD"
+      preview csv_format_id: format.id, rows_to_skip: "1", date_order: "year_month_day"
 
       expect(response).to have_http_status(:ok)
       expect(previewed_rows.first).to eq("2 | Sep 1, 2026 | Paycheck | $2,800.00 Money in")
-      expect(format.reload).to have_attributes(date_format: "MM/DD/YYYY", rows_to_skip: 0)
+      expect(format.reload).to have_attributes(date_order: "month_day_year", rows_to_skip: 0)
     end
 
     it "is not found for another user's format" do

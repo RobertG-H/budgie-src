@@ -37,6 +37,19 @@ class Budget::CsvFormat::Sample
     (first_read ? first_read.cells.size : width).presence
   end
 
+  # What's in one column of every row a format with these rows to skip would read, as far as the reader would read, which is
+  # what the date order is chosen from. Nothing for a sample that can't be read.
+  def column_texts(column, rows_to_skip:)
+    return [] if refusal
+
+    @source.each_row.lazy.with_index
+      .reject { |(_line, cells), index| index < rows_to_skip || cells.all?(&:blank?) }
+      .map { |(_line, cells), _index| cells[column - 1] }
+      .first(Budget::CsvFormat::Reader::MAX_DATA_ROWS)
+  rescue Budget::CsvFormat::Refused
+    []
+  end
+
   # Reads the whole sample with a CSV format, so the preview can't read it any other way than an Import would.
   def read(csv_format)
     csv_format.read(@source)

@@ -5,7 +5,7 @@ module CsvFormatParams
 
   private
     def csv_format_params
-      params.expect(csv_format: [ :name, :rows_to_skip, :column_count, :date_column, :date_format, :description_columns, :amount_style,
+      params.expect(csv_format: [ :name, :rows_to_skip, :column_count, :date_column, :date_order, :description_columns, :amount_style,
                                   :amount_column, :money_in_column, :money_out_column, :direction_column, :money_in_value, :invert_sign ])
     end
 

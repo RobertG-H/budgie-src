@@ -210,7 +210,7 @@ RSpec.describe "Importing from the header", type: :request do
     it "names the date a format couldn't read, in the words the reader uses" do
       guess(upload_text("Date,Description,Amount\n04/09/2026,Paycheck,2800.00\n"))
 
-      expect(visible_text).to include("TD: Line 2: the date \"04/09/2026\" isn't a date in the YYYY-MM-DD format.")
+      expect(visible_text).to include("TD: Line 2: the date \"04/09/2026\" isn't a date in year, month, day order.")
     end
 
     it "says what's wrong with the file once, and lists no formats, when it's every format's: it isn't UTF-8, it's empty, it isn't CSV" do
