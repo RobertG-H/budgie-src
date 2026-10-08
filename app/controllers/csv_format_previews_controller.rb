@@ -8,6 +8,7 @@ class CsvFormatPreviewsController < ApplicationController
     @csv_format = build_csv_format
     @sample = read_sample(@csv_format)
     @csv_format.column_count = @sample.column_count if @sample&.column_count
+    @date_order_chosen = @csv_format.choose_date_order(@sample).present?
     @preview = Budget::CsvFormat::Preview.new(@csv_format, @sample)
 
     # Without JavaScript the Preview button sends the form as it is, so the answer is the whole page.

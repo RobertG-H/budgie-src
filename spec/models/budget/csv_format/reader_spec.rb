@@ -94,32 +94,50 @@ RSpec.describe Budget::CsvFormat::Reader do
 
   describe "dates" do
     {
-      "YYYY-MM-DD" => "2026-03-04",
-      "MM/DD/YYYY" => "03/04/2026",
-      "DD/MM/YYYY" => "04/03/2026",
-      "YYYYMMDD" => "20260304"
-    }.each do |date_format, text|
-      it "reads #{date_format}" do
-        format = build(:budget_csv_format, date_format: date_format)
+      "year_month_day" => [ "2026-03-04", "20260304", "2026/3/4", "2026.03.04", "2026 Mar 4", "2026-03-04T14:30:00Z", "2026-03-04 14:30" ],
+      "month_day_year" => [ "03/04/2026", "3/4/2026", "03-04-2026", "3.4.26", "03042026", "Mar 4, 2026", "March 4th, 2026", "Wed, Mar 4, 2026",
+                            "Sept 4, 2026", "3/4/2026 2:30 PM" ],
+      "day_month_year" => [ "04/03/2026", "4/3/2026", "04-03-2026", "4.3.26", "04032026", "4 Mar 2026", "04-Mar-26", "4th March 2026",
+                            "Wednesday 4 March 2026", "04/03/2026 14:30:00" ]
+    }.each do |date_order, texts|
+      texts.each do |text|
+        it "reads #{text} in #{date_order}" do
+          format = build(:budget_csv_format, date_order: date_order)
 
-        reading = read(format, "#{text},Paycheck,10.00\n")
+          reading = read(format, "\"#{text}\",Paycheck,10.00\n")
 
-        expect(reading.rows.sole.date).to eq(Date.new(2026, 3, 4))
+          expect(reading.refusal).to be_nil
+          expect(reading.rows.sole.date).to eq(Date.new(2026, 3, 4)) unless text.start_with?("Sept")
+        end
       end
     end
 
-    it "reads 03/04/2026 as March 4 with MM/DD/YYYY, and as April 3 with DD/MM/YYYY" do
-      us = read(build(:budget_csv_format, date_format: "MM/DD/YYYY"), "03/04/2026,Paycheck,10.00\n")
-      day_first = read(build(:budget_csv_format, date_format: "DD/MM/YYYY"), "03/04/2026,Paycheck,10.00\n")
+    it "reads Sept as September" do
+      expect(read(build(:budget_csv_format, date_order: "month_day_year"), "\"Sept 4, 2026\",Paycheck,10.00\n").rows.sole.date).to eq(Date.new(2026, 9, 4))
+    end
+
+    it "reads 03/04/2026 as March 4 month first, and as April 3 day first" do
+      us = read(build(:budget_csv_format, date_order: "month_day_year"), "03/04/2026,Paycheck,10.00\n")
+      day_first = read(build(:budget_csv_format, date_order: "day_month_year"), "03/04/2026,Paycheck,10.00\n")
 
       expect(us.rows.sole.date).to eq(Date.new(2026, 3, 4))
       expect(day_first.rows.sole.date).to eq(Date.new(2026, 4, 3))
     end
 
-    it "reads a month and a day without their leading zeros in the slash formats" do
-      format = build(:budget_csv_format, date_format: "MM/DD/YYYY")
+    it "reads a two-digit year from 90 as the 1990s, and the rest as this century" do
+      format = build(:budget_csv_format, date_order: "day_month_year")
 
-      expect(read(format, "3/4/2026,Paycheck,10.00\n").rows.sole.date).to eq(Date.new(2026, 3, 4))
+      expect(read(format, "04/03/95,Paycheck,10.00\n").rows.sole.date).to eq(Date.new(1995, 3, 4))
+      expect(read(format, "04/03/26,Paycheck,10.00\n").rows.sole.date).to eq(Date.new(2026, 3, 4))
+    end
+
+    it "reads every date that one of the four exact formats there were read as the same date" do
+      { "year_month_day" => [ "2026-03-04", "20260304" ], "month_day_year" => [ "03/04/2026", "3/4/2026" ],
+        "day_month_year" => [ "04/03/2026", "4/3/2026" ] }.each do |date_order, texts|
+        texts.each do |text|
+          expect(read(build(:budget_csv_format, date_order: date_order), "#{text},Paycheck,10.00\n").rows.sole.date).to eq(Date.new(2026, 3, 4))
+        end
+      end
     end
 
     it "reads a date with space around it" do
@@ -232,13 +250,22 @@ RSpec.describe Budget::CsvFormat::Reader do
       expect(refusal_of("2026-09-01,Paycheck,10.00,extra\n")).to eq("Line 1: has 4 columns, and this CSV format expects 3.")
     end
 
-    it "says when a date can't be read in the chosen format" do
-      expect(refusal_of("13/45/2026,Paycheck,10.00\n", build(:budget_csv_format, date_format: "MM/DD/YYYY")))
-        .to eq("Line 1: the date \"13/45/2026\" isn't a date in the MM/DD/YYYY format.")
-      expect(refusal_of("2026-02-30,Paycheck,10.00\n")).to eq("Line 1: the date \"2026-02-30\" isn't a date in the YYYY-MM-DD format.")
-      expect(refusal_of("yesterday,Paycheck,10.00\n")).to eq("Line 1: the date \"yesterday\" isn't a date in the YYYY-MM-DD format.")
+    it "says when a date can't be read in the chosen order" do
+      expect(refusal_of("13/45/2026,Paycheck,10.00\n", build(:budget_csv_format, date_order: "month_day_year")))
+        .to eq("Line 1: the date \"13/45/2026\" isn't a date in month, day, year order.")
+      expect(refusal_of("2026-02-30,Paycheck,10.00\n")).to eq("Line 1: the date \"2026-02-30\" isn't a date in year, month, day order.")
+      expect(refusal_of("yesterday,Paycheck,10.00\n")).to eq("Line 1: the date \"yesterday\" isn't a date in year, month, day order.")
       expect(refusal_of(",Paycheck,10.00\n")).to eq("Line 1: the date is blank.")
-      expect(refusal_of("2026-09-01,Paycheck,10.00\n04/09/2026,Hydro,5.00\n")).to eq("Line 2: the date \"04/09/2026\" isn't a date in the YYYY-MM-DD format.")
+      expect(refusal_of("2026-09-01,Paycheck,10.00\n04/09/2026,Hydro,5.00\n")).to eq("Line 2: the date \"04/09/2026\" isn't a date in year, month, day order.")
+    end
+
+    it "refuses what only looks like a date" do
+      day_first = build(:budget_csv_format, date_order: "day_month_year")
+
+      [ "2026-10", "Smarch 4 2026", "4 Mar Apr 2026", "04/03/2026 or so", "04/03/26/1", "123/03/2026", "4 Mar 2026th" ].each do |text|
+        expect(refusal_of("\"#{text}\",Paycheck,10.00\n", day_first)).to match(/isn't a date in day, month, year order/), text
+      end
+      expect(refusal_of("26-10-07,Paycheck,10.00\n")).to match(/isn't a date in year, month, day order/)
     end
 
     describe "a date that can't be right" do

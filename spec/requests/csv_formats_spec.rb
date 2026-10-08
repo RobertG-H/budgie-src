@@ -8,7 +8,7 @@ RSpec.describe "CSV formats", type: :request do
 
   # What a person types into the form for a signed amount in the third column of a three-column sample.
   let(:format_params) do
-    { name: "My bank", rows_to_skip: "1", column_count: "3", date_column: "1", date_format: "YYYY-MM-DD",
+    { name: "My bank", rows_to_skip: "1", column_count: "3", date_column: "1", date_order: "year_month_day",
       description_columns: "2", amount_style: "signed", amount_column: "3", invert_sign: "0" }
   end
 
@@ -29,13 +29,13 @@ RSpec.describe "CSV formats", type: :request do
     end
 
     it "links each to where it's edited, and says how it reads a file" do
-      format = create(:budget_csv_format, budget: budget, name: "CIBC", date_column: 1, date_format: "MM/DD/YYYY", description_columns: [ 2 ], amount_column: 3)
+      format = create(:budget_csv_format, budget: budget, name: "CIBC", date_column: 1, date_order: "month_day_year", description_columns: [ 2 ], amount_column: 3)
 
       get csv_formats_path
 
       assert_select "main ul.list li a[href='#{edit_csv_format_path(format)}']" do
         assert_select "span.font-semibold", text: "CIBC"
-        assert_select "span.text-base-content\\/70", text: "Date in column 1 as MM/DD/YYYY. Description in column 2. Amount in column 3, with money out as a negative amount."
+        assert_select "span.text-base-content\\/70", text: "Date in column 1, in month, day, year order. Description in column 2. Amount in column 3, with money out as a negative amount."
       end
     end
 
@@ -87,8 +87,8 @@ RSpec.describe "CSV formats", type: :request do
         assert_select "input[type=number][name='csv_format[rows_to_skip]'][min='0'][value='0']"
         assert_select "label", text: "Date column"
         assert_select "input[type=number][name='csv_format[date_column]'][min='1']"
-        assert_select "label", text: "Date format"
-        assert_select "select[name='csv_format[date_format]'] option", count: 5 # A prompt and the four formats.
+        assert_select "label", text: "Date order"
+        assert_select "select[name='csv_format[date_order]'] option", count: 4 # A prompt and the three orders.
         assert_select "label", text: "Description columns"
         assert_select "input[type=text][name='csv_format[description_columns]']"
         assert_select "legend", text: "Amount style"
@@ -105,11 +105,11 @@ RSpec.describe "CSV formats", type: :request do
       end
     end
 
-    it "offers the four date formats, after a prompt" do
+    it "offers the three date orders, each with what it looks like, after a prompt" do
       get new_csv_format_path
 
-      expect(css_select("select[name='csv_format[date_format]'] option").map { |option| option.text.strip })
-        .to eq([ "Choose a date format", "YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "YYYYMMDD" ])
+      expect(css_select("select[name='csv_format[date_order]'] option").map { |option| option.text.strip })
+        .to eq([ "Choose a date order", "Year, month, day (2026-10-07)", "Month, day, year (10/07/2026)", "Day, month, year (07/10/2026)" ])
     end
 
     it "has a button that previews how the sample reads, which sends the form somewhere else, and Cancel back to the list" do
@@ -141,12 +141,20 @@ RSpec.describe "CSV formats", type: :request do
       expect { post csv_formats_path, params: { csv_format: format_params } }.to change(budget.csv_formats, :count).by(1)
 
       expect(budget.csv_formats.sole).to have_attributes(
-        name: "My bank", rows_to_skip: 1, column_count: 3, date_column: 1, date_format: "YYYY-MM-DD", description_columns: [ 2 ],
+        name: "My bank", rows_to_skip: 1, column_count: 3, date_column: 1, date_order: "year_month_day", description_columns: [ 2 ],
         amount_style: "signed", amount_column: 3, invert_sign: false
       )
       expect(response).to redirect_to(csv_formats_path)
       follow_redirect!
       assert_select "[role=status]", text: "CSV format added."
+    end
+
+    it "chooses the date order from the sample when it wasn't chosen, as a form without JavaScript sends it" do
+      sample = Rack::Test::UploadedFile.new(file_fixture("signed-sample.csv"), "text/csv")
+
+      post csv_formats_path, params: { csv_format: format_params.merge(date_order: "", sample: sample) }
+
+      expect(budget.csv_formats.sole.date_order).to eq("year_month_day")
     end
 
     it "saves each amount style with its columns" do
@@ -229,13 +237,13 @@ RSpec.describe "CSV formats", type: :request do
     end
 
     it "refuses what's wrong with it, keeping what was entered, and creates nothing" do
-      expect { post csv_formats_path, params: { csv_format: format_params.merge(name: "", date_column: "7", date_format: "", description_columns: "2, payee", amount_style: "direction", direction_column: "3", money_in_value: "") } }
+      expect { post csv_formats_path, params: { csv_format: format_params.merge(name: "", date_column: "7", date_order: "", description_columns: "2, payee", amount_style: "direction", direction_column: "3", money_in_value: "") } }
         .not_to change(Budget::CsvFormat, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
       assert_select "[role=alert] li", text: "Name can't be blank"
       assert_select "[role=alert] li", text: "Date column must be one of the sample's columns, 1 to 3"
-      assert_select "[role=alert] li", text: "Date format must be chosen"
+      assert_select "[role=alert] li", text: "Date order must be chosen"
       assert_select "[role=alert] li", text: /Description columns must be one of the sample's columns/
       assert_select "[role=alert] li", text: "Direction column can't be the same column as the amount"
       assert_select "[role=alert] li", text: "Direction for money in can't be blank"
@@ -298,7 +306,7 @@ RSpec.describe "CSV formats", type: :request do
       assert_select "input[name='csv_format[rows_to_skip]'][value='1']"
       assert_select "input[name='csv_format[column_count]'][value='4']"
       assert_select "input[name='csv_format[date_column]'][value='1']"
-      assert_select "select[name='csv_format[date_format]'] option[selected][value='YYYY-MM-DD']"
+      assert_select "select[name='csv_format[date_order]'] option[selected][value='year_month_day']"
       assert_select "input[name='csv_format[description_columns]'][value='2, 1']"
       assert_select "input[type=radio][value=direction][checked]"
       assert_select "input[name='csv_format[amount_column]'][value='3']"
@@ -351,12 +359,12 @@ RSpec.describe "CSV formats", type: :request do
   end
 
   describe "PATCH /csv_formats/:id" do
-    let!(:format) { create(:budget_csv_format, budget: budget, name: "CIBC", date_format: "MM/DD/YYYY") }
+    let!(:format) { create(:budget_csv_format, budget: budget, name: "CIBC", date_order: "month_day_year") }
 
     it "changes the format, and goes back to the list" do
-      patch csv_format_path(format), params: { csv_format: { name: "CIBC Visa", date_format: "DD/MM/YYYY", invert_sign: "1" } }
+      patch csv_format_path(format), params: { csv_format: { name: "CIBC Visa", date_order: "day_month_year", invert_sign: "1" } }
 
-      expect(format.reload).to have_attributes(name: "CIBC Visa", date_format: "DD/MM/YYYY", invert_sign: true)
+      expect(format.reload).to have_attributes(name: "CIBC Visa", date_order: "day_month_year", invert_sign: true)
       expect(response).to redirect_to(csv_formats_path)
       follow_redirect!
       assert_select "[role=status]", text: "CSV format updated."
@@ -446,9 +454,9 @@ RSpec.describe "CSV formats", type: :request do
       it "can still be edited, which changes nothing that was imported" do
         transaction = create(:budget_bank_transaction, account: Budget::Import.sole.account, import: Budget::Import.sole, description: "Coffee shop")
 
-        patch csv_format_path(format), params: { csv_format: { name: "CIBC Visa", date_format: "DD/MM/YYYY" } }
+        patch csv_format_path(format), params: { csv_format: { name: "CIBC Visa", date_order: "day_month_year" } }
 
-        expect(format.reload).to have_attributes(name: "CIBC Visa", date_format: "DD/MM/YYYY")
+        expect(format.reload).to have_attributes(name: "CIBC Visa", date_order: "day_month_year")
         expect(response).to redirect_to(csv_formats_path)
         expect(transaction.reload).to have_attributes(description: "Coffee shop", date: Date.new(2026, 9, 15), amount: -10)
       end

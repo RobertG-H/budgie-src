@@ -175,7 +175,7 @@ RSpec.describe Budget::ImportGuesser do
     it "counts only formats that read it cleanly, so a format that refuses doesn't make the others uncertain" do
       plain = format("Plain")
       format("Four columns", column_count: 4)
-      format("Dates the other way", date_format: "MM/DD/YYYY")
+      format("Dates the other way", date_order: "month_day_year")
 
       result = guess
 
@@ -241,7 +241,7 @@ RSpec.describe Budget::ImportGuesser do
 
   describe "when no CSV format reads the file" do
     it "has no format, no Account, and each format's first refusal, in its own words, alphabetically" do
-      td = format("TD CSV", date_format: "DD/MM/YYYY")
+      td = format("TD CSV", date_order: "day_month_year")
       amex = format("Amex", column_count: 4)
       account("Chequing", default: td)
 
@@ -254,7 +254,7 @@ RSpec.describe Budget::ImportGuesser do
       expect(result.refusals.map(&:csv_format)).to eq([ amex, td ])
       expect(result.refusals.map { |rejection| rejection.refusal.message }).to eq([
         "Line 1: has 3 columns, and this CSV format expects 4.",
-        "Line 1: the date \"2026-09-01\" isn't a date in the DD/MM/YYYY format."
+        "Line 1: the date \"2026-09-01\" isn't a date in day, month, year order."
       ])
     end
 

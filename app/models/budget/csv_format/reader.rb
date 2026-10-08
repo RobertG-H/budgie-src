@@ -15,17 +15,10 @@ class Budget::CsvFormat::Reader
   NO_DESCRIPTION = "No description"
 
   MAX_DATA_ROWS = 5_000
-  EARLIEST_DATE = Date.new(1990, 1, 1)
+  EARLIEST_DATE = Budget::CsvFormat::DateOrder::EARLIEST_DATE
 
   # A sign, a currency symbol, then digits with commas between each group of three, and decimals.
   AMOUNT_PATTERN = /\A(?<sign>[+-])?[$€£]?(?<whole>\d{1,3}(?:,\d{3})+|\d+)?(?:\.(?<fraction>\d+))?\z/
-
-  DATE_PATTERNS = {
-    "YYYY-MM-DD" => [ /\A(\d{4})-(\d{2})-(\d{2})\z/, %i[ year month day ] ],
-    "MM/DD/YYYY" => [ %r{\A(\d{1,2})/(\d{1,2})/(\d{4})\z}, %i[ month day year ] ],
-    "DD/MM/YYYY" => [ %r{\A(\d{1,2})/(\d{1,2})/(\d{4})\z}, %i[ day month year ] ],
-    "YYYYMMDD" => [ /\A(\d{4})(\d{2})(\d{2})\z/, %i[ year month day ] ]
-  }.freeze
 
   def initialize(format)
     @format = format
@@ -82,12 +75,9 @@ class Budget::CsvFormat::Reader
       text = cell.to_s.strip
       refuse(line, "the date is blank.") if text.empty?
 
-      pattern, parts = DATE_PATTERNS.fetch(@format.date_format)
-      numbers = text.match(pattern)&.captures&.map(&:to_i)
-      date = parts.zip(numbers).to_h if numbers
-      refuse(line, "the date #{quote(text)} isn't a date in the #{@format.date_format} format.") unless date && Date.valid_date?(date[:year], date[:month], date[:day])
+      date = Budget::CsvFormat::DateOrder.new(@format.date_order).read(text)
+      refuse(line, "the date #{quote(text)} isn't a date in #{Budget::CsvFormat::DateOrder.label(@format.date_order).downcase} order.") unless date
 
-      date = Date.new(date[:year], date[:month], date[:day])
       refuse(line, "the date #{date.iso8601} is more than a day after today.") if date > Date.current + 1
       refuse(line, "the date #{date.iso8601} is before #{EARLIEST_DATE.year}.") if date < EARLIEST_DATE
       date

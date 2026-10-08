@@ -394,7 +394,7 @@ RSpec.describe "Imports", type: :request do
         expect { import(file: file) }.to not_change(Budget::Import, :count).and not_change(Budget::BankTransaction, :count)
 
         expect(response).to have_http_status(:unprocessable_content)
-        assert_select "[role=alert] li", text: "Line 3: the date \"2026-13-45\" isn't a date in the YYYY-MM-DD format."
+        assert_select "[role=alert] li", text: "Line 3: the date \"2026-13-45\" isn't a date in year, month, day order."
         assert_select "option[selected][value='#{csv_format.id}']", text: "Sample bank"
         assert_select "h1", text: "Import"
       end

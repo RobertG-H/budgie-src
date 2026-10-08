@@ -47,9 +47,11 @@ class CsvFormatsController < ApplicationController
     # Saves the format with the column count of the sample that was sent with the form, if one was, which is the sample's whatever the
     # form's own say: the preview fills it in as the form changes, and a form without JavaScript, or one sent before the preview
     # answered, has none. A sample that can't be read is refused, with why. Without one, the format keeps the column count it has.
+    # A date order that wasn't chosen is chosen from the sample, as the preview would have.
     def save_with_sample
       sample = read_sample(@csv_format)
       @csv_format.column_count = sample.column_count if sample&.column_count
+      @csv_format.choose_date_order(sample)
       return @csv_format.save unless sample&.refusal
 
       @csv_format.valid?

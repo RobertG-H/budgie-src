@@ -6,7 +6,8 @@
 # Columns are numbered from 1, as the builder's grid numbers them. `column_count` is the sample's, and every column a
 # format names has to be within it.
 class Budget::CsvFormat < ApplicationRecord
-  DATE_FORMATS = [ "YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "YYYYMMDD" ].freeze
+  # The order a date's day, month and year are in, which is all a format says about its dates. See DateOrder.
+  DATE_ORDERS = Budget::CsvFormat::DateOrder::ORDERS
 
   # How a file says how much money moved, and which way:
   # - signed: one column, negative for money out
@@ -42,7 +43,7 @@ class Budget::CsvFormat < ApplicationRecord
   validates :rows_to_skip, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: MAX_ROWS_TO_SKIP }
   validates :column_count, presence: { message: "must be chosen, so the columns can be read from it" }
   validates :column_count, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: MAX_COLUMNS }, allow_nil: true
-  validates :date_format, inclusion: { in: DATE_FORMATS, message: "must be chosen" }
+  validates :date_order, inclusion: { in: DATE_ORDERS, message: "must be chosen" }
   validates :amount_style, inclusion: { in: AMOUNT_STYLES, message: "must be chosen" }
   validates :invert_sign, inclusion: { in: [ true, false ] }
   validate :date_and_description_columns
@@ -52,6 +53,15 @@ class Budget::CsvFormat < ApplicationRecord
   # See Reader.
   def read(file)
     Reader.new(self).read(file)
+  end
+
+  # Chooses the date order from a sample when none has been chosen and the dates in the date column read in only one, such as
+  # when a day is over 12 or the year comes first, and is the order it chose. A sample that could be read more than one way
+  # leaves it for the person to choose.
+  def choose_date_order(sample)
+    return if date_order.present? || sample.nil? || !date_column.to_i.between?(1, column_count || MAX_COLUMNS)
+
+    self.date_order = Budget::CsvFormat::DateOrder.detect(sample.column_texts(date_column, rows_to_skip: rows_to_skip.to_i))
   end
 
   # A blank field means no rows are skipped.

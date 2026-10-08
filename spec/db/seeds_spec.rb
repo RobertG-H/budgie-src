@@ -234,11 +234,11 @@ RSpec.describe "db/seeds.rb" do
       end
 
       it "is left as the developer has changed it" do
-        budget.csv_formats.sole.update!(date_format: "DD/MM/YYYY")
+        budget.csv_formats.sole.update!(date_order: "day_month_year")
 
         run_seeds
 
-        expect(budget.csv_formats.sole.date_format).to eq("DD/MM/YYYY")
+        expect(budget.csv_formats.sole.date_order).to eq("day_month_year")
       end
     end
 

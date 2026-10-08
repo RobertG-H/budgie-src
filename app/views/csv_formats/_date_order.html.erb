@@ -1,0 +1,8 @@
+<%# locals: (form:) %>
+<%# The date order, which the preview chooses from the sample when it's still to choose and the sample's dates read in only one, and replaces this with (see CsvFormatPreviewsController), so it's never replaced while it holds a choice. %>
+<div id="csv-format-date-order">
+  <%= render "components/field", form: form, attribute: :date_order, control: :select,
+        hint: "The order of the day, month and year. Chosen from the sample when its dates can only be read one way." do |field| %>
+    <%= form.select :date_order, date_order_options, { prompt: "Choose a date order" }, required: true, **field %>
+  <% end %>
+</div>
