@@ -422,15 +422,83 @@ RSpec.describe "Navigation", type: :request do
     end
   end
 
-  it "has Import beside Sign out in the main navigation, whenever the person has a budget, as the primary button" do
+  it "has Import beside the menu in the main navigation, whenever the person has a budget, as the primary button" do
     sign_in_as budget.user
 
     [ root_path, accounts_path, records_path, csv_formats_path ].each do |path|
       get path
 
       assert_select "nav[aria-label=Main] a.btn.btn-primary.btn-sm[href='#{new_import_path}']", text: "Import", count: 1
-      assert_select "nav[aria-label=Main] a", count: 1
-      assert_select "nav[aria-label=Main] button", text: "Sign out"
+      assert_select "nav[aria-label=Main] a", count: 3 # Import, and the menu's Profile and User guide
+      assert_select "nav[aria-label=Main] details.dropdown", count: 1
+    end
+  end
+
+  describe "the menu" do
+    before { sign_in_as budget.user }
+
+    it "has Profile, the User guide and Sign out, in that order, in a native details that opens without JavaScript" do
+      get root_path
+
+      assert_select "nav[aria-label=Main] details.dropdown[data-controller=menu]" do
+        assert_select "summary.btn", text: "Menu"
+        assert_select "ul.menu a[href='#{profile_path}']", text: "Profile"
+        assert_select "ul.menu a[href='#{guide_path}']", text: "User guide"
+      end
+      items = css_select("nav[aria-label=Main] ul.menu > li").map { |item| item.text.squish }
+      expect(items).to eq([ "Profile", "User guide", "Sign out" ])
+    end
+
+    it "signs out through a form of its own, which Sign out sends" do
+      get root_path
+
+      assert_select "nav[aria-label=Main] form#sign-out[action='#{session_path}'][method=post]" do
+        assert_select "input[name=_method][value=delete]", count: 1
+      end
+      assert_select "nav[aria-label=Main] ul.menu button[type=submit][form=sign-out]", text: "Sign out"
+
+      delete session_path
+
+      expect(response).to redirect_to(sign_in_path)
+    end
+
+    it "marks the page it's on, in a word's weight and for assistive technology, and no section, since neither page is one" do
+      { profile_path => "Profile", guide_path => "User guide" }.each do |path, name|
+        get path
+
+        expect(response).to have_http_status(:ok)
+        assert_select "nav[aria-label=Main] ul.menu a.font-semibold[aria-current=page][href='#{path}']", text: name
+        assert_select "nav[aria-label=Main] ul.menu a[aria-current]", count: 1
+        assert_select "nav[aria-label=Sections] a[aria-current]", count: 0
+      end
+
+      get root_path
+
+      assert_select "nav[aria-label=Main] ul.menu a[aria-current]", count: 0
+    end
+
+    it "has all three for a person who hasn't set up their budget yet, whose Profile and User guide both open" do
+      sign_in_as create(:user)
+
+      get new_budget_path
+
+      assert_select "nav[aria-label=Main] details.dropdown ul.menu a", count: 2
+      assert_select "nav[aria-label=Main] ul.menu button[form=sign-out]", text: "Sign out"
+
+      [ profile_path, guide_path ].each do |path|
+        get path
+
+        expect(response).to have_http_status(:ok), path
+      end
+    end
+
+    it "isn't there for a visitor who isn't signed in" do
+      delete session_path
+
+      get sign_in_path
+
+      assert_select "details.dropdown", count: 0
+      assert_select "form#sign-out", count: 0
     end
   end
 
@@ -479,12 +547,13 @@ RSpec.describe "Navigation", type: :request do
     end
   end
 
-  it "has no Import for a person who hasn't got a budget yet, only Sign out" do
+  it "has no Import for a person who hasn't got a budget yet, only the menu" do
     sign_in_as create(:user)
 
     get new_budget_path
 
-    assert_select "nav[aria-label=Main] a", count: 0
+    assert_select "nav[aria-label=Main] a[href='#{new_import_path}']", count: 0
+    assert_select "nav[aria-label=Main] > details.dropdown", count: 1
     assert_select "nav[aria-label=Main] button", text: "Sign out"
   end
 

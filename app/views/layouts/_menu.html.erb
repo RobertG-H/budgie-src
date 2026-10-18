@@ -1,0 +1,19 @@
+<%# locals: () %>
+<%# The signed-in person's menu, where Sign out used to be: their Profile, the User guide and Sign out, whether or not they have a budget yet. It's a native <details>, so it opens and closes without JavaScript, and the menu controller also closes it on a click outside it, on Escape and before Turbo caches the page, so going back never finds it open. The page it's on is marked in a bolder weight and for assistive technology, as a section link is. %>
+<%# Sign out is a button for a form of its own outside the list: a daisyUI menu styles a list item's own child, which has to be the button, and a form can't sit between them. %>
+<details class="dropdown dropdown-end" data-controller="menu"
+         data-action="click@window->menu#closeFromOutside keydown.esc@window->menu#closeFromKeyboard turbo:before-cache@document->menu#close">
+  <summary class="btn btn-ghost btn-sm gap-1" data-menu-target="toggle">
+    <svg class="size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-5.5-2.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 12a5.99 5.99 0 0 0-4.793 2.39A6.483 6.483 0 0 0 10 16.5a6.483 6.483 0 0 0 4.793-2.11A5.99 5.99 0 0 0 10 12Z" clip-rule="evenodd" /></svg>
+    <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+    <span class="sr-only">Menu</span>
+  </summary>
+  <ul class="menu dropdown-content mt-2 w-44 rounded-box border border-base-300 bg-base-100">
+    <% { "Profile" => profile_path, "User guide" => guide_path }.each do |name, path| %>
+      <% current = current_page?(path) %>
+      <li><%= link_to name, path, class: ("font-semibold" if current), aria: { current: ("page" if current) } %></li>
+    <% end %>
+    <li><button type="submit" form="sign-out">Sign out</button></li>
+  </ul>
+</details>
+<%= form_with url: session_path, method: :delete, id: "sign-out", class: "hidden" do %><% end %>

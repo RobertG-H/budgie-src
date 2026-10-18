@@ -1,0 +1,33 @@
+<% content_for :title, "Profile · Budgie" %>
+<% providers = Rails.configuration.x.auth_providers %>
+
+<%= render "components/page_header", title: "Profile", description: "Who you're signed in to Budgie as." %>
+
+<%# Everyone who signed in through a provider has one; only the seeded development user has none, and then the row is left out. %>
+<% sign_ins = capture do %>
+  <ul class="space-y-1">
+    <% @identities.each do |identity| %>
+      <li><%= providers.fetch(identity.provider.to_sym, identity.provider.titleize) %>, as <%= identity.email %></li>
+    <% end %>
+  </ul>
+<% end if @identities.any? %>
+<% currency = capture do %>
+  <% if @budget %>
+    <%= Budget::CURRENCIES.dig(@budget.currency, :name) %> (<%= @budget.currency %>)
+  <% else %>
+    Not chosen yet. <%= link_to "Set up your budget", new_budget_path, class: "link" %>
+  <% end %>
+<% end %>
+
+<%# Read-only for now. What can be changed here, such as deleting it all, comes later. %>
+<dl class="mt-8 divide-y divide-base-300 rounded-box border border-base-300">
+  <% { "Name" => @user.name.presence || "Not given", "Email" => @user.email, "Signs in with" => sign_ins,
+       "Budget currency" => currency, "Joined" => spelled_date(@user.created_at.to_date) }.compact.each do |label, value| %>
+    <div class="grid gap-1 p-4 sm:grid-cols-3 sm:gap-4">
+      <dt class="font-medium"><%= label %></dt>
+      <dd class="break-words sm:col-span-2"><%= value %></dd>
+    </div>
+  <% end %>
+</dl>
+
+<p class="mt-4 text-sm text-base-content/70">Your name comes from where you sign in, and is brought up to date each time you do.</p>

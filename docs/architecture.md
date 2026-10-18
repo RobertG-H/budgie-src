@@ -93,6 +93,16 @@ Sessions are database rows referenced by a signed, permanent cookie. They expire
 use, and `last_active_at` is written at most once an hour. The `Authentication` concern requires sign-in
 for every action; `allow_unauthenticated_access` opts out.
 
+### The menu, Profile and the User guide
+
+Sign out is in the header's menu, beside Import: a native `<details>` dropdown of **Profile**, **User guide**
+and **Sign out**, there for every signed-in person, with a budget or not, so it opens and closes without
+JavaScript; a small Stimulus controller also closes it on a click outside it, on Escape and before Turbo
+caches the page. Profile (`/profile`) is read-only for now: the person's name, email, how they sign in, their
+budget's currency and when they joined. It's called Profile and never Account, which in Budgie is a bank or
+card Account. The User guide (`/guide`) explains how to use Budgie, part by part, in the app's own words,
+and ends with the same sentence for each figure that the tooltips use. Neither page needs a budget.
+
 ### Invites
 
 Budgie is invite-only, and there's no admin page: invites are rake tasks. `Invite` has one row per email
@@ -326,7 +336,7 @@ two identical coffees on one day both come in, while the same file again, or one
 occurrence are written when the row is made and never recomputed, because they record how it first looked. The description as a
 Filing rule reads it is a separate, generated column that follows the description, which bank sync will update in place; the key never leaves out the numbers and symbols that a Filing rule's reading does.
 
-**Import from the header.** "Import" is in the header on every page, beside Sign out: one click and one file imports it when Budgie is certain which of the budget's CSV formats reads it and which
+**Import from the header.** "Import" is in the header on every page, beside the menu: one click and one file imports it when Budgie is certain which of the budget's CSV formats reads it and which
 Account it's for, and lands on the Import's summary, where Undo already is. It tries each CSV format over the file once, and a format is certain when it's the only one that reads it, or when every one that does reads the same
 rows; the Account is certain when exactly one has that format as its default CSV format. Anything less shows the whole form, with File, CSV format and Account, and the best offer chosen, with a note on what was guessed, and creates
 nothing, because duplicates are judged per Account and an unconfirmed Import into the wrong one can't be caught as one ([ADR 0014](adr/0014-importing-from-the-header-is-unconfirmed-only-when-it-is-certain.md)). A file that no format reads
@@ -505,7 +515,7 @@ An Account that's synced takes no CSV Import: its page has none, the Import form
 can't be deleted and one without takes its connection with it. Specs never call Splitwise: everything that asks it questions sits behind `Splitwise.client`, which every spec replaces. Connecting needs Splitwise's client id and
 secret and the keys the token is encrypted with, and without them it isn't offered ([Splitwise setup](splitwise.md)).
 
-The header's top row has Import, the primary button, beside Sign out, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
+The header's top row has Import, the primary button, beside the menu, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
 bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
 count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state, and of the ones to review ("8 to review"), a link to the To review state: both come from one query, counting at most 100 of each and read once per request, so every page with the header costs one query more.
 

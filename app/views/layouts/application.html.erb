@@ -42,7 +42,7 @@
         <% if authenticated? %>
           <nav aria-label="Main" class="flex flex-none items-center gap-2">
             <%= render "layouts/import_button" if Current.budget %>
-            <%= button_to "Sign out", session_path, method: :delete, class: "btn btn-ghost btn-sm" %>
+            <%= render "layouts/menu" %>
           </nav>
         <% end %>
       </div>

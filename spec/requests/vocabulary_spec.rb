@@ -79,7 +79,9 @@ RSpec.describe "The words on the pages", type: :request do
     "a month's Deposits" => -> { month_deposits_path("2026-10") },
     "the envelope page" => -> { month_envelope_path("2026-10", bills) },
     "the Assigned input" => -> { edit_month_envelope_assignment_path("2026-10", bills) },
-    "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) }
+    "the Records" => -> { records_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" }) },
+    "the Profile" => -> { profile_path },
+    "the User guide" => -> { guide_path }
   }.each do |page, path|
     it "has no table or column names in #{page}" do
       get instance_exec(&path)
@@ -132,7 +134,9 @@ RSpec.describe "The words on the pages", type: :request do
     "the Filing rule form" => -> { new_filing_rule_path },
     "the Filing rule edit form" => -> { edit_filing_rule_path(budget.filing_rules.find_by!(text: "loblaws")) },
     "the filing form for money in" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Paycheck"), from: "bank_transactions", filter: { state: "unfiled" }) },
-    "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") }
+    "the filing form for money out" => -> { new_bank_transaction_filing_path(account.bank_transactions.find_by!(description: "Loblaws"), from: "account") },
+    "the Profile" => -> { profile_path },
+    "the User guide" => -> { guide_path }
   }.each do |page, path|
     it "has no snake_case names and no retired terms in the words on #{page}" do
       get instance_exec(&path)

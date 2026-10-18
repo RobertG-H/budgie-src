@@ -1,0 +1,124 @@
+<% content_for :title, "User guide · Budgie" %>
+
+<%= render "components/page_header", title: "User guide",
+      description: "How Budgie works, from your first envelope to filing what your bank sends you." %>
+
+<%# The sections, linked to where each one starts. GuidesHelper::GUIDE_SECTIONS is the one list of them. %>
+<%= render "components/panel", tag: :nav, class: "mt-8", aria: { label: "On this page" } do %>
+  <h2 class="font-semibold">On this page</h2>
+  <%# Two columns from sm up, read down the first and then the second, in the order of the page. %>
+  <ul class="mt-2 gap-x-6 sm:columns-2">
+    <% GuidesHelper::GUIDE_SECTIONS.each do |id, heading| %>
+      <li><%= link_to heading, "##{id}", class: "link link-hover inline-block py-1" %></li>
+    <% end %>
+  </ul>
+<% end %>
+
+<%# Buttons and pages are named as the app names them, in bold, so they can be found on the page. Every word is one CLAUDE.md lists. %>
+<div class="mt-8 space-y-8">
+  <%= guide_section "how-it-works" do %>
+    <p>Budgie is an envelope budget. Money you deposit goes into Ready to Assign, and from there you give each part of it a job by assigning it to an envelope, such as Groceries, Rent or Holidays. When you spend, the money comes out of an envelope.</p>
+    <p>Envelopes never reset at the end of a month. What's left in one carries over into the next month, and so does an envelope that's Overspent, until you cover it.</p>
+    <p>The <strong>Budget</strong> page, your home page, shows one month at a time: Ready to Assign at the top, and a row for each envelope with what's Assigned to it this month and what's Available in it now.</p>
+  <% end %>
+
+  <%= guide_section "setting-up" do %>
+    <ol>
+      <li>The first time you sign in, choose your budget's currency. Every amount is in it, and the header says which it is.</li>
+      <li>Make an envelope for each thing you set money aside for, with <strong>New envelope</strong> on the Budget page. If an envelope already holds money from before you started with Budgie, such as savings, give it that as its Starting balance.</li>
+      <li>Add your first Deposit, then assign it to your envelopes.</li>
+    </ol>
+  <% end %>
+
+  <%= guide_section "deposits" do %>
+    <p>A Deposit is money coming into your budget, such as a paycheck. Add one with <strong>New deposit</strong> on the Budget page, and see a month's Deposits with <strong>See Deposits</strong> on the Ready to Assign card.</p>
+    <p>A Deposit counts toward Ready to Assign in the month of its date or, if you choose, the month after. That lets you live on last month's money: a paycheck on the 28th can be for next month.</p>
+    <p>The Ready to Assign card says in words where you are: there's money left to assign, it's all assigned, more was assigned than deposited (so some envelopes are counting on money you don't have yet), or there's nothing to assign yet.</p>
+  <% end %>
+
+  <%= guide_section "assigning" do %>
+    <p>Assigned is how much of Ready to Assign you put in an envelope for a month. Choose an envelope's Assigned amount on the Budget page, type the new one and save: Ready to Assign goes down by as much as the envelope's Available goes up. Clearing it, or setting it to 0, takes it back.</p>
+    <p>Each month starts with the Assigned amounts of the month before, so a month like the last one needs nothing from you, and you can change any of them. An amount you entered ahead for a later month stays as you entered it.</p>
+    <p>Changing a past month's Assigned changes the balances of every month after it.</p>
+  <% end %>
+
+  <%= guide_section "spends-and-refunds" do %>
+    <p>A Spend is money paid out of an envelope, such as the week's groceries from Groceries. Add one with <strong>New spend</strong> on the Budget page or on an envelope's page. The envelope's Available goes down, and Ready to Assign doesn't change, since that money was already assigned.</p>
+    <p>A Refund is money coming back to an envelope, such as a store refund, a friend paying you back for their share, or an insurance payout. It goes back into its envelope, never into Ready to Assign. Add one with <strong>New refund</strong> on an envelope's page.</p>
+    <p>An envelope whose Available is below 0 is Overspent. It says so in a word, and the amount carries into the next month until you cover it with Assigned or a Reallocation.</p>
+  <% end %>
+
+  <%= guide_section "reallocations" do %>
+    <p>A Reallocation takes money that's already in an envelope and puts it in another envelope, or back in Ready to Assign: to cover an Overspent envelope, say, or to put back holiday money you didn't use. Choose <strong>Reallocate</strong> on the page of the envelope the money comes from, then choose where it goes.</p>
+    <p>Assigned is your plan for the month, and a Reallocation is money that's already there going somewhere else, so Budgie keeps the two apart. To give an envelope more of what's in Ready to Assign, change its Assigned instead.</p>
+  <% end %>
+
+  <%= guide_section "months" do %>
+    <ul>
+      <li>The Budget page opens on this month. <strong>Previous</strong> and <strong>Next</strong> go a month either way, <strong>This month</strong> comes back, and the month's name opens a picker for any month of any year.</li>
+      <li>Choose an envelope's name to open its page for the month, with its figures and its Spends, Refunds and Reallocations.</li>
+      <li><strong>Show details</strong> adds Carried over, Refunded and Reallocated to the table. Without them, an envelope's row doesn't add up across.</li>
+      <li>The bar under an envelope's name is how much of what it had this month is still Available: blue is plenty, a short amber bar is a little, and a dashed red line is Overspent, which also says so in a word.</li>
+      <li><strong>What do these figures mean?</strong>, under the table, says what each figure is, and so does the end of this guide.</li>
+    </ul>
+  <% end %>
+
+  <%= guide_section "archiving" do %>
+    <p>When you've finished with an envelope, <strong>Archive</strong> it from its page. It needs an Available of 0 this month and nothing dated after this month. An archived envelope keeps its history and shows in a month only where it has figures, and it takes no new Spends, Refunds, Reallocations or Assigned.</p>
+    <p>Every archived envelope is listed under the Budget page's table, and <strong>Unarchive</strong> on its page brings it back. An envelope can only be deleted while nothing has been recorded in it, so archive one you've used instead.</p>
+  <% end %>
+
+  <%= guide_section "records" do %>
+    <p><strong>Records</strong> lists every Deposit, Spend, Refund and Reallocation in a range of dates, newest first. Narrow it by kind or by envelope, and choose any one to change or delete it. Money in and Money out add up the whole range.</p>
+  <% end %>
+
+  <%= guide_section "importing" do %>
+    <p>Budgie can read the CSV file your bank lets you download, so you don't type in each bank transaction yourself.</p>
+    <ol>
+      <li>In <strong>Accounts</strong>, add an Account for each bank or card account you download from.</li>
+      <li>In <strong>CSV formats</strong>, make one for your bank from a sample of its file: choose the columns that hold the date, the description and the amount. The preview shows how the file reads before you save it.</li>
+      <li>Choose <strong>Import</strong> in the header and pick the file. When Budgie is certain which CSV format reads it and which Account it's for, it imports it at once. Otherwise it asks you, with the likeliest ones chosen. An Account's Default CSV format is how Budgie knows which Account a file is for.</li>
+    </ol>
+    <p>A row that's already in the Account is skipped as a duplicate, so importing a file that overlaps the last one is safe. The Import's summary says what was added and what was skipped, and an Account's latest Import can be undone for 24 hours.</p>
+  <% end %>
+
+  <%= guide_section "filing" do %>
+    <p>A bank transaction is your bank's record of money in or out. It changes nothing in your budget until you file it: money out as a Spend, and money in as a Deposit or a Refund. Or ignore it, such as paying off a card from your bank, which is money between your own accounts.</p>
+    <ul>
+      <li><strong>Bank transactions</strong> lists them all, from every Account. The header counts the unfiled ones, such as "12 unfiled", and links to them.</li>
+      <li>Choose one to open its filing form, choose the envelope, and <strong>File</strong>. <strong>File and next</strong> goes straight on to the next unfiled one.</li>
+      <li>When one bank transaction was for several things, <strong>Add another record</strong> to split it. The records must add up to its amount exactly.</li>
+      <li>Tick several in the list to file them all to one envelope, or ignore them, at once.</li>
+      <li><strong>Un-file</strong> and <strong>Un-ignore</strong> put one back. Deleting a record that was filed from a bank transaction un-files it too.</li>
+    </ul>
+  <% end %>
+
+  <%= guide_section "filing-rules" do %>
+    <p>A Filing rule files bank transactions the same way every time, as soon as they come in: anything with "loblaws" in its description goes to Groceries, say. Tick <strong>Always file like this</strong> on the filing form to make one as you file, or add one on the <strong>Filing rules</strong> page. Numbers and symbols in a description are left out, so a store number doesn't stop a rule fitting. A rule can be kept to one Account or one amount, and can ignore instead of file.</p>
+    <p>When you make a rule, Budgie can also file the unfiled bank transactions it fits that are already there.</p>
+    <p>Everything a Filing rule filed or ignored is To review until you've looked at it. The header counts them, such as "8 to review", and <strong>Mark reviewed</strong> says you have. Your figures don't wait for it. If a rule got one wrong, Un-file it and file it yourself.</p>
+    <p>An Account can keep Filing rules off, so that every bank transaction in it waits for you. Change it on the Account's <strong>Edit</strong> page.</p>
+  <% end %>
+
+  <%= guide_section "guesses" do %>
+    <p>A Guess is what Budgie suggests for an unfiled bank transaction, from how you filed ones like it before, such as "Guess: like LOBLAWS #1234 → Groceries". The filing form starts on it. A Guess only suggests: nothing is filed until you file it.</p>
+    <p>In the unfiled list, <strong>File as guessed</strong> shows a page of Guesses for you to review, and files the ones you leave ticked.</p>
+  <% end %>
+
+  <%= guide_section "splitwise" do %>
+    <p>If you share costs with friends in Splitwise, choose <strong>Connect Splitwise</strong> on the Accounts page. Splitwise becomes an Account, and each shared cost you're part of comes in as a bank transaction of your share: money out for your part of what a friend paid, and money in for what friends owe you of what you paid. File them like any other. Money in starts as a Refund, since it's almost always a friend paying you back.</p>
+    <p>A Settle-up, money paid between friends to settle what Splitwise says they owe, comes in ignored. Ignore the bank transaction that paid it too: the shares were already filed, so settling them changes nothing in your budget.</p>
+    <p>Splitwise is synced every hour, and <strong>Sync now</strong> on its Account's page syncs it at once.</p>
+  <% end %>
+
+  <%= guide_section "figures" do %>
+    <dl class="space-y-4">
+      <% HelpHelper::TERMS.each_key do |key| %>
+        <div>
+          <dt class="font-medium"><%= help_term(key) %></dt>
+          <dd class="text-base-content/70"><%= help_text(key) %></dd>
+        </div>
+      <% end %>
+    </dl>
+  <% end %>
+</div>
