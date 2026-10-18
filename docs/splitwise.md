@@ -39,7 +39,7 @@ Development's callback is `localhost`, not `127.0.0.1`, though Compose publishes
 
 ## 2. Generate the encryption keys
 
-A connection's token is kept encrypted, with Active Record encryption, under keys that Budgie reads from the environment, since credentials can't be edited from the repo.
+A connection's token is kept encrypted, with Active Record encryption, under keys that Budgie reads from the environment, like every secret, since Budgie has no Rails credentials.
 Make one set for each destination, with `bin/rails db:encryption:init`:
 
 ```sh

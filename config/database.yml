@@ -62,9 +62,10 @@ test:
   <<: *default
   database: budgie_test
 
-# As with config/credentials.yml, you never want to store sensitive information,
-# like your database password, in your source code. If your source code is
-# ever seen by anyone, they now have access to your database.
+# Never store sensitive information, like your database password, in your
+# source code. If your source code is ever seen by anyone, they now have
+# access to your database. Budgie has no Rails credentials, so every secret
+# is an environment variable.
 #
 # Instead, provide the password or a full connection URL as an environment
 # variable when you boot the app. For example:
