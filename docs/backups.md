@@ -585,6 +585,14 @@ Then write the date in [Before production holds real data](#before-production-ho
 
 The drill proves the dump. A real restore has a different target: the host's own `budgie-db`, over SSH. Nothing on the host decrypts anything, which is why there's no restore script there: it would need the private key piped to the host, and a host never holds one.
 
+**Check your checkout is on the commit the destination runs, before you stop anything.** Kamal names the app container after a version, which is the git commit of the checkout you run it from, and `app stop`, `app start` and `dbc` look the container up by that name. `app stop` finds whatever is running by its labels, so it works from any commit, but `app start` and `dbc` fail with `Failed to get endpoint for web… did the container boot?` or `No such container: budgie-web-<destination>-<sha>` when your checkout is ahead of what was last deployed, and the app is left stopped. Find the running version first and either check that commit out or pass it with `--version`:
+
+```sh
+ssh budgie-testing 'docker ps -a --filter name=budgie-web --format "{{.Names}}: {{.Status}}"'
+```
+
+The newest `budgie-web-testing-<sha>` is the version to use. Write it down before you stop the app, since after the stop it shows as exited. Then start with `app start -d testing --version <sha>`, as in the steps below. `dbc` takes `--version <sha>` the same way.
+
 `restore-drill.sh` has `--keep`, which leaves the decrypted dump in `tmp/restore/`, a gitignored directory. It's plaintext, so delete it when you're done.
 
 ```sh
@@ -617,7 +625,7 @@ This isn't part of the quarterly drill. It's done once, so the first real restor
 3. **Start the app again,** and check it works:
 
    ```sh
-   docker compose run --rm kamal app start -d testing
+   docker compose run --rm kamal app start -d testing --version <the sha you noted>
    curl -sS -o /dev/null -w '%{http_code}\n' https://testing.budgiebuddie.com/up
    ```
 
@@ -673,6 +681,6 @@ Production's database used to be on its VPS's own disk and nowhere else. **It ho
 - [ ] The pre-deploy hook has run on a real production deploy
 - [ ] The live restore on testing has worked
 
-**Last restore drill passed:** *not yet*
+**Last restore drill passed:** 2026-10-18
 
 Write the date here when a drill passes, which is also what the quarterly issue asks for.
