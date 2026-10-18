@@ -1,5 +1,5 @@
-# The keys Active Record encrypts a bank connection's token with. They come from environment variables, because credentials can't be edited from
-# this checkout: generate them once with `bin/rails db:encryption:init` and put its primary key and its key derivation salt in the variables of their names
+# The keys Active Record encrypts a bank connection's token with. They come from environment variables, like every secret, since Budgie has no Rails
+# credentials: generate them once with `bin/rails db:encryption:init` and put its primary key and its key derivation salt in the variables of their names
 # below, in `.env` and in each destination's secrets (docs/deployment.md). Nothing here is encrypted deterministically, so the third key it prints isn't
 # needed. A different key can't read what another wrote, so a lost one means every connection has to be reconnected.
 #

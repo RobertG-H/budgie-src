@@ -84,7 +84,7 @@ RSpec.describe "Assignments", type: :request do
 
       ids = [ groceries, rent ].map do |envelope|
         patch month_envelope_assignment_path("2026-09", envelope), params: { assignment: { amount: "-5" } }
-        css_select("[id]").map { |element| element["id"] }
+        css_select("main [id]").map { |element| element["id"] }
       end
 
       expect(ids.first).to include("envelope_#{groceries.id}_assignment_amount", "envelope_#{groceries.id}_assignment_amount_error")

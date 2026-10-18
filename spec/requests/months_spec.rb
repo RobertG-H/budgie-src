@@ -825,14 +825,15 @@ RSpec.describe "Months", type: :request do
       expect(response.body.scan("CAD").size).to eq(1)
     end
 
-    it "keeps only Import and Sign out in the main navigation" do
+    it "keeps only Import and the menu in the main navigation" do
       create(:budget_envelope, budget: budget)
 
       get month_path("2026-09")
 
-      assert_select "nav[aria-label=Main] form[action='#{session_path}'] button", text: "Sign out"
-      assert_select "nav[aria-label=Main] a", count: 1
+      assert_select "nav[aria-label=Main] button[form=sign-out]", text: "Sign out"
+      assert_select "nav[aria-label=Main] > :not(details) a", count: 1
       assert_select "nav[aria-label=Main] a[href='#{new_import_path}']", text: "Import"
+      assert_select "nav[aria-label=Main] details ul.menu a", count: 2
     end
   end
 

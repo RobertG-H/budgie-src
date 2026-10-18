@@ -15,6 +15,10 @@ Rails.application.routes.draw do
 
   resource :budget, only: [ :new, :create ]
 
+  # The header's menu: who the person is signed in as, and how to use Budgie. Neither needs a budget, so both work during setup.
+  resource :profile, only: :show
+  resource :guide, only: :show
+
   # The month view is the home page: root is the current month, and any other is /months/YYYY-MM.
   get "months/:month" => "months#show", as: :month
   get "months/:month/deposits" => "deposits#index", as: :month_deposits

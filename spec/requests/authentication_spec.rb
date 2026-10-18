@@ -16,7 +16,8 @@ RSpec.describe "Authentication", type: :request do
       get root_path
 
       expect(response).to have_http_status(:ok)
-      assert_select "nav form[action='#{session_path}'] button", text: "Sign out"
+      assert_select "nav form#sign-out[action='#{session_path}']"
+      assert_select "nav button[form=sign-out]", text: "Sign out"
     end
   end
 

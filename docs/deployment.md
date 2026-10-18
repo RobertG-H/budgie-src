@@ -288,7 +288,7 @@ The four Splitwise secrets can show up here until [Splitwise is set up](splitwis
 The IP addresses aren't secrets, so this doesn't list them. If one isn't set, every command for that destination stops with `key not found` and the variable's name.
 
 Each destination has its own `SECRET_KEY_BASE`, so a cookie or signed ID from one is useless on the other.
-`RAILS_MASTER_KEY` isn't deployed at all. The credentials file holds nothing but a `secret_key_base`, which `SECRET_KEY_BASE` takes precedence over, and nothing else in the app reads credentials.
+Budgie has no Rails credentials, so there's no encrypted credentials file and no key to deploy for one: every secret is an environment variable. A new one follows the pattern of the ones above: a `TESTING_` and a `PRODUCTION_` variable in the env files and the GitHub environments, a line mapping each to the app's name in `.kamal/secrets.<destination>`, and the name in `config/deploy.yml`'s `env.secret`.
 
 PostgreSQL only reads the database password the first time it starts with an empty data directory. To change it later, change the role's password in the database too, with `ALTER ROLE budgie PASSWORD '...'` in `dbc`, or the app can no longer connect.
 
