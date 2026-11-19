@@ -1,0 +1,33 @@
+<%# PROTOTYPE (#148) variant C, "A connection page": an Account's page links to its connection's page, where the actions are, and keeps its own date to read from. A removed connection has no page, so Connect again is here. %>
+<% account = @account %>
+<% connection = connection_of(account) %>
+
+<%= link_to "Back to accounts", proto_path("accounts"), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: account.name do %>
+    <%= link_to "Edit", "#", class: "btn" %>
+  <% end %>
+</div>
+
+<div class="mt-4 space-y-4">
+  <% if connection.removed? %>
+    <p class="text-base-content/70">Was synced from <%= connection.name %>, which was disconnected. Its bank transactions stay as they are.</p>
+    <%= link_to "Connect #{connection.short_name} again", proto_path("choose-relink"), class: "btn btn-primary" %>
+  <% elsif !account.shared %>
+    <p class="text-base-content/70"><%= render "components/label_badge", text: "No longer shared" %> No longer shared from <%= link_to connection.name, proto_path("connection-#{connection.key}"), class: "link" %>, so nothing new comes in. Its bank transactions stay as they are.</p>
+  <% elsif connection.needs_reconnect? %>
+    <div role="status" class="alert alert-warning">
+      <span><%= connection.name %> stopped accepting the sign-in, so this Account isn't syncing.</span>
+      <%= link_to "Go to #{connection.short_name}", proto_path("connection-#{connection.key}"), class: "btn btn-sm" %>
+    </div>
+  <% else %>
+    <p class="text-base-content/70">Synced from <%= link_to connection.name, proto_path("connection-#{connection.key}"), class: "link" %>, <%= account.plaid_name %> ••<%= account.mask %>. Last synced <%= connection.synced_ago %> ago.</p>
+  <% end %>
+
+  <%= render "dev/connect_bank_prototype/read_from", account: account %>
+</div>
+
+<div class="mt-8">
+  <%= render "dev/connect_bank_prototype/transactions" %>
+</div>

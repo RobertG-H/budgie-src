@@ -1,0 +1,10 @@
+<%# locals: (choice:) %>
+<%# PROTOTYPE (#148): what each choice page says above its rows, by why it's open. %>
+<% case choice[:mode] %>
+<% when :new %>
+  <p class="text-base-content/70">You shared <%= pluralize(choice[:accounts].size, "account") %> from <%= choice[:connection] %>. Choose what each one becomes. Nothing is connected until you press Connect, and the choice has to be made within 30 minutes.</p>
+<% when :relink %>
+  <p class="text-base-content/70">One of these looks like an Account from your removed Wealthsimple connection, so it starts linked onto it and carries on where it stopped. Nothing is connected until you press Connect.</p>
+<% when :more %>
+  <p class="text-base-content/70">These are the accounts you shared from <%= choice[:connection] %> that aren't Accounts yet. <%= choice[:connection] %>'s Accounts stay as they are.</p>
+<% end %>

@@ -1,0 +1,46 @@
+<%# PROTOTYPE (#148) variant A: the choice page as a list, one shared account per row, with one select for what it becomes: New Account, one of the Accounts it can link onto (by name, in the same select), or Leave out. The fields for that choice are under it. %>
+<% choice = @choice %>
+
+<div class="mx-auto max-w-xl">
+  <%= render "components/page_header", title: (choice[:mode] == :more ? "Choose accounts on #{choice[:connection]}" : "Connect #{choice[:connection]}") %>
+  <div class="mt-2"><%= render "dev/connect_bank_prototype/choice_intro", choice: choice %></div>
+
+  <ol class="mt-8 list rounded-box border border-base-300">
+    <% choice[:accounts].each do |pa| %>
+      <% other = pa.currency != @budget.currency %>
+      <li class="list-row block space-y-4 <%= "opacity-60" if other %>" data-controller="prototype-choice">
+        <div>
+          <p class="font-semibold"><%= pa.plaid_name %> <span class="font-normal text-base-content/70">••<%= pa.mask %></span></p>
+          <p class="text-sm text-base-content/70"><%= pa.subtype %> · <%= pa.currency %></p>
+        </div>
+
+        <div class="space-y-2">
+          <label class="block font-medium" for="becomes_<%= pa.id %>">Becomes</label>
+          <% if other %>
+            <select id="becomes_<%= pa.id %>" class="select w-full" disabled data-choice aria-describedby="currency_<%= pa.id %>"><option value="leave">Left out</option></select>
+            <p id="currency_<%= pa.id %>" class="text-sm text-base-content/70">It's in <%= pa.currency %> and your budget is in <%= @budget.currency %>, so it can only be left out.</p>
+          <% else %>
+            <select id="becomes_<%= pa.id %>" class="select w-full border-base-content/55" data-choice data-action="prototype-choice#update">
+              <option value="new" <%= "selected" if pa.start == :new %>>A new Account</option>
+              <optgroup label="Link onto an existing Account">
+                <% choice[:targets].each do |account| %>
+                  <option value="link:<%= account.key %>" data-latest="<%= account.latest_row&.iso8601 %>" data-latest-text="<%= account.latest_row ? spelled_date(account.latest_row) : "" %>" <%= "selected" if pa.link_target == account.key %>><%= account.name %></option>
+                <% end %>
+              </optgroup>
+              <option value="leave" <%= "selected" if pa.start == :leave %>>Leave out</option>
+            </select>
+          <% end %>
+        </div>
+
+        <% unless other %>
+          <%= render "dev/connect_bank_prototype/choice_panels", choice: choice, plaid_account: pa %>
+        <% end %>
+      </li>
+    <% end %>
+  </ol>
+
+  <div class="mt-8 flex flex-wrap items-center gap-2">
+    <%= link_to (choice[:mode] == :more ? "Save" : "Connect #{choice[:connection]}"), proto_path("accounts", did: (choice[:mode] == :more ? "chose" : "connected")), class: "btn btn-primary" %>
+    <%= link_to "Cancel", proto_path("accounts"), class: "btn btn-ghost" %>
+  </div>
+</div>

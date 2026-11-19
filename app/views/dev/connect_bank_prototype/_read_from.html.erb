@@ -1,0 +1,16 @@
+<%# locals: (account:) %>
+<%# PROTOTYPE (#148): the Account's own date to read from (ADR 0018 moved it off the connection), as the Splitwise page has it today. %>
+<details class="rounded-box border border-base-300">
+  <summary class="cursor-pointer p-4">
+    <span class="font-semibold">Date to read from</span>
+    <span class="block text-sm text-base-content/70">Bank transactions dated from <%= spelled_date(account.read_from) %></span>
+  </summary>
+  <div class="space-y-6 border-t border-base-300 p-4">
+    <div class="space-y-2">
+      <label class="block font-medium" for="read_from_<%= account.key %>">Read bank transactions dated from</label>
+      <input id="read_from_<%= account.key %>" type="date" class="input w-full border-base-content/55" value="<%= account.read_from.iso8601 %>">
+      <p class="text-sm text-base-content/70">Bank transactions dated before this are never read. Changing it makes the next sync read every one dated from it again; none comes in twice. What's already here stays as it is.</p>
+    </div>
+    <%= link_to "Change date", proto_path(@screen, did: "date"), class: "btn" %>
+  </div>
+</details>

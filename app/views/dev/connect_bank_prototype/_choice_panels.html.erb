@@ -1,0 +1,45 @@
+<%# locals: (choice:, plaid_account:, target_select: false, compact: false) %>
+<%# PROTOTYPE (#148): the fields under one shared account's choice, one panel per outcome, shown by the prototype-choice controller. `target_select` adds the Account to link onto (variant B, whose choice is a radio); A and C put the Accounts in the choice's own select. %>
+<% pa = plaid_account %>
+<% target = choice[:targets].find { it.key == pa.link_target } || choice[:targets].first %>
+<% earliest = Date.new(2025, 1, 2) %>
+<% label_class = compact ? "sr-only" : "block font-medium" %>
+
+<div class="<%= compact ? "space-y-2" : "space-y-4" %>" data-prototype-choice-target="panel" data-for="new">
+  <div class="space-y-2">
+    <label class="<%= label_class %>" for="name_<%= pa.id %>">Account name</label>
+    <input id="name_<%= pa.id %>" class="input w-full border-base-content/55" value="<%= default_name(choice, pa) %>">
+  </div>
+  <div class="space-y-2">
+    <label class="<%= label_class %>" for="from_new_<%= pa.id %>">Read bank transactions dated from</label>
+    <input id="from_new_<%= pa.id %>" type="date" class="input w-full border-base-content/55" value="<%= earliest.iso8601 %>" data-prototype-choice-target="date">
+    <% unless compact %>
+      <p class="text-sm text-base-content/70">Your earliest bank transaction's date, so it lines up with the rest of your Accounts. Plaid has up to two years before today.</p>
+    <% end %>
+  </div>
+</div>
+
+<div class="<%= compact ? "space-y-2" : "space-y-4" %>" data-prototype-choice-target="panel" data-for="link" hidden>
+  <% if target_select %>
+    <div class="space-y-2">
+      <label class="block font-medium" for="target_<%= pa.id %>">Account</label>
+      <select id="target_<%= pa.id %>" class="select w-full border-base-content/55" data-link-target data-action="prototype-choice#update">
+        <% choice[:targets].each do |account| %>
+          <option value="<%= account.key %>" data-latest="<%= account.latest_row&.iso8601 %>" data-latest-text="<%= account.latest_row ? spelled_date(account.latest_row) : "" %>" <%= "selected" if account == target %>>
+            <%= account.name %><%= " (from a removed connection)" if account.synced? %>
+          </option>
+        <% end %>
+      </select>
+      <p class="text-sm text-base-content/70">It keeps its name, bank transactions and Filing rules, and takes no CSV Import while it's synced.</p>
+    </div>
+  <% end %>
+  <div class="space-y-2">
+    <label class="<%= label_class %>" for="from_link_<%= pa.id %>">Read bank transactions dated from</label>
+    <input id="from_link_<%= pa.id %>" type="date" class="input w-full border-base-content/55" value="<%= target.latest_row&.iso8601 %>" data-prototype-choice-target="date">
+    <p class="text-sm text-base-content/70">The date of its latest bank transaction. Bank transactions from <span data-prototype-choice-target="day"><%= target.latest_row ? spelled_date(target.latest_row) : "that day" %></span> may come in twice, unfiled, for you to ignore.</p>
+  </div>
+</div>
+
+<div data-prototype-choice-target="panel" data-for="leave" hidden>
+  <p class="text-sm text-base-content/70">Not synced. Choose accounts on <%= choice[:connection] %> can add it later.</p>
+</div>

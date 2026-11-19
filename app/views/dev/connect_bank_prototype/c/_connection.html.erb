@@ -1,0 +1,56 @@
+<%# PROTOTYPE (#148) variant C, "A connection page": one page for a connection, with its actions in the header and its Accounts in a table, each with its own date to read from and whether it's still shared. %>
+<% connection = @connection %>
+
+<%= link_to "Back to accounts", proto_path("accounts"), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: connection.name,
+        badge: (render("components/warning_badge", text: "Needs reconnecting") if connection.needs_reconnect?),
+        description: "A connection to #{connection.name} through Plaid. It syncs every hour." do %>
+    <% if connection.needs_reconnect? %>
+      <%= link_to "Reconnect", proto_path(@screen, did: "reconnected"), class: "btn btn-primary" %>
+    <% else %>
+      <%= link_to "Sync now", proto_path(@screen, did: "sync"), class: "btn btn-primary" %>
+      <%= link_to "Reconnect", proto_path(@screen, did: "reconnected"), class: "btn" %>
+    <% end %>
+    <%= link_to "Choose accounts", proto_path("choose-more"), class: "btn" %>
+  <% end %>
+</div>
+
+<div class="mt-4">
+  <% if connection.needs_reconnect? %>
+    <div role="status" class="alert alert-warning">
+      <span><%= connection.name %> stopped accepting the sign-in, so none of its Accounts is syncing. Reconnect to start again; nothing is missed, since each Account carries on from where it stopped.</span>
+    </div>
+  <% else %>
+    <p class="text-sm text-base-content/70">Last synced <%= connection.synced_ago %> ago.</p>
+  <% end %>
+</div>
+
+<section class="mt-8 space-y-2" aria-labelledby="connection-accounts">
+  <h2 id="connection-accounts" class="text-lg font-semibold">Accounts</h2>
+  <%= render "components/table", caption: "#{connection.name}'s Accounts" do %>
+    <thead>
+      <tr><th class="min-w-40">Account</th><th>Reads from</th></tr>
+    </thead>
+    <tbody>
+      <% accounts_of(connection).each do |account| %>
+        <tr>
+          <td>
+            <%= link_to account.name, proto_path("account-#{account.key}"), class: "link font-medium" %>
+            <% unless account.shared %> <%= render "components/label_badge", text: "No longer shared" %><% end %>
+            <span class="block text-base-content/70"><%= account.plaid_name %> ••<%= account.mask %> · <%= pluralize(account.count, "bank transaction") %></span>
+          </td>
+          <td class="whitespace-nowrap align-top"><%= spelled_date(account.read_from) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  <% end %>
+  <p class="text-sm text-base-content/70">An Account's date to read from is changed on its page.</p>
+</section>
+
+<section class="mt-8 space-y-2" aria-labelledby="connection-disconnect">
+  <h2 id="connection-disconnect" class="text-lg font-semibold">Disconnect</h2>
+  <p class="text-base-content/70">Budgie asks Plaid to remove the connection for good. Its Accounts keep their bank transactions and what they were filed as, but nothing new comes in.</p>
+  <%= link_to "Disconnect #{connection.short_name}", proto_path("accounts", did: "disconnected"), class: "btn btn-ghost text-error", data: { turbo_confirm: disconnect_confirm(connection) } %>
+</section>

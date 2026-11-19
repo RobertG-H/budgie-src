@@ -1,0 +1,59 @@
+<%# PROTOTYPE (#148) variant A, "On each Account": every synced Account's page carries its connection's panel, as a Splitwise Account's does today. The actions act on the whole connection, so the panel names the other Accounts they reach. %>
+<% account = @account %>
+<% connection = connection_of(account) %>
+<% others = accounts_of(connection) - [ account ] %>
+
+<%= link_to "Back to accounts", proto_path("accounts"), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: account.name do %>
+    <%= link_to "Edit", "#", class: "btn" %>
+  <% end %>
+</div>
+
+<div class="mt-4 space-y-4">
+  <%# How this Account stands, then the connection's. %>
+  <% if !account.shared %>
+    <div role="status" class="alert alert-warning">
+      <span>No longer shared from <%= connection.name %>, so nothing new comes in. Its bank transactions stay as they are. Choose accounts to share it again.</span>
+    </div>
+  <% end %>
+
+  <%= render "components/panel" do %>
+    <h2 class="font-semibold"><%= connection.name %></h2>
+    <% if connection.removed? %>
+      <p class="mt-1 text-base-content/70">Disconnected from <%= connection.name %>, so this Account isn't syncing. Its bank transactions stay as they are. Connecting again starts a new connection and offers to link onto this Account.</p>
+    <% elsif connection.needs_reconnect? %>
+      <div role="status" class="alert alert-warning mt-2">
+        <span><%= connection.name %> stopped accepting the sign-in, so <%= others.any? ? "this Account and #{others.map(&:name).to_sentence} aren't" : "this Account isn't" %> syncing. Reconnect to start again.</span>
+      </div>
+    <% else %>
+      <p class="mt-1 text-base-content/70">
+        <% if account.shared %>Synced from <%= connection.name %>, <%= account.plaid_name %> ••<%= account.mask %>.<% end %>
+        <% if others.any? %>
+          The same connection syncs <%= safe_join(others.map { link_to(it.name, proto_path("account-#{it.key}"), class: "link") }, ", ") %>, so what's done here is done to <%= others.size == 1 ? "it" : "them" %> too.
+        <% end %>
+      </p>
+      <p class="mt-1 text-sm text-base-content/70">Last synced <%= connection.synced_ago %> ago.</p>
+    <% end %>
+
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+      <% if connection.removed? %>
+        <%= link_to "Connect #{connection.short_name} again", proto_path("choose-relink"), class: "btn btn-primary" %>
+      <% else %>
+        <% if connection.connected? %>
+          <%= link_to "Sync #{connection.short_name} now", proto_path(@screen, did: "sync"), class: "btn btn-primary" %>
+        <% end %>
+        <%= link_to "Reconnect", proto_path(@screen, did: "reconnected"), class: class_names("btn", "btn-primary": connection.needs_reconnect?) %>
+        <%= link_to "Choose accounts", proto_path("choose-more"), class: "btn" %>
+        <%= link_to "Disconnect #{connection.short_name}", proto_path("accounts", did: "disconnected"), class: "btn btn-ghost text-error", data: { turbo_confirm: disconnect_confirm(connection) } %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%= render "dev/connect_bank_prototype/read_from", account: account %>
+</div>
+
+<div class="mt-8">
+  <%= render "dev/connect_bank_prototype/transactions" %>
+</div>

@@ -1,0 +1,33 @@
+<%# PROTOTYPE (#148) variant B, "Grouped on Accounts": an Account's page says where it's synced from in one line and points at its group on the Accounts page for the connection's actions. Only what's the Account's own is here: its date to read from. %>
+<% account = @account %>
+<% connection = connection_of(account) %>
+
+<%= link_to "Back to accounts", proto_path("accounts"), class: "link" %>
+
+<div class="mt-4">
+  <%= render "components/page_header", title: account.name do %>
+    <%= link_to "Edit", "#", class: "btn" %>
+  <% end %>
+</div>
+
+<div class="mt-4 space-y-4">
+  <% if !account.shared %>
+    <p class="text-base-content/70"><%= render "components/label_badge", text: "No longer shared" %> No longer shared from <%= connection.name %>, so nothing new comes in. Its bank transactions stay as they are.</p>
+  <% elsif connection.removed? %>
+    <p class="text-base-content/70">Was synced from <%= connection.name %>, which was disconnected. Its bank transactions stay as they are.</p>
+  <% elsif connection.needs_reconnect? %>
+    <div role="status" class="alert alert-warning">
+      <span><%= connection.name %> stopped accepting the sign-in, so this Account isn't syncing.</span>
+      <%= link_to "Reconnect on Accounts", proto_path("accounts"), class: "btn btn-sm" %>
+    </div>
+  <% else %>
+    <p class="text-base-content/70">Synced from <%= connection.name %>, <%= account.plaid_name %> ••<%= account.mask %>. Last synced <%= connection.synced_ago %> ago.</p>
+  <% end %>
+  <p class="text-sm text-base-content/70"><%= link_to "Sync now, Reconnect and the rest", proto_path("accounts", variant: "B"), class: "link" %> are on Accounts, beside <%= connection.name %>'s Accounts.</p>
+
+  <%= render "dev/connect_bank_prototype/read_from", account: account %>
+</div>
+
+<div class="mt-8">
+  <%= render "dev/connect_bank_prototype/transactions" %>
+</div>

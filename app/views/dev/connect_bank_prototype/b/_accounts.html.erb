@@ -1,0 +1,75 @@
+<%# PROTOTYPE (#148) variant B, "Grouped on Accounts": the Accounts page groups synced Accounts under their connection, and the connection's actions sit on its group: Sync now in sight, the rarer ones in a More menu. CSV Accounts are a group of their own. An Account's page only points here. %>
+<%= render "components/page_header", title: "Accounts",
+      description: "The real bank and card accounts your bank transactions come from. Budgie doesn't track what's in them." do %>
+  <%= link_to "Connect a bank", proto_path("choose-new"), class: "btn", title: "Plaid Link opens first; then the choice page" %>
+  <%= link_to "Connect Splitwise", "#", class: "btn" %>
+  <%= link_to "New account", "#", class: "btn btn-primary" %>
+<% end %>
+
+<div class="mt-8 space-y-8">
+  <% @connections.each_value do |connection| %>
+    <section aria-labelledby="group-<%= connection.key %>" class="space-y-2">
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="group-<%= connection.key %>" class="text-lg font-semibold">
+            <%= connection.name %>
+            <% if connection.needs_reconnect? %><span class="align-middle"><%= render "components/warning_badge", text: "Needs reconnecting" %></span><% end %>
+            <% if connection.removed? %><span class="align-middle"><%= render "components/label_badge", text: "Disconnected" %></span><% end %>
+          </h2>
+          <p class="text-sm text-base-content/70">
+            <% if connection.removed? %>
+              Its Accounts keep their bank transactions. Connecting again offers to link onto them.
+            <% elsif connection.needs_reconnect? %>
+              <%= connection.name %> stopped accepting the sign-in, so these aren't syncing. Last synced <%= connection.synced_ago %> ago.
+            <% else %>
+              Last synced <%= connection.synced_ago %> ago.
+            <% end %>
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <% if connection.removed? %>
+            <%= link_to "Connect #{connection.short_name} again", proto_path("choose-relink"), class: "btn btn-sm" %>
+          <% else %>
+            <% if connection.needs_reconnect? %>
+              <%= link_to "Reconnect", proto_path(@screen, did: "reconnected"), class: "btn btn-sm btn-primary" %>
+            <% else %>
+              <%= link_to "Sync now", proto_path(@screen, did: "sync"), class: "btn btn-sm" %>
+            <% end %>
+            <details class="dropdown dropdown-end" data-controller="menu" data-action="click@window->menu#closeFromOutside keydown.esc@window->menu#closeFromKeyboard turbo:before-cache@document->menu#close">
+              <summary class="btn btn-sm btn-ghost">More<span class="sr-only"> for <%= connection.name %></span> <span aria-hidden="true">▾</span></summary>
+              <ul class="menu dropdown-content z-10 w-52 rounded-box border border-base-300 bg-base-100 p-2">
+                <% unless connection.needs_reconnect? %><li><%= link_to "Reconnect", proto_path(@screen, did: "reconnected") %></li><% end %>
+                <li><%= link_to "Choose accounts", proto_path("choose-more") %></li>
+                <li><%= link_to "Disconnect", proto_path(@screen, did: "disconnected"), class: "text-error", data: { turbo_confirm: disconnect_confirm(connection) } %></li>
+              </ul>
+            </details>
+          <% end %>
+        </div>
+      </div>
+
+      <%= render "components/record_list" do %>
+        <% accounts_of(connection).each do |account| %>
+          <%= render "components/link_row", href: proto_path("account-#{account.key}"), name: account.name,
+                badge: ("No longer shared" unless account.shared),
+                detail: "#{account.plaid_name} ••#{account.mask}. #{pluralize(account.count, "bank transaction")}" %>
+        <% end %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section aria-labelledby="group-splitwise" class="space-y-2">
+    <h2 id="group-splitwise" class="text-lg font-semibold">Splitwise</h2>
+    <%= render "components/record_list" do %>
+      <%= render "components/link_row", href: "#", name: @splitwise[:name], detail: "57 bank transactions" %>
+    <% end %>
+  </section>
+
+  <section aria-labelledby="group-csv" class="space-y-2">
+    <h2 id="group-csv" class="text-lg font-semibold">Imported from CSV files</h2>
+    <%= render "components/record_list" do %>
+      <%= render "components/link_row", href: "#", name: "Amex Cobalt", detail: "133 bank transactions" %>
+      <%= render "components/link_row", href: "#", name: "Tangerine Chequing", detail: "No bank transactions yet." %>
+    <% end %>
+  </section>
+</div>

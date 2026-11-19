@@ -1,0 +1,14 @@
+<%# PROTOTYPE (#148): a few stub bank transactions, so an Account's page looks lived in. %>
+<% rows = [
+     [ Date.new(2026, 11, 18), "LOBLAWS #1029", -82.45, "Spend from Groceries" ],
+     [ Date.new(2026, 11, 17), "PRESTO FARE/SHWQFXPDDF", -3.30, nil ],
+     [ Date.new(2026, 11, 15), "PAYROLL ACME CORP", 2800.00, "Deposit" ],
+     [ Date.new(2026, 11, 14), "DOLLARAMA #1595", -11.30, "Spend from Household" ]
+   ] %>
+<%= render "components/record_list" do %>
+  <% rows.each do |date, description, amount, filed| %>
+    <%= render "components/record_row", href: nil, date: date, description: description, amount: amount.to_d, budget: @budget do %>
+      <span class="block text-base-content/70"><%= filed ? "Filed: #{filed}" : "Unfiled" %></span>
+    <% end %>
+  <% end %>
+<% end %>

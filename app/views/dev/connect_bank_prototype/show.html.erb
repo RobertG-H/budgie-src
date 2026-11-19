@@ -1,0 +1,17 @@
+<%# PROTOTYPE (#148), throwaway. Three variants of the Connect a bank flow, switchable via ?variant=, on one dev-only route. %>
+<% content_for :title, "Prototype: Connect a bank · Budgie" %>
+<% kind = @screen.split("-").first %>
+
+<div class="pb-24">
+  <% if kind == "connection" && @variant != "C" %>
+    <%= render "components/empty_state", title: "No connection page in variant #{@variant}",
+          message: "Only variant C has a page for a connection. In #{@variant}, its actions are #{@variant == "A" ? "on each of its Accounts' pages" : "on the Accounts page, in its group"}." do %>
+      <%= link_to "See it in C", proto_path(@screen, variant: "C"), class: "btn btn-primary" %>
+      <%= link_to "Accounts", proto_path("accounts"), class: "btn" %>
+    <% end %>
+  <% else %>
+    <%= render "dev/connect_bank_prototype/#{@variant.downcase}/#{kind}" %>
+  <% end %>
+</div>
+
+<%= render "dev/connect_bank_prototype/switcher" %>

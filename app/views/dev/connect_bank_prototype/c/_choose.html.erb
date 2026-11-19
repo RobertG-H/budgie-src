@@ -1,0 +1,70 @@
+<%# PROTOTYPE (#148) variant C: the choice page checkbox-first. Each shared account is ticked to sync it (unticked is left out), and a ticked one picks New Account or the Account to link onto in one select. Its date to read from is already right in almost every case, so it's folded into a closed details on the row that says what it is. %>
+<% choice = @choice %>
+<% earliest = Date.new(2025, 1, 2) %>
+
+<div class="mx-auto max-w-xl">
+  <%= render "components/page_header", title: (choice[:mode] == :more ? "Choose accounts on #{choice[:connection]}" : "Connect #{choice[:connection]}") %>
+  <div class="mt-2"><%= render "dev/connect_bank_prototype/choice_intro", choice: choice %></div>
+
+  <h2 class="mt-8 font-semibold">Sync these accounts</h2>
+  <ul class="mt-2 list rounded-box border border-base-300">
+    <% choice[:accounts].each do |pa| %>
+      <% other = pa.currency != @budget.currency %>
+      <% target = choice[:targets].find { it.key == pa.link_target } || choice[:targets].first %>
+      <li class="list-row block" data-controller="prototype-choice">
+        <div class="flex items-start gap-3">
+          <input id="include_<%= pa.id %>" type="checkbox" class="checkbox checkbox-primary mt-1" data-include data-action="prototype-choice#update"
+                 <%= "checked" unless other || pa.start == :leave %> <%= "disabled" if other %> <%= "aria-describedby=currency_#{pa.id}" if other %>>
+          <div class="min-w-0 grow space-y-3">
+            <label for="include_<%= pa.id %>" class="block cursor-pointer <%= "text-base-content/70" if other %>">
+              <span class="font-semibold"><%= pa.plaid_name %></span> <span class="text-base-content/70">••<%= pa.mask %> · <%= pa.subtype %></span>
+            </label>
+
+            <% if other %>
+              <p id="currency_<%= pa.id %>" class="text-sm text-base-content/70">In <%= pa.currency %>, and your budget is in <%= @budget.currency %>, so it can't be synced.</p>
+            <% else %>
+              <div class="space-y-3" data-prototype-choice-target="panel" data-for="new link">
+                <div class="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center">
+                  <label for="as_<%= pa.id %>" class="text-sm font-medium">As</label>
+                  <select id="as_<%= pa.id %>" class="select select-sm w-full border-base-content/55" data-choice data-action="prototype-choice#update">
+                    <option value="new" <%= "selected" if pa.start == :new %>>A new Account</option>
+                    <optgroup label="Link onto">
+                      <% choice[:targets].each do |account| %>
+                        <option value="link:<%= account.key %>" data-latest="<%= account.latest_row&.iso8601 %>" data-latest-text="<%= account.latest_row ? spelled_date(account.latest_row) : "" %>" <%= "selected" if pa.link_target == account.key %>><%= account.name %></option>
+                      <% end %>
+                    </optgroup>
+                  </select>
+                  <label for="name_<%= pa.id %>" class="text-sm font-medium" data-prototype-choice-target="panel" data-for="new">Named</label>
+                  <input id="name_<%= pa.id %>" class="input input-sm w-full border-base-content/55" value="<%= default_name(choice, pa) %>" data-prototype-choice-target="panel" data-for="new">
+                </div>
+
+                <details class="text-sm">
+                  <summary class="cursor-pointer text-base-content/70">
+                    <span data-prototype-choice-target="panel" data-for="new">Reads from <%= spelled_date(earliest) %>, your earliest bank transaction's date</span>
+                    <span data-prototype-choice-target="panel" data-for="link" hidden>Reads from <span data-prototype-choice-target="day"><%= target.latest_row ? spelled_date(target.latest_row) : "its latest bank transaction" %></span>, which may come in twice</span>
+                  </summary>
+                  <div class="mt-2 space-y-2">
+                    <div data-prototype-choice-target="panel" data-for="new">
+                      <label class="sr-only" for="from_new_<%= pa.id %>">Read bank transactions dated from</label>
+                      <input id="from_new_<%= pa.id %>" type="date" class="input input-sm border-base-content/55" value="<%= earliest.iso8601 %>">
+                    </div>
+                    <div data-prototype-choice-target="panel" data-for="link" hidden>
+                      <label class="sr-only" for="from_link_<%= pa.id %>">Read bank transactions dated from</label>
+                      <input id="from_link_<%= pa.id %>" type="date" class="input input-sm border-base-content/55" value="<%= target.latest_row&.iso8601 %>" data-prototype-choice-target="date">
+                      <p class="mt-2 text-base-content/70">The date of its latest bank transaction, so nothing is missed: that day's bank transactions may come in again, unfiled, for you to ignore.</p>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </li>
+    <% end %>
+  </ul>
+
+  <div class="mt-8 flex flex-wrap items-center gap-2">
+    <%= link_to (choice[:mode] == :more ? "Save" : "Connect #{choice[:connection]}"), proto_path("accounts", did: (choice[:mode] == :more ? "chose" : "connected")), class: "btn btn-primary" %>
+    <%= link_to "Cancel", proto_path("accounts"), class: "btn btn-ghost" %>
+  </div>
+</div>

@@ -1,0 +1,45 @@
+<%# PROTOTYPE (#148) variant C, "A connection page": the Accounts page lists the bank connections first, each a row that opens its own page, where its actions are; the Accounts list below stays flat, as today. %>
+<%= render "components/page_header", title: "Accounts",
+      description: "The real bank and card accounts your bank transactions come from. Budgie doesn't track what's in them." do %>
+  <%= link_to "Connect a bank", proto_path("choose-new"), class: "btn", title: "Plaid Link opens first; then the choice page" %>
+  <%= link_to "Connect Splitwise", "#", class: "btn" %>
+  <%= link_to "New account", "#", class: "btn btn-primary" %>
+<% end %>
+
+<section class="mt-8 space-y-2" aria-labelledby="connections-heading">
+  <h2 id="connections-heading" class="text-lg font-semibold">Bank connections</h2>
+  <%= render "components/record_list" do %>
+    <% @connections.each_value do |connection| %>
+      <% accounts = accounts_of(connection) %>
+      <li>
+        <%= link_to proto_path(connection.removed? ? "account-wealthsimple" : "connection-#{connection.key}"), class: "list-row hover:bg-base-200" do %>
+          <span class="list-col-grow">
+            <span class="block font-semibold">
+              <%= connection.name %>
+              <% if connection.needs_reconnect? %><%= render "components/warning_badge", text: "Needs reconnecting" %><% end %>
+              <% if connection.removed? %><%= render "components/label_badge", text: "Disconnected" %><% end %>
+            </span>
+            <span class="block text-base-content/70">
+              <%= accounts.map(&:name).to_sentence %>.
+              <%= connection.removed? ? "Not syncing." : "Last synced #{connection.synced_ago} ago." %>
+            </span>
+          </span>
+        <% end %>
+      </li>
+    <% end %>
+  <% end %>
+</section>
+
+<section class="mt-8 space-y-2" aria-labelledby="accounts-heading">
+  <h2 id="accounts-heading" class="text-lg font-semibold">Accounts</h2>
+  <%= render "components/record_list" do %>
+    <%= render "components/link_row", href: "#", name: "Amex Cobalt", detail: "133 bank transactions" %>
+    <%= render "components/link_row", href: proto_path("account-cibc"), name: "CIBC Dividend Visa", detail: "Synced from CIBC. 196 bank transactions" %>
+    <%= render "components/link_row", href: "#", name: @splitwise[:name], detail: @splitwise[:detail] %>
+    <%= render "components/link_row", href: proto_path("account-savings"), name: "TD High Interest Savings Account", detail: "Synced from TD Canada Trust. 23 bank transactions" %>
+    <%= render "components/link_row", href: proto_path("account-unshared"), name: "TD Aeroplan Visa", badge: "No longer shared", detail: "Was synced from TD Canada Trust. 288 bank transactions" %>
+    <%= render "components/link_row", href: proto_path("account-td"), name: "TD Chequing", detail: "Synced from TD Canada Trust. 412 bank transactions" %>
+    <%= render "components/link_row", href: "#", name: "Tangerine Chequing", detail: "No bank transactions yet." %>
+    <%= render "components/link_row", href: proto_path("account-wealthsimple"), name: "Wealthsimple Cash", detail: "Was synced from Wealthsimple. 74 bank transactions" %>
+  <% end %>
+</section>

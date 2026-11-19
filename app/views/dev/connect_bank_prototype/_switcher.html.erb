@@ -1,0 +1,21 @@
+<%# PROTOTYPE (#148), throwaway: the floating bar. Deliberately not the app's look, so it's obviously not part of the design. Development only. %>
+<% if Rails.env.development? %>
+  <div class="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4"
+       data-controller="prototype-switcher"
+       data-prototype-switcher-variants-value="<%= Dev::ConnectBankPrototypeController::VARIANTS.keys.to_json %>"
+       data-prototype-switcher-variant-value="<%= @variant %>"
+       data-prototype-switcher-screen-value="<%= @screen %>"
+       data-prototype-switcher-base-value="/dev/prototype/connect-bank">
+    <div class="flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full bg-neutral p-2 text-neutral-content ring-4 ring-accent">
+      <button type="button" class="btn btn-circle btn-sm" data-action="prototype-switcher#previous" aria-label="Previous variant">←</button>
+      <span class="px-2 text-sm font-semibold whitespace-nowrap"><%= @variant %> (<%= Dev::ConnectBankPrototypeController::VARIANTS[@variant] %>)</span>
+      <button type="button" class="btn btn-circle btn-sm" data-action="prototype-switcher#next" aria-label="Next variant">→</button>
+      <label class="sr-only" for="prototype-screen">Screen</label>
+      <select id="prototype-screen" class="select select-sm w-56 text-base-content" data-action="prototype-switcher#screen">
+        <% Dev::ConnectBankPrototypeController::SCREENS.each do |key, label| %>
+          <option value="<%= key %>" <%= "selected" if key == @screen %>><%= label %></option>
+        <% end %>
+      </select>
+    </div>
+  </div>
+<% end %>

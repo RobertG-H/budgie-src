@@ -1,0 +1,36 @@
+<%# PROTOTYPE (#148) variant A, "On each Account": the Accounts list stays flat, as today. A connection has no place of its own; each synced Account's row says where it's from, and anything wrong with the connection is said on the row. %>
+<%= render "components/page_header", title: "Accounts",
+      description: "The real bank and card accounts your bank transactions come from. Budgie doesn't track what's in them." do %>
+  <%= link_to "Connect a bank", proto_path("choose-new"), class: "btn", title: "Plaid Link opens first; then the choice page" %>
+  <%= link_to "Connect Splitwise", "#", class: "btn" %>
+  <%= link_to "New account", "#", class: "btn btn-primary" %>
+<% end %>
+
+<div class="mt-8">
+  <%= render "components/record_list" do %>
+    <% rows = [
+         [ "amex", "133 bank transactions", nil ],
+         [ "cibc", "Synced from CIBC. 196 bank transactions", "CIBC stopped accepting the sign-in. Reconnect it on this Account." ],
+         [ "savings", "Synced from TD Canada Trust. 23 bank transactions", nil ],
+         [ "unshared", "No longer shared from TD Canada Trust. 288 bank transactions", nil ],
+         [ "td", "Synced from TD Canada Trust. 412 bank transactions", nil ],
+         [ "tangerine", "No bank transactions yet.", nil ],
+         [ "wealthsimple", "Was synced from Wealthsimple, which was disconnected. 74 bank transactions", nil ]
+       ] %>
+    <% rows.each do |key, detail, warning| %>
+      <% account = @accounts[key] %>
+      <li>
+        <%= link_to proto_path("account-#{key}"), class: "list-row hover:bg-base-200" do %>
+          <span class="list-col-grow">
+            <span class="block font-semibold"><%= account.name %></span>
+            <span class="block text-base-content/70"><%= detail %></span>
+            <% if warning %>
+              <span class="mt-1 flex flex-wrap items-center gap-2"><%= render "components/warning_badge", text: "Needs reconnecting" %> <span class="text-sm"><%= warning %></span></span>
+            <% end %>
+          </span>
+        <% end %>
+      </li>
+    <% end %>
+    <%= render "components/link_row", href: "#", name: @splitwise[:name], detail: @splitwise[:detail] %>
+  <% end %>
+</div>

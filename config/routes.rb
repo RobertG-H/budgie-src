@@ -106,6 +106,8 @@ Rails.application.routes.draw do
     scope module: :dev do
       get "styleguide" => "styleguide#show"
       get "dev/sign_in" => "sessions#create", as: :dev_sign_in
+      # PROTOTYPE (#148), throwaway: the Connect a bank flow's variants. Only on prototype/connect-bank-148.
+      get "dev/prototype/connect-bank(/:screen)" => "connect_bank_prototype#show", as: :connect_bank_prototype
     end
   end
 

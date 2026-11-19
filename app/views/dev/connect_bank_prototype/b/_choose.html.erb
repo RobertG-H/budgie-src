@@ -1,0 +1,39 @@
+<%# PROTOTYPE (#148) variant B: the choice page as one box per shared account, with its three outcomes as radio buttons spelled out (New Account, Link onto an existing Account, Leave out), and the fields for the chosen one under them. Choosing which Account to link onto is a second step inside the box. %>
+<% choice = @choice %>
+
+<div class="mx-auto max-w-xl">
+  <%= render "components/page_header", title: (choice[:mode] == :more ? "Choose accounts on #{choice[:connection]}" : "Connect #{choice[:connection]}") %>
+  <div class="mt-2"><%= render "dev/connect_bank_prototype/choice_intro", choice: choice %></div>
+
+  <div class="mt-8 space-y-4">
+    <% choice[:accounts].each do |pa| %>
+      <% other = pa.currency != @budget.currency %>
+      <%= render "components/panel", tag: :fieldset, class: class_names("space-y-4", "bg-base-200": other), data: { controller: "prototype-choice" } do %>
+        <legend class="sr-only"><%= pa.plaid_name %> ••<%= pa.mask %></legend>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <p class="font-semibold"><%= pa.plaid_name %> <span class="font-normal text-base-content/70">••<%= pa.mask %></span></p>
+          <p class="text-sm text-base-content/70"><%= pa.subtype %> · <%= pa.currency %></p>
+        </div>
+
+        <% if other %>
+          <p class="text-base-content/70"><%= render "components/label_badge", text: "Left out" %> It's in <%= pa.currency %> and your budget is in <%= @budget.currency %>, so Budgie can't sync it.</p>
+        <% else %>
+          <div class="flex flex-wrap gap-x-6 gap-y-2" role="radiogroup">
+            <% [ [ "new", "New Account" ], [ "link", "Link onto an Account" ], [ "leave", "Leave out" ] ].each do |value, label| %>
+              <label class="flex min-h-11 cursor-pointer items-center gap-2">
+                <input type="radio" class="radio radio-primary" name="becomes_<%= pa.id %>" value="<%= value %>" data-choice data-action="prototype-choice#update" <%= "checked" if pa.start.to_s == value %>>
+                <span><%= label %></span>
+              </label>
+            <% end %>
+          </div>
+          <%= render "dev/connect_bank_prototype/choice_panels", choice: choice, plaid_account: pa, target_select: true %>
+        <% end %>
+      <% end %>
+    <% end %>
+  </div>
+
+  <div class="mt-8 flex flex-wrap items-center gap-2">
+    <%= link_to (choice[:mode] == :more ? "Save" : "Connect #{choice[:connection]}"), proto_path("accounts", did: (choice[:mode] == :more ? "chose" : "connected")), class: "btn btn-primary" %>
+    <%= link_to "Cancel", proto_path("accounts"), class: "btn btn-ghost" %>
+  </div>
+</div>
