@@ -1,0 +1,22 @@
+# A Plaid connection is an Item whose accounts become new or existing Accounts
+
+A bank is connected through Plaid Link, and one Plaid Item is one connection with one or more Accounts. After Link, a Budgie page lists the accounts the person shared and asks what each becomes: a new Account, linked onto an existing Account (which keeps its CSV history, name and Filing rules), or left out. The public token is exchanged only when that page is submitted, so a connection always has at least one Account and an Item is spent only on a deliberate "Connect". Disconnecting removes the Item at Plaid, which is final: coming back is a new Item linked onto the same Accounts.
+
+- **Linking onto an existing Account** keeps one continuous Account per real account. Without it, connecting a bank would leave every CSV-only Account as a dead twin. A link target is an Account that takes CSV Imports, or one whose earlier Plaid connection was removed. Linking clears its Default CSV format and, until twin recognition across CSV and sync is decided, stops it taking Imports, as a Splitwise Account does (ADR 0016).
+- **The date to read from is per Account**, not per connection, for Splitwise too. A new Account starts at the budget's earliest bank transaction, or the 1st of this month when there are none. A linked Account starts at the date of its latest bank transaction, inclusive, so that day's rows may arrive twice, unfiled, and the person ignores them. Reading from the day after would silently lose whatever the bank posted that day after the CSV was downloaded, and no real transaction is ever silently dropped (ADR 0010). Link asks for 730 days, the most Plaid allows, since an Item's history can never be raised later, and the date decides what's kept.
+- **Exchange on confirm.** Before exchanging, the page compares the institution and each account's name and mask with the budget's connections: an overlap with a live connection is refused and pointed at Reconnect or Choose accounts, a second login at the same bank is allowed, and an overlap with a removed connection's Accounts starts those on "Link onto". Leaving the page, choosing nothing or waiting past the token's 30 minutes keeps nothing. An account in another currency can only be left out, and Link offers only depository and credit accounts.
+- **Reconnect is always Plaid's update mode**, which keeps the Item and its account ids. A new Item for the same login renumbers every transaction, so it would bring the whole history in again. **Choose accounts** is update mode with account selection, followed by the same page. An account that's left out isn't stored and its transactions are skipped. An account de-selected in Link keeps its Account and bank transactions, which stay synced and get nothing new.
+- **Disconnect is `/item/remove`.** It stops Plaid's access and its billing, and is refused, changing nothing, when Plaid can't be reached. The Accounts keep their bank transactions and stay synced. Deleting a connection's last Account removes the Item too.
+
+## Considered Options
+
+- **Exchange straight after Link and build the page from `/accounts/get`.** Rejected: a person who abandons the page leaves a connection with no Accounts, and on Plaid's Trial an Item counts for good once it's exchanged.
+- **Disconnect pauses syncing and keeps the Item, so Reconnect is free.** Rejected: a person who disconnects expects Budgie to stop having access to the bank, and on Production a kept Item is still billed.
+- **Every Plaid account becomes a new Account.** Rejected: it splits each real account's history across two Accounts, with its Filing rules pinned to the old one.
+- **Budgie counts Items against the Trial's 10.** Rejected: it's a temporary limit on a team the operator runs, Plaid refuses the exchange itself, and exchanging only on confirm already means no Item is spent by accident.
+
+## Consequences
+
+- A Splitwise connection's read-from date moves onto its one Account.
+- Changing a Plaid Account's read-from date, or mapping an account that was left out, resets the Item's sync cursor. Reading every transaction again is harmless, because each is matched by its Plaid id.
+- A removed connection offers "Connect TD again", never Reconnect, and the question before Disconnect says that coming back spends another Item on the Trial.
