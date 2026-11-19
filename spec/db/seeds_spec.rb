@@ -245,6 +245,8 @@ RSpec.describe "db/seeds.rb" do
     describe "the Account" do
       let(:budget) { run_seeds && User.find_by!(email: Dev::USER_EMAIL).budget }
 
+      before { travel_to Time.utc(2026, 10, 15, 16) }
+
       it "is Chequing, with one Import of the sample file, read with the seeded CSV format" do
         account = budget.accounts.find_by!(name: "Chequing")
 

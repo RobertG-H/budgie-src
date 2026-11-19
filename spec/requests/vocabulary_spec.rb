@@ -184,6 +184,8 @@ RSpec.describe "The words on the pages", type: :request do
   end
 
   describe "what's to review" do
+    before { travel_to Time.utc(2026, 10, 15, 16) }
+
     let!(:filed_by_rule) do
       create(:budget_bank_transaction, :filed, :by_rule, account: account, description: "Hydro bill", date: Date.new(2026, 10, 4))
     end
