@@ -98,6 +98,21 @@ RSpec.describe SyncPlaid do
       expect(result).to have_attributes(created: 1, skipped: 0)
     end
 
+    it "brings nothing new into an Account that's no longer shared, and leaves what it has as it is, uncounted" do
+      adds tx("tx-1", account: "acc-2", amount: "10.00")
+      sync
+      visa.update!(unshared_at: Time.current)
+      modifies tx("tx-1", account: "acc-2", amount: "99.00")
+      removes "tx-1", account: "acc-2"
+      adds tx("tx-2", account: "acc-2"), tx("tx-3")
+
+      result = sync
+
+      expect(bank_transaction("tx-1")).to have_attributes(amount: BigDecimal("-10.00"), removed_at: nil)
+      expect(bank_transactions.map(&:external_id)).to eq([ "tx-1", "tx-3" ])
+      expect(result).to have_attributes(created: 1, changed: 0, removed: 0, skipped: 0)
+    end
+
     it "skips one in another currency and one of 0, and counts them" do
       adds tx("tx-1", currency: "USD"), tx("tx-2", currency: nil, unofficial_currency: "BTC"), tx("tx-3", amount: "0.00"), tx("tx-4", currency: nil)
 

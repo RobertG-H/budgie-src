@@ -1,7 +1,8 @@
 require "rails_helper"
 
 # The Accounts a bank connected through Plaid syncs (ADR 0018): they're on the Accounts list saying where they're from, each one's page has a panel for its connection
-# in place of Import, with Sync TD now, they take no CSV Import from any way in, and what reconnects or disconnects Splitwise doesn't reach them yet.
+# in place of Import, with Sync TD now, Reconnect and Choose accounts, they take no CSV Import from any way in, and what reconnects or disconnects Splitwise doesn't
+# reach them. Reconnect and Choose accounts themselves are in spec/requests/plaid_update_mode_spec.rb.
 RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
   let(:budget) { create(:budget, currency: "CAD") }
   let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust") }
@@ -28,6 +29,28 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
 
       expect(visible_text).to include("TD Chequing Synced from TD Canada Trust. No bank transactions yet.")
       expect(visible_text).to include("TD Savings Synced from TD Canada Trust. No bank transactions yet.")
+      assert_select ".badge", text: "Needs reconnecting", count: 0
+    end
+
+    it "puts a Needs reconnecting badge on each of a connection's Accounts' rows when the bank stopped accepting it, and on no other's" do
+      other = create(:budget_account, :plaid, budget: budget, name: "Tangerine")
+      connection.needs_reconnect!
+
+      get accounts_path
+
+      [ chequing, savings ].each do |account|
+        assert_select "main li a[href='#{account_path(account)}'] .badge-warning", text: "Needs reconnecting"
+      end
+      assert_select "main li a[href='#{account_path(other)}'] .badge", count: 0
+    end
+
+    it "says an Account the bank no longer shares, in place of where it's synced from" do
+      savings.update!(unshared_at: Time.current)
+      create(:budget_bank_transaction, account: savings)
+
+      get accounts_path
+
+      expect(visible_text).to include("TD Savings No longer shared from TD Canada Trust. 1 bank transaction")
     end
   end
 
@@ -45,23 +68,50 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       expect(visible_text).to include("No bank transactions yet. Bank transactions from TD Canada Trust appear here once they're synced.")
     end
 
-    it "offers Sync TD now, named for the bank, and none of Splitwise's other actions, which come later for a bank" do
+    it "offers Sync TD now, named for the bank, as the primary button, then Reconnect and Choose accounts, and no Disconnect yet" do
       get account_path(chequing)
 
-      assert_select "form[action='#{account_connection_sync_path(chequing)}'] button[data-turbo-submits-with]", text: "Sync TD now"
-      expect(visible_text).not_to include("Sync now", "Reconnect", "Disconnect", "expense")
+      assert_select "form[action='#{account_connection_sync_path(chequing)}'] button.btn-primary[data-turbo-submits-with]", text: "Sync TD now"
+      assert_select "a.btn:not(.btn-primary)[href='#{new_account_connection_reconnect_path(chequing)}']", text: "Reconnect"
+      assert_select "a.btn:not(.btn-primary)[href='#{new_account_connection_selection_path(chequing)}']", text: "Choose accounts"
+      expect(visible_text).not_to include("Sync now", "Disconnect", "expense")
     end
 
-    it "offers no Sync TD now where Plaid isn't set up, or once the bank stopped accepting the connection, which it says" do
+    it "offers none of its actions where Plaid isn't set up" do
       PlaidApi.client = PlaidFake.new(configured: false)
       get account_path(chequing)
-      assert_select "button", text: "Sync TD now", count: 0
 
-      PlaidApi.client = PlaidFake.new
+      assert_select "button", text: "Sync TD now", count: 0
+      assert_select "a", text: "Reconnect", count: 0
+      assert_select "a", text: "Choose accounts", count: 0
+    end
+
+    it "hides Sync TD now once the bank stopped accepting the connection, makes Reconnect the primary button, and names the other Accounts that aren't syncing" do
       connection.needs_reconnect!
       get account_path(chequing)
+
       assert_select "button", text: "Sync TD now", count: 0
-      assert_select "[role=status].alert-warning", text: "TD Canada Trust stopped accepting the connection, so this Account isn't syncing."
+      assert_select "a.btn.btn-primary[href='#{new_account_connection_reconnect_path(chequing)}']", text: "Reconnect"
+      assert_select "a.btn[href='#{new_account_connection_selection_path(chequing)}']", text: "Choose accounts"
+      assert_select "[role=status].alert-warning",
+        text: "TD Canada Trust stopped accepting the connection, so this Account and TD Savings aren't syncing. Reconnect to start again."
+
+      savings.destroy!
+      get account_path(chequing)
+      assert_select "[role=status].alert-warning", text: "TD Canada Trust stopped accepting the connection, so this Account isn't syncing. Reconnect to start again."
+    end
+
+    it "says above the panel when the bank no longer shares its account, keeping its bank transactions" do
+      savings.update!(unshared_at: Time.current)
+      create(:budget_bank_transaction, account: savings, description: "INTEREST")
+
+      get account_path(savings)
+
+      assert_select "[role=status].alert-warning",
+        text: "No longer shared from TD Canada Trust, so nothing new comes in. Its bank transactions stay as they are. Choose accounts to share it again."
+      expect(visible_text).to include("Was synced from TD Canada Trust, TD ePremium Savings ••1100.")
+      expect(visible_text).to include("INTEREST")
+      assert_select "a[href='#{new_account_connection_selection_path(savings)}']", text: "Choose accounts"
     end
 
     it "has the date to read from, under a closed details, in bank transactions" do
@@ -91,13 +141,24 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
-    it "asks whether the connection goes with it only for its last Account" do
+    it "asks whether the connection goes with it only for its last Account, and says the bank stops bringing in any other, which Choose accounts can bring back" do
       get edit_account_path(chequing)
       expect(response.body).not_to include("Its connection to TD Canada Trust is removed with it.")
+      assert_select "[data-turbo-confirm]" do |forms|
+        expect(forms.map { it["data-turbo-confirm"] }).to include("Delete the TD Chequing account? TD Canada Trust will stop bringing in TD Chequing. Choose accounts can bring it back.")
+      end
 
       savings.destroy!
       get edit_account_path(chequing)
       expect(response.body).to include("Its connection to TD Canada Trust is removed with it.")
+    end
+
+    it "leaves the deleted one's bank account unmapped, so a sync skips it" do
+      delete account_path(savings)
+      plaid.adds(connection.access_token, plaid.transaction("tx-1", account: savings.external_account_id))
+
+      expect(connection.reload.sync).to have_attributes(created: 0, skipped: 0)
+      expect(Budget::BankTransaction.count).to eq(0)
     end
 
     it "deletes the connection with its last Account, without asking Plaid" do
@@ -225,7 +286,7 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
   end
 
   describe "what's Splitwise's alone, until a later ticket" do
-    it "is a 404: Reconnect and Disconnect, which forgets no token without Plaid being told" do
+    it "is a 404: Splitwise's Reconnect, and Disconnect, which forgets no token without Plaid being told" do
       post account_connection_path(chequing)
       expect(response).to have_http_status(:not_found)
       delete account_connection_path(chequing)

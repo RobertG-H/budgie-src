@@ -1143,6 +1143,41 @@ RSpec.describe "The words on the pages", type: :request do
       expect(visible_text).not_to match(retired_terms)
     end
 
+    it "uses only these words for Reconnect and Choose accounts, and never a retired term, Plaid's Item or an institution" do
+      create(:budget_account, :plaid, budget: budget, name: "TD Savings", bank_connection: connection, external_account_id: "acc-2")
+      plaid.item(connection.access_token, accounts: [ plaid.account("acc-1"), plaid.account("acc-2"), plaid.account("acc-3", "TD Visa Infinite"),
+        plaid.account("acc-4", "TD U.S. Dollar Account", currency: "USD") ])
+      connection.needs_reconnect!
+      words = /\b(item|institution)\b/i
+      texts = []
+
+      [ accounts_path, account_path(chequing), new_account_connection_reconnect_path(chequing), new_account_connection_selection_path(chequing) ].each do |path|
+        get path
+        texts << visible_text
+      end
+      post account_connection_reconnect_path(chequing)
+      follow_redirect!
+      texts << visible_text
+      post account_connection_selection_path(chequing),
+        params: { plaid_link: { accounts: { "0" => { id: "acc-1", name: "Chequing" }, "1" => { id: "acc-3", name: "TD Visa Infinite" }, "2" => { id: "acc-4", name: "TD U.S. Dollar Account" } } } }
+      follow_redirect!
+      texts << visible_text
+      post plaid_choice_path, params: { plaid_choice: { accounts: { "1" => { becomes: "new" } } } }
+      follow_redirect!
+      texts << visible_text
+      get account_path(Budget::Account.find_by!(name: "TD Savings"))
+      texts << visible_text
+
+      expect(texts.join(" ")).to include("Needs reconnecting", "Reconnect TD Canada Trust", "Reconnected TD Canada Trust.", "Choose accounts on TD Canada Trust",
+        "It's in USD and your budget is in CAD, so it can only be left out.", "TD Savings is no longer shared, so nothing new comes in.",
+        "No longer shared from TD Canada Trust, so nothing new comes in.")
+      texts.each do |text|
+        expect(text).not_to match(retired_terms)
+        expect(text).not_to match(words)
+        expect(text).not_to match(/\w+_\w+/)
+      end
+    end
+
     it "says a bank transaction the bank removed was Removed by TD Canada Trust, on both lists" do
       create(:budget_bank_transaction, :removed, account: chequing, description: "Gone", date: Date.new(2026, 10, 3))
 

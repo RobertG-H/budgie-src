@@ -83,6 +83,37 @@ RSpec.describe PlaidApi::Client do
     end
   end
 
+  describe "#create_update_link_token" do
+    it "asks for update mode on the Item, with its access token and no products, for Reconnect" do
+      answer(200, link_token: "link-sandbox-update")
+
+      expect(client.create_update_link_token(access_token: "access-sandbox-xyz", client_user_id: "42")).to eq("link-sandbox-update")
+
+      expect(sent.last.path).to eq("/link/token/create")
+      expect(sent_body).to eq(
+        "client_name" => "Budgie", "language" => "en", "country_codes" => [ "CA" ], "user" => { "client_user_id" => "42" }, "access_token" => "access-sandbox-xyz"
+      )
+    end
+
+    it "turns account selection on, with Connect's account filters, for Choose accounts" do
+      answer(200, link_token: "link-sandbox-update")
+
+      client.create_update_link_token(access_token: "access-sandbox-xyz", client_user_id: "42", account_selection: true)
+
+      expect(sent_body).to eq(
+        "client_name" => "Budgie", "language" => "en", "country_codes" => [ "CA" ], "user" => { "client_user_id" => "42" }, "access_token" => "access-sandbox-xyz",
+        "update" => { "account_selection_enabled" => true },
+        "account_filters" => { "depository" => { "account_subtypes" => [ "all" ] }, "credit" => { "account_subtypes" => [ "all" ] } }
+      )
+    end
+
+    it "is an Error when the answer has no token in it" do
+      answer(200, request_id: "req-1")
+
+      expect { client.create_update_link_token(access_token: "access-sandbox-xyz", client_user_id: "42") }.to raise_error(PlaidApi::Error, "Plaid sent no link.")
+    end
+  end
+
   describe "#exchange_public_token" do
     it "swaps the public token for the Item's access token and id" do
       answer(200, access_token: "access-sandbox-xyz", item_id: "item-1", request_id: "req-1")

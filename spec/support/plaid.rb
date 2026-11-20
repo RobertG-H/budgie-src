@@ -18,8 +18,14 @@
 #   plaid.fails_once(:transactions_sync, error)           # the next call raises, and the one after answers
 #   plaid.not_ready("access-sandbox-token")               # answers nothing and an empty cursor until `ready`
 #   expect(plaid.transaction_requests).to eq([ [ "access-sandbox-token", nil ] ])
+#
+# For a connection that's already there (Reconnect and Choose accounts), it's told what the Item's accounts are, which is also how a spec changes what's shared,
+# and records each update-mode link token it was asked for:
+#
+#   plaid.item("access-sandbox-token", accounts: [ plaid.account("acc-1", "TD Every Day Chequing") ])
+#   expect(plaid.update_link_tokens).to eq([ { access_token: "access-sandbox-token", client_user_id: budget.id, account_selection: true } ])
 class PlaidFake
-  attr_reader :link_tokens, :exchanges, :account_requests, :removals, :transaction_requests
+  attr_reader :link_tokens, :update_link_tokens, :exchanges, :account_requests, :removals, :transaction_requests
   attr_accessor :transactions_page_size
 
   def initialize(configured: true)
@@ -28,6 +34,7 @@ class PlaidFake
     @items = {}    # access token => PlaidApi::Accounts
     @failures = {} # method => error
     @link_tokens = []
+    @update_link_tokens = []
     @exchanges = []
     @account_requests = []
     @removals = []
@@ -46,6 +53,11 @@ class PlaidFake
   # Lets `public_token` be swapped for an Item with these accounts at this bank, whose access token is `access_token`.
   def links(public_token, item_id: "item-for-#{public_token}", institution_id: "ins_42", institution_name: "TD Canada Trust", accounts: [], access_token: "access-for-#{public_token}")
     @links[public_token] = PlaidApi::Exchange.new(access_token: access_token, item_id: item_id)
+    @items[access_token] = PlaidApi::Accounts.new(item_id: item_id, institution_id: institution_id, institution_name: institution_name, accounts: accounts)
+  end
+
+  # The Item `access_token` reads has these accounts, as `/accounts/get` answers once the person has chosen them in Link: whatever it had before is replaced.
+  def item(access_token, accounts:, item_id: "item-for-#{access_token}", institution_id: "ins_42", institution_name: "TD Canada Trust")
     @items[access_token] = PlaidApi::Accounts.new(item_id: item_id, institution_id: institution_id, institution_name: institution_name, accounts: accounts)
   end
 
@@ -122,6 +134,12 @@ class PlaidFake
     @link_tokens << client_user_id
     fail_if(:create_link_token)
     "link-sandbox-#{@link_tokens.size}"
+  end
+
+  def create_update_link_token(access_token:, client_user_id:, account_selection: false)
+    @update_link_tokens << { access_token: access_token, client_user_id: client_user_id, account_selection: account_selection }
+    fail_if(:create_update_link_token)
+    "link-sandbox-update-#{@update_link_tokens.size}"
   end
 
   def exchange_public_token(public_token)

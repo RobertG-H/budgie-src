@@ -46,9 +46,12 @@ Rails.application.routes.draw do
     resources :imports, only: [ :new, :create ]
     # What a synced Account is synced from: Reconnect (create) sends the person to sign in to Splitwise again, Disconnect (destroy) forgets its token, and the date it
     # reads expenses from is changed (update). Sync now (the sync's create) brings its expenses in by hand, which the hourly job also does. Only the date is for a
-    # bank connected through Plaid so far.
+    # bank connected through Plaid so far: a bank's Reconnect and Choose accounts are Plaid Link's update mode, each a page that opens Link (new) and where what Link
+    # gives back is sent (create), which for Choose accounts goes on to the choice page below when there's a choice to make.
     resource :connection, only: [ :create, :update, :destroy ], controller: "account_connections" do
       resource :sync, only: :create, controller: "account_connection_syncs"
+      resource :reconnect, only: [ :new, :create ], controller: "account_connection_reconnects"
+      resource :selection, only: [ :new, :create ], controller: "account_connection_selections", path: "accounts"
     end
   end
   # Connecting Splitwise: a form for the Account's name and the date to read from (new), which sends the person to Splitwise to sign in (create), and
@@ -57,7 +60,8 @@ Rails.application.routes.draw do
   resource :splitwise_connection, only: [ :new, :create ], path: "splitwise/connection"
   get "splitwise/callback" => "splitwise_callbacks#show", as: :splitwise_callback
   # Connecting a bank through Plaid (ADR 0018): the page that opens Plaid Link (new), where what Link gives back is sent and kept in the session (create), and
-  # the page after it where the person chooses what each account they shared becomes (the choice's show), which connects (create) or keeps nothing (destroy).
+  # the page after it where the person chooses what each account they shared becomes (the choice's show), which connects (create) or keeps nothing (destroy). Choose
+  # accounts on a connection that's already there comes to the same page, which saves instead.
   resource :plaid_connection, only: [ :new, :create ], path: "plaid/connection"
   resource :plaid_choice, only: [ :show, :create, :destroy ], path: "plaid/connection/accounts"
   # An Import from anywhere: the whole form (new, create), with the Account chosen on it, and the file alone (guess), which works out which CSV

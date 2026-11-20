@@ -16,6 +16,9 @@
 #
 # A synced Account has the date it reads from (`read_from`): what the provider has dated before it is never read. It's the Account's and not the connection's,
 # so that a connection with several Accounts can give each its own (ADR 0018), and an Account that isn't synced has none.
+#
+# A bank's account stops being shared when the person de-selects it in Choose accounts (`unshared_at`, ChoosePlaidAccounts): the Account keeps its bank transactions
+# and stays synced, and a sync brings nothing new into it (SyncPlaid) until it's selected again.
 class Budget::Account < ApplicationRecord
   belongs_to :budget
   belongs_to :default_csv_format, class_name: "Budget::CsvFormat", optional: true
@@ -44,7 +47,7 @@ class Budget::Account < ApplicationRecord
   validates :read_from, absence: { message: "needs a connection" }, unless: :bank_connection
   validate :read_from_is_a_date_that_could_be_real
   # A bank's name and mask for the account it's synced from, which say which real account it is (the ADR 0001 addendum). Only a synced Account has them.
-  validates :external_name, :external_mask, absence: { message: "needs a connection" }, unless: :bank_connection
+  validates :external_name, :external_mask, :unshared_at, absence: { message: "needs a connection" }, unless: :bank_connection
 
   # Its connection goes with it when no other Account is synced from it, which is always so for Splitwise. After the Account's own row has gone,
   # since its foreign key is what keeps the connection from being deleted, and only reached when nothing refused the delete.
@@ -56,6 +59,8 @@ class Budget::Account < ApplicationRecord
   scope :without_filing_rules, -> { where(files_with_rules: false) }
   # The Accounts a CSV file can be imported into: the ones that aren't synced from a connection.
   scope :importable, -> { where(bank_connection_id: nil) }
+  # The synced Accounts whose bank account is still shared: the ones a sync brings anything into.
+  scope :shared, -> { where(unshared_at: nil) }
 
   # Where a new synced Account starts reading from: the date of the budget's earliest bank transaction, so that a shared expense the person paid for, whose
   # card charge is already there, gets its share back, or the 1st of this month when there are none.
@@ -67,6 +72,11 @@ class Budget::Account < ApplicationRecord
   # disconnected, since what's there came from it and a CSV file read in would count some of it twice.
   def synced?
     bank_connection_id.present?
+  end
+
+  # Whether the bank stopped sharing its account, because the person de-selected it in Choose accounts.
+  def unshared?
+    unshared_at.present?
   end
 
   # What it's synced from, as the connection's name ("Splitwise", or a bank's, "TD Canada Trust"), or nothing for an Account known only from CSV files.

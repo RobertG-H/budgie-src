@@ -1,25 +1,41 @@
-<%# locals: (bank:, short_name:, external_name:, external_mask:, others:, last_synced:, sync_path: nil, needs_reconnect: false) %>
-<%# The panel on the page of an Account synced from a bank through Plaid, in place of Import: which of the bank's accounts it is, and which other Accounts the same connection syncs, with links, since what's done to the connection here (Sync now, and Reconnect, Choose accounts and Disconnect, which come later) is done to them too. It takes plain values, so /styleguide can draw it: `others` is each other Account's name and page. %>
-<%# Sync now is named with the bank's short name ("Sync TD now"), since it syncs the bank's connection and not only this Account, and is there only with a `sync_path`, which the page gives for a connection that works where Plaid is set up. A connection the bank stopped accepting says so as a warning. %>
+<%# locals: (bank:, short_name:, external_name:, external_mask:, others:, last_synced:, sync_path: nil, reconnect_path: nil, choose_path: nil, needs_reconnect: false, unshared: false) %>
+<%# The panel on the page of an Account synced from a bank through Plaid, in place of Import: which of the bank's accounts it is, and which other Accounts the same connection syncs, with links, since what's done to the connection here (Sync now, Reconnect and Choose accounts, and Disconnect, which comes later) is done to them too. It takes plain values, so /styleguide can draw it: `others` is each other Account's name and page. %>
+<%# Sync now is named with the bank's short name ("Sync TD now"), since it syncs the bank's connection and not only this Account, and is there only with a `sync_path`, which the page gives for a connection that works where Plaid is set up. Reconnect and Choose accounts are there with their paths, which the page gives for a connection that has a token where Plaid is set up. A connection the bank stopped accepting says so as a warning naming the other Accounts that aren't syncing either, and Reconnect is then the primary button. An Account whose bank account was de-selected in Choose accounts (`unshared`) says so in a warning above the panel, and "Was synced from" which bank account it is. %>
+<% if unshared %>
+  <div role="status" class="alert alert-warning mt-4">
+    <span>No longer shared from <%= bank %>, so nothing new comes in. Its bank transactions stay as they are. Choose accounts to share it again.</span>
+  </div>
+<% end %>
 <%= render "components/panel", class: "mt-4" do %>
   <h2 class="font-semibold"><%= bank %></h2>
   <% if needs_reconnect %>
     <div role="status" class="alert alert-warning mt-2">
-      <span><%= bank %> stopped accepting the connection, so this Account isn't syncing.</span>
+      <span>
+        <%= bank %> stopped accepting the connection, so <%= others.any? ? "this Account and #{others.map(&:first).to_sentence} aren't" : "this Account isn't" %> syncing.
+        Reconnect to start again.
+      </span>
     </div>
   <% end %>
   <p class="mt-1 text-base-content/70">
-    Synced from <%= bank %>, <%= external_name %><% if external_mask.present? %> ••<%= external_mask %><% end %>.
+    <%= unshared ? "Was synced from" : "Synced from" %> <%= bank %>, <%= external_name %><% if external_mask.present? %> ••<%= external_mask %><% end %>.
     <% if others.any? %>
       The same connection syncs <%= safe_join(others.map { |name, href| link_to(name, href, class: "link") }, ", ") %>,
       so what's done here is done to <%= others.one? ? "it" : "them" %> too.
     <% end %>
   </p>
   <p class="mt-1 text-sm text-base-content/70"><%= last_synced %></p>
-  <% if sync_path %>
-    <%# A sync can take a few seconds, so the button says so, and can't be pressed twice. %>
-    <div class="mt-4">
-      <%= button_to "Sync #{short_name} now", sync_path, class: "btn btn-primary", data: { turbo_submits_with: "Syncing…" } %>
+  <% if sync_path || reconnect_path || choose_path %>
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+      <% if sync_path && !needs_reconnect %>
+        <%# A sync can take a few seconds, so the button says so, and can't be pressed twice. %>
+        <%= button_to "Sync #{short_name} now", sync_path, class: "btn btn-primary", data: { turbo_submits_with: "Syncing…" } %>
+      <% end %>
+      <% if reconnect_path %>
+        <%= link_to "Reconnect", reconnect_path, class: class_names("btn", "btn-primary": needs_reconnect) %>
+      <% end %>
+      <% if choose_path %>
+        <%= link_to "Choose accounts", choose_path, class: "btn" %>
+      <% end %>
     </div>
   <% end %>
 <% end %>

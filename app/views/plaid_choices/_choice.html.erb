@@ -1,7 +1,8 @@
 <%# locals: (form:, choice:, index:) %>
 <%# One account the person shared in Plaid Link, and what it becomes: Plaid's name, its mask (last digits) and its kind, then the "Becomes" select, A new Account or Leave out, with the fields for that choice under it. A new Account has its name and its date to read from; one that's left out has a note. The plaid-choice controller shows only the chosen one's; without JavaScript both show, and the server reads only the chosen one's. `choice` is a ConnectPlaid::Choice, so /styleguide can draw a row from plain values. %>
+<%# An account that can only be left out (`choice.left_out?`, one in another currency on Choose accounts) has the select disabled on "Left out", with the reason under it, and nothing else: a disabled select isn't sent, and the server leaves it out whatever it's sent. %>
 <% shared = choice.shared_account %>
-<li class="list-row block space-y-4" data-controller="plaid-choice">
+<%= tag.li class: "list-row block space-y-4", data: ({ controller: "plaid-choice" } unless choice.left_out?) do %>
   <div>
     <p class="font-semibold">
       <%= shared.name %>
@@ -13,23 +14,29 @@
   </div>
 
   <%= form.fields_for :accounts, choice, index: index do |fields| %>
-    <%= render "components/field", form: fields, attribute: :becomes, control: :select, label: "Becomes" do |field| %>
-      <%= fields.select :becomes, [ [ "A new Account", ConnectPlaid::Choice::NEW ], [ "Leave out", ConnectPlaid::Choice::LEAVE ] ], {},
-            data: { plaid_choice_target: "becomes", action: "plaid-choice#toggle" }, **field %>
+    <% if choice.left_out? %>
+      <%= render "components/field", form: fields, attribute: :becomes, control: :select, label: "Becomes", hint: choice.left_out_reason do |field| %>
+        <%= fields.select :becomes, [ [ "Left out", ConnectPlaid::Choice::LEAVE ] ], {}, disabled: true, **field %>
+      <% end %>
+    <% else %>
+      <%= render "components/field", form: fields, attribute: :becomes, control: :select, label: "Becomes" do |field| %>
+        <%= fields.select :becomes, [ [ "A new Account", ConnectPlaid::Choice::NEW ], [ "Leave out", ConnectPlaid::Choice::LEAVE ] ], {},
+              data: { plaid_choice_target: "becomes", action: "plaid-choice#toggle" }, **field %>
+      <% end %>
+
+      <div class="space-y-4" data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::NEW %>">
+        <%= render "components/field", form: fields, attribute: :name, label: "Account name" do |field| %>
+          <%= fields.text_field :name, **field %>
+        <% end %>
+        <%= render "components/field", form: fields, attribute: :read_from, label: "Read bank transactions dated from",
+              hint: "Bank transactions dated before this are never read. It starts where your other Accounts' bank transactions start, so they line up. Up to two years back can be read." do |field| %>
+          <%= fields.date_field :read_from, **field %>
+        <% end %>
+      </div>
+
+      <div data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::LEAVE %>">
+        <p class="text-sm text-base-content/70">Left out: its bank transactions aren't brought in.</p>
+      </div>
     <% end %>
-
-    <div class="space-y-4" data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::NEW %>">
-      <%= render "components/field", form: fields, attribute: :name, label: "Account name" do |field| %>
-        <%= fields.text_field :name, **field %>
-      <% end %>
-      <%= render "components/field", form: fields, attribute: :read_from, label: "Read bank transactions dated from",
-            hint: "Bank transactions dated before this are never read. It starts where your other Accounts' bank transactions start, so they line up. Up to two years back can be read." do |field| %>
-        <%= fields.date_field :read_from, **field %>
-      <% end %>
-    </div>
-
-    <div data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::LEAVE %>">
-      <p class="text-sm text-base-content/70">Left out: its bank transactions aren't brought in.</p>
-    </div>
   <% end %>
-</li>
+<% end %>

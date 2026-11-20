@@ -37,12 +37,20 @@ class PlaidApi::Client
     @client_id.present? && @secret.present? && @host.present?
   end
 
+  # What an update-mode link token asks for: Link's own settings and none of a new Item's, since its products and history were decided when it was made.
+  UPDATE_LINK_SETTINGS = LINK_SETTINGS.slice(:client_name, :language, :country_codes).freeze
+
   # A link token for Plaid Link to open with, for a new connection. `client_user_id` says who it's for, which is the budget's id and never anything personal.
   def create_link_token(client_user_id:)
-    token = post("/link/token/create", **LINK_SETTINGS, user: { client_user_id: client_user_id.to_s })["link_token"]
-    raise PlaidApi::Error, "Plaid sent no link." unless token.is_a?(String) && token.present?
+    link_token(**LINK_SETTINGS, user: { client_user_id: client_user_id.to_s })
+  end
 
-    token
+  # A link token for Plaid Link's update mode on an Item that's already connected, which keeps the Item and its account ids, so its access token doesn't change and
+  # there's nothing to exchange afterwards: Reconnect signs in to the bank again, and with `account_selection` (Choose accounts) the person also changes which of
+  # the bank's accounts are shared, from the same kinds Connect offers. It lasts 30 minutes.
+  def create_update_link_token(access_token:, client_user_id:, account_selection: false)
+    selection = { update: { account_selection_enabled: true }, account_filters: LINK_SETTINGS[:account_filters] } if account_selection
+    link_token(**UPDATE_LINK_SETTINGS, user: { client_user_id: client_user_id.to_s }, access_token: access_token, **selection.to_h)
   end
 
   # What the public token Link gave back is worth: the Item's access token and id. Each exchange makes an Item, which on Plaid's Trial is one of ten for good.
@@ -95,6 +103,13 @@ class PlaidApi::Client
   alias_method :to_s, :inspect
 
   private
+    def link_token(**payload)
+      token = post("/link/token/create", **payload)["link_token"]
+      raise PlaidApi::Error, "Plaid sent no link." unless token.is_a?(String) && token.present?
+
+      token
+    end
+
     # One request, and its answer as a Hash. Plaid answers an error with a non-success status and a JSON body of `error_code` and `display_message` (and a message
     # for developers, which is never repeated); anything else that isn't an answer is said by its status alone.
     def post(path, **payload)

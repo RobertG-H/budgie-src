@@ -1,7 +1,7 @@
 <%# locals: () %>
 <section id="link-rows" aria-labelledby="link-rows-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="link-rows-heading" class="text-xl font-semibold">Link rows</h2>
-  <p class="text-base-content/70">One thing in a list that's opened by choosing it, such as a CSV format or an Account: its name, with a muted line under it that says more when there is one, and a short word beside the name when it needs one. The whole row links to where it's opened, so a row that holds buttons is a table row instead (see Tables).</p>
+  <p class="text-base-content/70">One thing in a list that's opened by choosing it, such as a CSV format or an Account: its name, with a muted line under it that says more when there is one, and a short word beside the name when it needs one, or a few words in a warning badge when it needs a second look. The whole row links to where it's opened, so a row that holds buttons is a table row instead (see Tables).</p>
 
   <%= render "components/record_list" do %>
     <%= render "components/link_row", href: "#", name: "CIBC chequing",
@@ -10,5 +10,7 @@
           detail: "Date in column 1, in year, month, day order. Description in columns 2 and 3. Money in is in column 5, and money out is in column 4." %>
     <%= render "components/link_row", href: "#", name: "Savings" %>
     <%= render "components/link_row", href: "#", name: "Joint chequing", badge: "Inactive", detail: "Not used for new Imports." %>
+    <%= render "components/link_row", href: "#", name: "TD Every Day Chequing", warning: "Needs reconnecting", detail: "Synced from TD Canada Trust. 412 bank transactions" %>
+    <%= render "components/link_row", href: "#", name: "TD ePremium Savings", detail: "No longer shared from TD Canada Trust. 23 bank transactions" %>
   <% end %>
 </section>

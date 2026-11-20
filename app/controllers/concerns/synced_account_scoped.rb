@@ -13,8 +13,25 @@ module SyncedAccountScoped
       @connection = @account.bank_connection or raise ActiveRecord::RecordNotFound
     end
 
-    # What only a Splitwise connection does so far (Reconnect and Disconnect): for a bank's, which gets its own in later tickets, it's a 404.
+    # What only a Splitwise connection does so far (Reconnect and Disconnect): for a bank's, which has its own Reconnect and gets Disconnect in a later ticket, it's a 404.
     def require_splitwise_connection
       raise ActiveRecord::RecordNotFound unless @connection.splitwise?
+    end
+
+    # What only a bank's connection does through Plaid's update mode (Reconnect and Choose accounts): another kind of connection is a 404, and it needs Plaid set up
+    # here and a token to open Link with, which a disconnected connection no longer has.
+    def require_connected_plaid
+      raise ActiveRecord::RecordNotFound unless @connection.plaid?
+
+      if !PlaidApi.configured?
+        redirect_to account_path(@account), alert: "Connecting a bank isn't set up here."
+      elsif @connection.disconnected?
+        redirect_to account_path(@account), alert: "#{@connection.name} isn't connected any more, so nothing was changed."
+      end
+    end
+
+    # A link token for Plaid Link's update mode on the connection. Its key being lost, which a token can't be read without, is said on the Account's page.
+    def update_link_token(account_selection: false)
+      PlaidApi.client.create_update_link_token(access_token: @connection.access_token, client_user_id: Current.budget.id, account_selection: account_selection)
     end
 end

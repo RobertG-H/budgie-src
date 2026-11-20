@@ -541,6 +541,17 @@ updated in place, never touching what was filed from it; and a removed one gets 
 on what's new in the Accounts that have them on, which a bank's do, so it's to review. Plaid saying the bank needs signing in again, or stopped sharing, marks the connection as needing reconnecting, which the hourly
 job then skips; Plaid asking Budgie to slow down says to try later; anything else changes nothing and fails the hourly run. Sync now says what it did: "Synced from TD Canada Trust: 9 new, 2 changed, 1 removed. 4 skipped."
 
+**Reconnect and Choose accounts** both use Plaid Link's update mode, which keeps the Item and its account ids, so no transaction is renumbered and no Trial Item is spent. Each is a page that opens Link
+with an update-mode link token made from the connection's access token (no products; it lasts 30 minutes, so the page is never cached), through the same `plaid-link` controller, told what to send back. Reconnect sends
+nothing: the server asks `/accounts/get` with the token it already has and clears needs-reconnect only when Plaid answers, saying "Reconnected TD Canada Trust." or "TD Canada Trust still needs reconnecting."; it's
+offered on a connection that works too, and is the primary button, with Sync TD now hidden, while the connection needs reconnecting, which each of its Accounts' rows on the Accounts page says in a "Needs reconnecting"
+badge and each panel in a warning naming the other Accounts that aren't syncing. Choose accounts turns account selection on and sends the whole selection, which is kept in the session for 30 minutes as Connect's
+is and leads to the same choice page, "Choose accounts on TD Canada Trust", listing only the selected accounts that aren't Accounts yet; the connection has its token, so `/accounts/get` gives each one's currency as the
+page renders, and one in another currency can only be left out. Save (`ChoosePlaidAccounts`) makes the new Accounts, from what `/accounts/get` says of them, in one database transaction holding the connection's row lock
+(which a sync holds too); an Account whose account isn't selected any more is no longer shared (`unshared_at`), keeping its bank transactions and getting nothing new, and one selected again is shared again. Making
+an Account or sharing one again resets the cursor, so the next sync reads everything again, matched by id, and when every selected account is already an Account it saves without asking. Deleting one of a live
+connection's Accounts, which has to have no bank transactions, leaves its bank account unmapped, which the sync skips and Choose accounts can bring back.
+
 The header's top row has Import, the primary button, beside the menu, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
 bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise or a bank, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
 count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state, and of the ones to review ("8 to review"), a link to the To review state: both come from one query, counting at most 100 of each and read once per request, so every page with the header costs one query more.

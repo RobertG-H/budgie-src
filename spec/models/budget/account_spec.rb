@@ -17,7 +17,7 @@ RSpec.describe Budget::Account, type: :model do
   # Plaid's name and mask for a synced account only say which real account it is (the ADR 0001 addendum), and aren't anything tracked about it.
   it "has no balance, currency or kind, since Budgie doesn't track what's in it" do
     expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "bank_connection_id", "external_account_id",
-      "external_name", "external_mask", "read_from", "created_at", "updated_at")
+      "external_name", "external_mask", "read_from", "unshared_at", "created_at", "updated_at")
   end
 
   describe "name" do
@@ -206,6 +206,19 @@ RSpec.describe Budget::Account, type: :model do
         expect(account.errors[:external_name]).to eq([ "needs a connection" ])
         expect(account.errors[:external_mask]).to eq([ "needs a connection" ])
         expect { account.save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /budget_accounts_external_name_when_synced/)
+      end
+
+      it "is shared until the person de-selects it in Choose accounts, which only a synced Account can be" do
+        account = create(:budget_account, :plaid, budget: budget, bank_connection: plaid)
+        expect(account).not_to be_unshared
+
+        account.update!(unshared_at: Time.current)
+        expect(account).to be_unshared
+
+        unsynced = build(:budget_account, budget: budget, unshared_at: Time.current)
+        expect(unsynced).not_to be_valid
+        expect(unsynced.errors[:unshared_at]).to eq([ "needs a connection" ])
+        expect { unsynced.save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /budget_accounts_unshared_when_synced/)
       end
 
       it "leaves the connection when another of its Accounts is still synced from it, and takes it with the last" do

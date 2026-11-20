@@ -22,7 +22,8 @@ class ConnectPlaid
   end
 
   # What one shared account becomes, as the choice page has it: `becomes` is "new" or "leave", and a new Account's `name` and `read_from` go with it. Its errors are
-  # an Account's own (its name taken, a date that couldn't be real) on the same fields.
+  # an Account's own (its name taken, a date that couldn't be real) on the same fields. `index` is its place in what Link sent, which the page's fields are numbered
+  # by. `left_out_reason` says why it can only be left out, which is an account in another currency when that's known before anything is saved (Choose accounts).
   class Choice
     include ActiveModel::Model
     include ActiveModel::Attributes
@@ -34,7 +35,7 @@ class ConnectPlaid
     attribute :becomes, :string, default: NEW
     attribute :name, :string
     attribute :read_from, :date
-    attr_accessor :shared_account
+    attr_accessor :shared_account, :index, :left_out_reason
 
     def self.human_attribute_name(attribute, options = {})
       { "name" => "Account name", "read_from" => "Date to read from", "becomes" => "Becomes" }.fetch(attribute.to_s) { super }
@@ -43,21 +44,51 @@ class ConnectPlaid
     def new_account?
       becomes == NEW
     end
+
+    def left_out?
+      left_out_reason.present?
+    end
   end
 
   DEADLINE = "Nothing was connected, since the accounts weren't chosen within 30 minutes. Connect again to choose them.".freeze
   NONE_CHOSEN = "Choose at least one account to connect.".freeze
 
-  # The choices for `link`'s accounts: what was sent for each, by its place in the list (`params`, the form's `accounts`), or, for the page as it starts, a new
-  # Account each, named for the bank and the account and reading from where the budget's bank transactions start. `params` is what the controller permitted.
-  def self.choices(budget, link, params = nil)
+  # The choices for `link`'s accounts, or only the ones in `only`: what was sent for each, by its place in the list (`params`, the form's `accounts`), or, for the
+  # page as it starts, a new Account each, named for the bank and the account and reading from where the budget's bank transactions start. `params` is what the
+  # controller permitted.
+  def self.choices(budget, link, params = nil, only: nil)
     read_from = Budget::Account.default_read_from(budget)
+    sent_by_index = params.respond_to?(:to_h) ? params.to_h.with_indifferent_access : {}
 
-    link.accounts.each_with_index.map do |shared, index|
-      sent = params.respond_to?(:to_h) ? params.to_h.with_indifferent_access[index.to_s] : nil
+    link.accounts.each_with_index.filter_map do |shared, index|
+      next if only && !only.include?(shared)
+
+      sent = sent_by_index[index.to_s]
       sent = sent.respond_to?(:slice) ? sent.slice(:becomes, :name, :read_from).to_h.symbolize_keys : {}
-      Choice.new(shared_account: shared, becomes: Choice::NEW, name: default_name(link, shared), read_from: read_from, **sent)
+      Choice.new(shared_account: shared, index: index, becomes: Choice::NEW, name: default_name(link, shared), read_from: read_from, **sent)
     end
+  end
+
+  # Checks each choice as the Account it would make would be (`build` makes it, unsaved, with its connection), so a name that's taken or a date that couldn't be real
+  # is said on the page, and two new Accounts can't be given the same name either. True when no choice has an error.
+  def self.check_choices(choices, &build)
+    choices.each do |choice|
+      choice.errors.clear
+      choice.errors.add(:becomes, "isn't one of the choices") unless Choice::BECOMES.include?(choice.becomes)
+    end
+
+    names = []
+    choices.select(&:new_account?).each do |choice|
+      account = build.call(choice)
+      account.validate
+      account.errors.each { |error| choice.errors.add(error.attribute, error.message) if error.attribute.in?([ :name, :read_from ]) }
+
+      key = account.name.to_s.downcase
+      choice.errors.add(:name, "is the same as another account's on this page") if key.present? && names.include?(key) && choice.errors[:name].none?
+      names << key
+    end
+
+    choices.none? { it.errors.any? }
   end
 
   # The bank and the account ("TD Canada Trust Visa Infinite"), unless the account's name already starts with the bank's first word ("TD Every Day Chequing"),
@@ -67,6 +98,12 @@ class ConnectPlaid
     first_word = link.institution_name.to_s[/\A[[:alnum:]]+/]
     named_for_the_bank = first_word && shared.name.match?(/\A#{Regexp.escape(first_word)}(?![[:alnum:]])/i)
     named_for_the_bank ? shared.name : "#{link.institution_name} #{shared.name}".squish
+  end
+
+  # The Account `choice` makes in `connection`, for `plaid_account` as `/accounts/get` says it, which is where its id, name and mask come from, with Filing rules on.
+  def self.create_account(connection, choice, plaid_account)
+    connection.budget.accounts.create!(name: choice.name, read_from: choice.read_from, bank_connection: connection, external_account_id: plaid_account.id,
+      external_name: plaid_account.name || choice.shared_account.name, external_mask: plaid_account.mask, files_with_rules: true)
   end
 
   def self.call(...)
@@ -99,26 +136,10 @@ class ConnectPlaid
       @choices.select(&:new_account?)
     end
 
-    # Each choice is checked as the Account it would make would be, with a Plaid connection that isn't made yet, so a name that's taken or a date that couldn't be
-    # real is said on the page, and two new Accounts can't be given the same name either.
+    # Each choice is checked as the Account it would make would be, with a Plaid connection that isn't made yet, and at least one account becomes an Account.
     def choices_valid?
-      @choices.each do |choice|
-        choice.errors.clear
-        choice.errors.add(:becomes, "isn't one of the choices") unless Choice::BECOMES.include?(choice.becomes)
-      end
-
-      names = []
-      chosen.each do |choice|
-        account = build_account(choice)
-        account.validate
-        account.errors.each { |error| choice.errors.add(error.attribute, error.message) if error.attribute.in?([ :name, :read_from ]) }
-
-        key = account.name.to_s.downcase
-        choice.errors.add(:name, "is the same as another account's on this page") if key.present? && names.include?(key) && choice.errors[:name].none?
-        names << key
-      end
-
-      chosen.any? && @choices.none? { it.errors.any? }
+      valid = self.class.check_choices(@choices) { build_account(it) }
+      chosen.any? && valid
     end
 
     def build_account(choice)
@@ -174,10 +195,7 @@ class ConnectPlaid
       @budget.with_lock do
         connection = @budget.bank_connections.create!(provider: Budget::BankConnection::PLAID, login_id: exchange.item_id,
           login_name: answer.institution_name || @link.institution_name, institution_id: answer.institution_id || @link.institution_id, access_token: exchange.access_token)
-        accounts = pairs.map do |choice, plaid_account|
-          @budget.accounts.create!(name: choice.name, read_from: choice.read_from, bank_connection: connection, external_account_id: plaid_account.id,
-            external_name: plaid_account.name || choice.shared_account.name, external_mask: plaid_account.mask, files_with_rules: true)
-        end
+        accounts = pairs.map { |choice, plaid_account| self.class.create_account(connection, choice, plaid_account) }
         [ connection, accounts ]
       end
     end

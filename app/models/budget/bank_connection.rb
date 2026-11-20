@@ -116,6 +116,12 @@ class Budget::BankConnection < ApplicationRecord
     update_columns(needs_reconnect: true, updated_at: Time.current)
   end
 
+  # The token works again, which a bank's Reconnect (Plaid's update mode) finds out once Plaid answers with it, and the token stays as it was. Written without reading
+  # the token, as `needs_reconnect!` is.
+  def clear_needs_reconnect!
+    update_columns(needs_reconnect: false, updated_at: Time.current)
+  end
+
   # Forgets the token, which stops syncing until the connection is reconnected. The Account, its bank transactions and what they were filed as are
   # untouched. With no token there's nothing to have stopped working, so that's forgotten too.
   def disconnect!

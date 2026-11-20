@@ -6,8 +6,8 @@ class AccountConnectionsController < ApplicationController
   include SplitwiseSignIn
   include SyncedAccountScoped
 
-  # Reconnect and Disconnect are Splitwise's alone for now: a bank's come with Plaid's update mode and `/item/remove`, in later tickets, so for one of its Accounts
-  # they're a 404 and never a token forgotten without Plaid being told.
+  # Reconnect and Disconnect here are Splitwise's: a bank's Reconnect is Plaid's update mode (AccountConnectionReconnectsController), and its Disconnect comes with
+  # `/item/remove` in a later ticket, so for one of its Accounts these are a 404 and never a token forgotten without Plaid being told.
   before_action :require_splitwise_connection, only: %i[ create destroy ]
   before_action :require_splitwise, only: :create
 
