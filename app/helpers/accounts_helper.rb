@@ -3,7 +3,7 @@ module AccountsHelper
   # and how many it has.
   def account_detail(account, transaction_count)
     count = transaction_count.zero? ? "No bank transactions yet." : pluralize(transaction_count, "bank transaction")
-    if account.bank_connection&.plaid? && account.bank_connection.disconnected?
+    if account.disconnected_bank?
       "Was synced from #{account.synced_from}, which was disconnected. #{count}"
     elsif account.unshared?
       "No longer shared from #{account.synced_from}. #{count}"
@@ -29,7 +29,7 @@ module AccountsHelper
     bank = account.synced_from
     if account.connection_siblings.none?
       " Its connection to #{bank} is removed with it#{", and Budgie stops having access to #{bank}" if account.removes_item_with_it?}."
-    elsif account.bank_connection.plaid? && !account.bank_connection.disconnected?
+    elsif account.live_bank?
       " #{bank} will stop bringing in #{account.name_was}. Choose accounts can bring it back."
     end
   end

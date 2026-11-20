@@ -138,13 +138,13 @@ class Budget::BankConnection < ApplicationRecord
   # token can't be read without, raises ActiveRecord::Encryption::Errors::Decryption, since then Plaid can't be told. A connection that's already disconnected has no
   # Item left to remove.
   def disconnect_from_plaid!
-    remove_item
+    remove_at_plaid
     disconnect!
   end
 
   # Asks Plaid to remove the Item, as far as that's needed: the same as `disconnect_from_plaid!` without forgetting the token, for deleting a connection's last Account,
   # which deletes the connection instead.
-  def remove_item
+  def remove_at_plaid
     return if disconnected?
     raise PlaidApi::Error, "Plaid isn't set up here." unless PlaidApi.configured?
 
