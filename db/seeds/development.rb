@@ -188,3 +188,15 @@ if splitwise_account.bank_transactions.none?
   # As if it had synced a little while ago, so the Account's page has a time to say.
   splitwise.update_columns(synced_at: 25.minutes.ago)
 end
+
+# A bank connected through Plaid, with two Accounts on the one connection, and a token that isn't real: nothing reaches Plaid in development unless its Sandbox keys
+# are in .env, and a Plaid connection doesn't sync yet, but the Accounts page and an Account's page have a bank's Accounts to show. Only made when the budget has no
+# Plaid connection, so a developer's own, made through Plaid's Sandbox, is left as it is.
+if budget.bank_connections.plaid.none?
+  bank = budget.bank_connections.create!(provider: Budget::BankConnection::PLAID, login_id: "development-item-not-real", login_name: "Tartan-Dominion Bank (sample)",
+    institution_id: "ins_43", access_token: "development-token-not-real")
+  [ [ "Bank chequing (sample)", "Plaid Checking", "0000" ], [ "Bank savings (sample)", "Plaid Saving", "1111" ] ].each_with_index do |(name, external_name, mask), index|
+    budget.accounts.create!(name: name, bank_connection: bank, external_account_id: "development-account-#{index}", external_name: external_name, external_mask: mask,
+      read_from: this_month)
+  end
+end

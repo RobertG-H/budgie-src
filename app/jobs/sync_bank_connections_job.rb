@@ -14,8 +14,8 @@ class SyncBankConnectionsJob < ApplicationJob
 
     failures = []
 
-    Budget::BankConnection.syncable.find_each do |connection|
-      # Splitwise is the only provider there is. A second one adds its own service here, chosen by `connection.provider`.
+    # Only Splitwise's connections sync so far: a bank connected through Plaid is left alone until its own sync is built.
+    Budget::BankConnection.syncable.splitwise.find_each do |connection|
       error = SyncSplitwise.call(connection).error
       failures << failed(connection, error) if error
     rescue => error

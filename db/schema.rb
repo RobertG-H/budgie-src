@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_19_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_19_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -24,11 +24,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_120000) do
     t.bigint "bank_connection_id"
     t.string "external_account_id"
     t.date "read_from"
+    t.string "external_name"
+    t.string "external_mask"
     t.index "budget_id, lower((name)::text)", name: "index_budget_accounts_on_budget_id_and_lower_name", unique: true
     t.index ["bank_connection_id", "external_account_id"], name: "index_budget_accounts_on_connection_and_external_id", unique: true
     t.index ["default_csv_format_id"], name: "index_budget_accounts_on_default_csv_format_id"
     t.check_constraint "(bank_connection_id IS NULL) = (external_account_id IS NULL)", name: "budget_accounts_connection_with_external_id"
     t.check_constraint "(bank_connection_id IS NULL) = (read_from IS NULL)", name: "budget_accounts_read_from_when_synced"
+    t.check_constraint "bank_connection_id IS NOT NULL OR external_name IS NULL AND external_mask IS NULL", name: "budget_accounts_external_name_when_synced"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_accounts_name_not_blank"
     t.check_constraint "read_from >= '1990-01-01'::date", name: "budget_accounts_read_from_not_before_1990"
   end
@@ -55,10 +58,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_120000) do
     t.datetime "synced_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "institution_id"
     t.index ["budget_id", "provider", "login_id"], name: "index_budget_bank_connections_on_login", unique: true
     t.check_constraint "NOT needs_reconnect OR access_token IS NOT NULL", name: "budget_bank_connections_needs_reconnect_has_token"
     t.check_constraint "btrim(login_id::text) <> ''::text AND btrim(login_name::text) <> ''::text", name: "budget_bank_connections_login_not_blank"
-    t.check_constraint "provider::text = 'splitwise'::text", name: "budget_bank_connections_provider_known"
+    t.check_constraint "provider::text <> 'plaid'::text OR institution_id IS NOT NULL AND btrim(institution_id::text) <> ''::text", name: "budget_bank_connections_plaid_has_institution"
+    t.check_constraint "provider::text = ANY (ARRAY['splitwise'::character varying, 'plaid'::character varying]::text[])", name: "budget_bank_connections_provider_known"
   end
 
   create_table "budget_bank_transactions", force: :cascade do |t|

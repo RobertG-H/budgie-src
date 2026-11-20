@@ -23,13 +23,14 @@ RSpec.describe Budget::BankConnection, type: :model do
   end
 
   describe "provider" do
-    it "is one that's supported, and Splitwise is the first" do
-      expect(described_class::PROVIDERS).to eq([ "splitwise" ])
+    it "is one that's supported: Splitwise, and a bank through Plaid" do
+      expect(described_class::PROVIDERS).to eq([ "splitwise", "plaid" ])
       expect(build(:budget_bank_connection, provider: "splitwise")).to be_valid
+      expect(build(:budget_bank_connection, :plaid)).to be_valid
     end
 
     it "is refused when it isn't one" do
-      connection = build(:budget_bank_connection, provider: "plaid")
+      connection = build(:budget_bank_connection, provider: "flinks")
 
       expect(connection).not_to be_valid
       expect(connection.errors[:provider]).to eq([ "isn't supported" ])
@@ -37,10 +38,61 @@ RSpec.describe Budget::BankConnection, type: :model do
 
     it "has a name to show" do
       expect(build(:budget_bank_connection, provider: "splitwise").provider_name).to eq("Splitwise")
+      expect(build(:budget_bank_connection, :plaid).provider_name).to eq("Plaid")
     end
 
     it "is refused by the database too" do
-      expect { build(:budget_bank_connection, provider: "plaid").save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /budget_bank_connections_provider_known/)
+      expect { build(:budget_bank_connection, provider: "flinks").save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /budget_bank_connections_provider_known/)
+    end
+  end
+
+  describe "a bank connected through Plaid" do
+    subject(:connection) { build(:budget_bank_connection, :plaid, login_id: "item-1", login_name: "TD Canada Trust", institution_id: "ins_42") }
+
+    it "is one Item: its login is the Item's id and its name the bank's" do
+      expect(connection).to be_valid
+      expect(connection).to be_plaid
+      expect(connection).not_to be_splitwise
+    end
+
+    it "is named for the bank, where a Splitwise connection is named for Splitwise" do
+      expect(connection.name).to eq("TD Canada Trust")
+      expect(build(:budget_bank_connection, login_name: "Robert G.").name).to eq("Splitwise")
+    end
+
+    it "needs the bank's Plaid id, which the database checks too, and a Splitwise connection has none" do
+      connection.institution_id = " "
+
+      expect(connection).not_to be_valid
+      expect(connection.errors[:institution_id]).to eq([ "can't be blank" ])
+      expect { connection.save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /budget_bank_connections_plaid_has_institution/)
+      expect(build(:budget_bank_connection, institution_id: nil)).to be_valid
+    end
+
+    it "isn't the one account, so it can have several Accounts" do
+      expect(connection.login_is_the_account?).to be(false)
+
+      connection.save!
+      chequing = create(:budget_account, :plaid, budget: connection.budget, bank_connection: connection, external_account_id: "acc-1")
+      savings = create(:budget_account, :plaid, budget: connection.budget, bank_connection: connection, external_account_id: "acc-2")
+
+      expect(connection.accounts).to contain_exactly(chequing, savings)
+    end
+
+    it "keeps its token encrypted, as a Splitwise connection's is" do
+      connection.access_token = "access-sandbox-secret"
+      connection.save!
+
+      stored = described_class.connection.select_value("SELECT access_token FROM budget_bank_connections WHERE id = #{connection.id}")
+      expect(stored).not_to include("access-sandbox-secret")
+      expect(connection.reload.access_token).to eq("access-sandbox-secret")
+    end
+
+    it "is never synced by the hourly job or Sync now until its sync is built, so it isn't among the Splitwise ones" do
+      connection.save!
+      splitwise = create(:budget_bank_connection, budget: connection.budget)
+
+      expect(described_class.splitwise).to contain_exactly(splitwise)
     end
   end
 

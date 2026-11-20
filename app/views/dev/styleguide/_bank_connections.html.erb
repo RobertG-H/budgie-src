@@ -1,0 +1,29 @@
+<%# locals: () %>
+<%# Connecting a bank through Plaid, drawn from plain values: the rows of the page after Plaid Link (a new Account, and one left out), the hint above them, and the panel on a synced Account's page. The form goes nowhere: it's only here to be looked at. %>
+<% chequing = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "a", name: "TD Every Day Chequing", mask: "4821", subtype: "checking"),
+     becomes: ConnectPlaid::Choice::NEW, name: "TD Every Day Chequing", read_from: Date.new(2026, 1, 2)) %>
+<% usd = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "b", name: "TD U.S. Dollar Account", mask: "1100", subtype: "savings"),
+     becomes: ConnectPlaid::Choice::LEAVE, name: "TD U.S. Dollar Account", read_from: Date.new(2026, 1, 2)) %>
+<% taken = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "c", name: "Visa Infinite", mask: nil, subtype: "credit card"),
+     becomes: ConnectPlaid::Choice::NEW, name: "Visa", read_from: Date.new(2026, 1, 2)).tap { it.errors.add(:name, "has already been taken") } %>
+
+<section id="bank-connections" aria-labelledby="bank-connections-heading" class="space-y-4 border-t border-base-300 pt-6">
+  <h2 id="bank-connections-heading" class="text-xl font-semibold">Connecting a bank</h2>
+  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then the panel a synced Account's page has in place of Import.</p>
+
+  <div class="mx-auto max-w-xl space-y-4">
+    <%= render "plaid_choices/currency_hint", currency: "CAD" %>
+    <%= form_with url: "#", scope: :plaid_choice, data: { turbo: false } do |form| %>
+      <ol class="list rounded-box border border-base-300">
+        <%= render "plaid_choices/choice", form: form, choice: chequing, index: 0 %>
+        <%= render "plaid_choices/choice", form: form, choice: usd, index: 1 %>
+        <%= render "plaid_choices/choice", form: form, choice: taken, index: 2 %>
+      </ol>
+    <% end %>
+  </div>
+
+  <%= render "accounts/plaid_connection", bank: "TD Canada Trust", external_name: "TD Every Day Chequing", external_mask: "4821",
+        others: [ [ "TD Savings", "#" ] ], last_synced: "Not synced yet." %>
+  <%= render "accounts/plaid_connection", bank: "Tartan-Dominion Bank of Canada", external_name: "Plaid Credit Card", external_mask: nil,
+        others: [], last_synced: "Not synced yet." %>
+</section>

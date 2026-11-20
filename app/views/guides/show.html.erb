@@ -82,6 +82,11 @@
     <p>A row that's already in the Account is skipped as a duplicate, so importing a file that overlaps the last one is safe. The Import's summary says what was added and what was skipped, and an Account's latest Import can be undone for 24 hours.</p>
   <% end %>
 
+  <%= guide_section "connecting-a-bank" do %>
+    <p>Where it's offered, <strong>Connect a bank</strong> on the Accounts page lets you sign in to your bank through Plaid and choose the accounts to share. Then Budgie lists them, and you choose what each one <strong>Becomes</strong>: a new Account, with its name and the date to read bank transactions from, or <strong>Leave out</strong>. Nothing is connected until you press <strong>Connect</strong>, within 30 minutes of signing in.</p>
+    <p>An account in another currency than your budget's is left out, and Budgie says so. An Account connected this way takes no Import: its bank transactions come from the bank.</p>
+  <% end %>
+
   <%= guide_section "filing" do %>
     <p>A bank transaction is your bank's record of money in or out. It changes nothing in your budget until you file it: money out as a Spend, and money in as a Deposit or a Refund. Or ignore it, such as paying off a card from your bank, which is money between your own accounts.</p>
     <ul>

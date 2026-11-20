@@ -1,0 +1,28 @@
+<% content_for :title, "Connect a bank · Budgie" %>
+<%# Plaid's script has to come from Plaid itself, so it's a plain script tag here and never pinned or vendored, and only on this page. The page is never cached, so a link token that has expired never comes back on Back, and it isn't refreshed by morphing, which could remove Link's iframe. %>
+<% content_for :head do %>
+  <meta name="turbo-cache-control" content="no-cache">
+  <%= javascript_include_tag "https://cdn.plaid.com/link/v2/stable/link-initialize.js", nonce: true %>
+<% end %>
+
+<div class="mx-auto max-w-md" data-controller="plaid-link" data-plaid-link-token-value="<%= @link_token %>">
+  <%= render "components/page_header", title: "Connect a bank",
+        description: "Sign in to your bank through Plaid and choose the accounts to share. Then you choose what each one becomes here, and nothing is connected until you do." %>
+
+  <%# What Plaid Link gives back goes in this form's hidden fields, which the plaid-link controller fills and sends. %>
+  <%= form_with url: plaid_connection_path, scope: :plaid_link, class: "mt-8 space-y-6", data: { plaid_link_target: "form" } do %>
+    <div data-plaid-link-target="fields"></div>
+
+    <noscript>
+      <p class="text-base-content/70">Connecting a bank needs JavaScript, which is off in this browser.</p>
+    </noscript>
+    <div role="alert" class="alert alert-error" data-plaid-link-target="unavailable" hidden>
+      <span>Plaid couldn't be loaded, so a bank can't be connected right now. Reload the page to try again.</span>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-4">
+      <button type="button" class="btn btn-primary" disabled data-plaid-link-target="button" data-action="plaid-link#open">Continue to Plaid</button>
+      <%= link_to "Cancel", accounts_path, class: "btn btn-ghost" %>
+    </div>
+  <% end %>
+</div>

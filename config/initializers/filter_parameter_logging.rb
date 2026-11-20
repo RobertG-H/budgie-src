@@ -6,5 +6,7 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   # The authorization code a provider's redirect brings back, which is swapped for a token (SplitwiseCallbacksController).
-  :code
+  :code,
+  # What Plaid Link gives back, which is swapped for a bank connection's token (PlaidConnectionsController). `:token` covers it too; it's named so it stays covered.
+  :public_token
 ]

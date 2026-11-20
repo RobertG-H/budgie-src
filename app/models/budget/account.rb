@@ -43,6 +43,8 @@ class Budget::Account < ApplicationRecord
   validates :read_from, presence: true, if: :bank_connection
   validates :read_from, absence: { message: "needs a connection" }, unless: :bank_connection
   validate :read_from_is_a_date_that_could_be_real
+  # A bank's name and mask for the account it's synced from, which say which real account it is (the ADR 0001 addendum). Only a synced Account has them.
+  validates :external_name, :external_mask, absence: { message: "needs a connection" }, unless: :bank_connection
 
   # Its connection goes with it when no other Account is synced from it, which is always so for Splitwise. After the Account's own row has gone,
   # since its foreign key is what keeps the connection from being deleted, and only reached when nothing refused the delete.
@@ -67,9 +69,9 @@ class Budget::Account < ApplicationRecord
     bank_connection_id.present?
   end
 
-  # What it's synced from, as the provider's name ("Splitwise"), or nothing for an Account known only from CSV files.
+  # What it's synced from, as the connection's name ("Splitwise", or a bank's, "TD Canada Trust"), or nothing for an Account known only from CSV files.
   def synced_from
-    bank_connection&.provider_name
+    bank_connection&.name
   end
 
   # What money in starts as when one of its bank transactions is filed: a Deposit, as for a bank, except from Splitwise, where it's almost always friends paying

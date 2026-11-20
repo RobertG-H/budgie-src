@@ -116,6 +116,19 @@ RSpec.describe "Navigation", type: :request do
     assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
   end
 
+  it "says Accounts is the one they're on while connecting a bank, on the page that opens Plaid Link and the page after it" do
+    sign_in_as budget.user
+
+    get new_plaid_connection_path
+    assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
+
+    post plaid_connection_path, params: { plaid_link: { public_token: "public-1", institution_id: "ins_42", institution_name: "TD Canada Trust",
+      accounts: { "0" => { id: "acc-1", name: "Chequing", mask: "4821" } } } }
+    get plaid_choice_path
+    assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
+    assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
+  end
+
   describe "the section a form belongs to, which is where it was opened from" do
     let(:envelope) { create(:budget_envelope, budget: budget, name: "Groceries") }
     let(:other_envelope) { create(:budget_envelope, budget: budget, name: "Household") }

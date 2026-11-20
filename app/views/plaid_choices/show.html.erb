@@ -1,0 +1,32 @@
+<% content_for :title, "Connect #{@link.institution_name} · Budgie" %>
+<%# Never cached: once it's submitted or cancelled, or its 30 minutes are up, there's nothing to come back to. %>
+<% content_for :head do %>
+  <meta name="turbo-cache-control" content="no-cache">
+<% end %>
+
+<div class="mx-auto max-w-xl">
+  <%= render "components/page_header", title: "Connect #{@link.institution_name}" %>
+  <div class="mt-2 space-y-2">
+    <p class="text-base-content/70">
+      You shared <%= pluralize(@link.accounts.size, "account") %> from <%= @link.institution_name %>. Choose what each one becomes.
+      Nothing is connected until you press Connect <%= @link.institution_name %>, which has to be within 30 minutes.
+    </p>
+    <%= render "plaid_choices/currency_hint", currency: Current.budget.currency %>
+  </div>
+
+  <%= form_with url: plaid_choice_path, scope: :plaid_choice, class: "mt-8 space-y-8" do |form| %>
+    <%= render "form_errors", messages: [ @error, *@choices.flat_map { |choice| choice.errors.full_messages.map { "#{choice.shared_account.name}: #{it}" } } ].compact %>
+
+    <ol class="list rounded-box border border-base-300">
+      <% @choices.each_with_index do |choice, index| %>
+        <%= render "plaid_choices/choice", form: form, choice: choice, index: index %>
+      <% end %>
+    </ol>
+
+    <div class="flex flex-wrap items-center gap-4">
+      <%= form.submit "Connect #{@link.institution_name}", class: "btn btn-primary" %>
+      <%# Cancel forgets what Plaid Link gave back, so it's a request of its own and not a link. %>
+      <%= button_tag "Cancel", type: "submit", formaction: plaid_choice_path, name: "_method", value: "delete", formnovalidate: true, class: "btn btn-ghost" %>
+    </div>
+  <% end %>
+</div>
