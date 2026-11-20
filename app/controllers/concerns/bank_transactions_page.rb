@@ -12,8 +12,8 @@ module BankTransactionsPage
 
   private
     # What a row needs so that saying what state it's in, and showing what it was filed as and by which Filing rule, takes no query of its
-    # own: the union of what the Unfiled list and an Account's page each needed.
-    PRELOADS = [ :account, { deposit_links: :deposit, spend_links: { spend: :envelope }, refund_links: { refund: :envelope }, filing_rule: :envelope } ].freeze
+    # own: the union of what the Unfiled list and an Account's page each needed, and the Account's connection, which a removed one is named by.
+    PRELOADS = [ { account: :bank_connection }, { deposit_links: :deposit, spend_links: { spend: :envelope }, refund_links: { refund: :envelope }, filing_rule: :envelope } ].freeze
 
     # `@list` is the list, `@bank_transactions` the page asked for (see Paginated) and `@guesses` the Guess of each unfiled one on it that
     # has one, by its id, whichever state the list is in: it costs no query of its own.

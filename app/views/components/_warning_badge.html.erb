@@ -1,3 +1,3 @@
 <%# locals: (text:) %>
-<%# A short word that says something about a bank transaction needs a second look, such as "Doesn't add up" or "Deleted in Splitwise": a `badge-warning` on one line (so a narrow row doesn't wrap it out of its pill), whose words carry the meaning and never the colour. %>
-<span class="badge badge-warning badge-sm whitespace-nowrap"><%= text %></span>
+<%# A few words that say something about a bank transaction needs a second look, such as "Doesn't add up", "Deleted in Splitwise" or "Removed by TD Canada Trust": a `badge-warning`, whose words carry the meaning and never the colour. A bank's name can be long, so on a narrow row it wraps inside its pill (`h-auto`) rather than widening the row and crushing the date and the amount; a short one stays on one line. %>
+<span class="badge badge-warning badge-sm h-auto max-w-full py-0.5 text-start"><%= text %></span>

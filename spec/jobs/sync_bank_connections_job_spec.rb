@@ -118,13 +118,73 @@ RSpec.describe SyncBankConnectionsJob, type: :job do
     expect(other.bank_transactions.count).to eq(1)
   end
 
-  it "does nothing where Splitwise isn't set up, since a token can't be read there" do
+  it "does nothing for Splitwise's connections where Splitwise isn't set up, since a token can't be read there" do
     _, account = connected_budget(user_id: "1", token: "token-1")
     Splitwise.client = SplitwiseFake.new(configured: false)
 
     described_class.perform_now
 
     expect(account.bank_transactions).to be_empty
+  end
+
+  describe "a bank's connections, through Plaid" do
+    def bank_account(token)
+      connection = create(:budget_bank_connection, :plaid, budget: create(:budget, currency: "CAD"), access_token: token)
+      account = create(:budget_account, :plaid, budget: connection.budget, bank_connection: connection, external_account_id: "acc-#{token}")
+      plaid.adds(token, plaid.transaction("tx-#{token}", account: account.external_account_id))
+      [ connection, account ]
+    end
+
+    it "syncs them alongside Splitwise's" do
+      _, splitwise_account = connected_budget(user_id: "1", token: "token-1")
+      _, bank = bank_account("bank-1")
+
+      described_class.perform_now
+
+      expect(splitwise_account.bank_transactions.count).to eq(1)
+      expect(bank.bank_transactions.count).to eq(1)
+    end
+
+    it "skips them where Plaid isn't set up, and still syncs Splitwise's" do
+      _, splitwise_account = connected_budget(user_id: "1", token: "token-1")
+      _, bank = bank_account("bank-1")
+      PlaidApi.client = PlaidFake.new(configured: false)
+
+      described_class.perform_now
+
+      expect(bank.bank_transactions).to be_empty
+      expect(splitwise_account.bank_transactions.count).to eq(1)
+    end
+
+    it "marks one the bank stopped accepting, without failing the run, and skips it after" do
+      stuck, = bank_account("bank-1")
+      _, other = bank_account("bank-2")
+      allow(plaid).to receive(:transactions_sync).and_wrap_original do |original, token, **options|
+        raise PlaidApi::Error.new(error_code: "ITEM_LOGIN_REQUIRED", error_type: "ITEM_ERROR", status: 400) if token == "bank-1"
+
+        original.call(token, **options)
+      end
+
+      expect { described_class.perform_now }.not_to raise_error
+      expect(stuck.reload).to be_needs_reconnect
+      expect(other.bank_transactions.count).to eq(1)
+
+      described_class.perform_now
+      expect(plaid.transaction_requests.map(&:first)).to eq([ "bank-2", "bank-2" ])
+    end
+
+    it "fails the run, after the rest are done, for any other error of Plaid's" do
+      bank_account("bank-1")
+      _, other = bank_account("bank-2")
+      allow(plaid).to receive(:transactions_sync).and_wrap_original do |original, token, **options|
+        raise PlaidApi::Error.new(error_code: "ITEM_NOT_FOUND", status: 400) if token == "bank-1"
+
+        original.call(token, **options)
+      end
+
+      expect { described_class.perform_now }.to raise_error(PlaidApi::Error, "Plaid refused it (ITEM_NOT_FOUND).")
+      expect(other.bank_transactions.count).to eq(1)
+    end
   end
 
   describe "its entry in config/recurring.yml" do

@@ -129,15 +129,17 @@ class Budget::BankTransaction < ApplicationRecord
     to_review.where(id: transactions.select(:id)).update_all(reviewed_at: Time.current, updated_at: Time.current)
   end
 
-  # The four columns a sync ever writes on a bank transaction it already has, and their types, which a CASE of nothing but nulls needs said.
-  SYNCED_COLUMNS = { date: "date", description: "varchar", amount: "numeric", removed_at: "timestamp" }.freeze
+  # The columns a sync ever writes on a bank transaction it already has, and their types, which a CASE of nothing but nulls needs said. A bank's sync writes
+  # `authorized_date` too, which Splitwise has nothing for.
+  SYNCED_COLUMNS = { date: "date", description: "varchar", amount: "numeric", authorized_date: "date", removed_at: "timestamp" }.freeze
 
-  # What a sync changed, in one statement however many there are: `changes` is `{ id => { date:, description:, amount:, removed_at: } }`, every column of
-  # SYNCED_COLUMNS for each. Never the content key or the occurrence, which record how a row first looked (ADR 0010), and never a record that was filed from it.
+  # What a sync changed, in one statement however many there are: `changes` is `{ id => { date:, description:, amount:, removed_at: } }`, the same columns of
+  # SYNCED_COLUMNS for each, which are the ones written. Never the content key or the occurrence, which record how a row first looked (ADR 0010), and never a
+  # record that was filed from it.
   def self.update_from_sync(changes)
     return if changes.empty?
 
-    assignments = SYNCED_COLUMNS.to_h do |column, type|
+    assignments = SYNCED_COLUMNS.slice(*changes.each_value.first.keys).to_h do |column, type|
       cases = changes.reduce(Arel::Nodes::Case.new(arel_table[:id])) { |node, (id, values)| node.when(id).then(values.fetch(column)) }
       [ column, Arel::Nodes::NamedFunction.new("CAST", [ cases.as(type) ]) ]
     end
@@ -215,6 +217,24 @@ class Budget::BankTransaction < ApplicationRecord
   # It's kept, since what was filed from it stays, and a sync that finds it again clears this.
   def removed?
     removed_at.present?
+  end
+
+  # What it says once a sync found it gone, which is where it went from: "Removed by TD Canada Trust" for a bank's (the bank's name, as the connection has it)
+  # and "Deleted in Splitwise" for a Splitwise expense. Preload the Account's connection for a list.
+  def removed_label
+    connection = account.bank_connection
+    connection&.plaid? ? "Removed by #{connection.name}" : "Deleted in Splitwise"
+  end
+
+  # Why it can't be filed, by the state it's in, when it isn't unfiled.
+  def filing_refusal
+    state == :removed ? removed_refusal : FILING_REFUSALS.fetch(state)
+  end
+
+  # Why it can't be filed once it's removed, in the same words.
+  def removed_refusal
+    connection = account.bank_connection
+    connection&.plaid? ? "This bank transaction was removed by #{connection.name}, so it can't be filed." : FILING_REFUSALS.fetch(:removed)
   end
 
   # The Filing rule that filed or ignored it, which is nothing for one that's unfiled, or that a person filed or ignored.

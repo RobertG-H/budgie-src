@@ -79,10 +79,11 @@ The task shows the current and new currency and asks you to type the email to co
 converted**: every amount keeps its number and is shown in the new currency. The supported currencies are
 listed in `Budget::CURRENCIES`.
 
-## Syncing Splitwise
+## Syncing Splitwise and banks
 
-A job syncs every connected Splitwise Account every hour, at twenty past, in production and on the testing host. It brings in each expense the person is part of, as a bank transaction of their share, and keeps it up to date as
-the expense is edited, deleted and restored ([Splitwise setup](splitwise.md)). People can also press **Sync now** on the Account's page. You normally never run it yourself, but you can, to try it in development (where
+A job syncs every connection every hour, at twenty past, in production and on the testing host. For a Splitwise Account it brings in each expense the person is part of, as a bank transaction of their share, and keeps it up to date as
+the expense is edited, deleted and restored ([Splitwise setup](splitwise.md)). For a bank connected through Plaid it brings in each posted transaction of each of its Accounts, and keeps it up to date as the bank changes or
+removes it ([Plaid setup](plaid.md)). A provider that isn't set up on a host is skipped there. People can also press **Sync now** (or **Sync TD now**, for a bank) on the Account's page. You normally never run it yourself, but you can, to try it in development (where
 recurring tasks don't run) or if the job on a host stops:
 
 ```sh
@@ -90,9 +91,9 @@ docker compose run --rm web bin/rails budget:sync_connections
 docker compose run --rm kamal task budget:sync_connections -d production
 ```
 
-It syncs every connection that can be synced and prints how many that was, or says that none can. A connection whose Splitwise sign-in stopped working says so on its Account's page and is skipped until its owner presses
-**Reconnect**. If one connection fails for another reason, the others still sync, the log says `Couldn't sync connection <id>` with the reason, and the job (or the task) then fails with the first error. That connection's
-sync is rolled back whole and its marker doesn't move, so the next run reads it again and nothing is lost or brought in twice.
+It syncs every connection that can be synced and prints how many that was, or says that none can. A connection whose Splitwise sign-in stopped working, or that the bank stopped accepting, says so on its Account's page and is
+skipped until its owner reconnects it. If one connection fails for another reason, the others still sync, the log says `Couldn't sync connection <id>` with the reason, and the job (or the task) then fails with the first error. That connection's
+sync is rolled back whole and its marker (or a bank's cursor) doesn't move, so the next run reads it again and nothing is lost or brought in twice.
 
 ## Starting new months
 

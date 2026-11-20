@@ -1,7 +1,7 @@
 require "net/http"
 
-# Asks Plaid the questions connecting a bank needs, and nothing else yet: a link token for Plaid Link to open with, what the public token Link gives back is worth,
-# which accounts an Item has, and removing an Item. It's the real thing behind `PlaidApi.client`, and the only code that opens a connection to Plaid.
+# Asks Plaid the questions connecting a bank and syncing it need: a link token for Plaid Link to open with, what the public token Link gives back is worth,
+# which accounts an Item has, what changed in its transactions since a cursor, and removing an Item. It's the real thing behind `PlaidApi.client`, and the only code that opens a connection to Plaid.
 #
 # Every request is a JSON POST with the client's id and secret in Plaid's headers, never in the body, so they can't end up in anything that shows a body. Neither
 # appears in an error, nor in `inspect`, and nor does a token: an error carries only Plaid's error code and the message Plaid writes for a person. Every failure
@@ -67,6 +67,22 @@ class PlaidApi::Client
     )
   end
 
+  # How many transactions to ask `/transactions/sync` for at once, which is the most Plaid gives.
+  TRANSACTIONS_PAGE_SIZE = 500
+
+  # One page of what changed in the Item's transactions since `cursor` (none the first time, which is the whole history), as a PlaidApi::TransactionsPage. The bank's
+  # own description is asked for on every call, the first included, since a transaction already sent without it isn't sent again.
+  def transactions_sync(access_token, cursor:)
+    body = post("/transactions/sync", access_token: access_token, **({ cursor: cursor } if cursor), count: TRANSACTIONS_PAGE_SIZE,
+      options: { include_original_description: true })
+
+    PlaidApi::TransactionsPage.new(
+      added: list(body["added"]).filter_map { transaction(it) }, modified: list(body["modified"]).filter_map { transaction(it) },
+      removed: list(body["removed"]).filter_map { removed_transaction(it) }, next_cursor: body["next_cursor"].is_a?(String) ? body["next_cursor"] : "",
+      has_more: body["has_more"] == true
+    )
+  end
+
   # Removes the Item: Plaid stops reading the bank for Budgie, and stops billing for it. The access token stops working.
   def remove_item(access_token)
     post("/item/remove", access_token: access_token)
@@ -91,9 +107,12 @@ class PlaidApi::Client
       body = parse(response)
 
       return body if response.is_a?(Net::HTTPSuccess)
-      raise PlaidApi::Error.new(error_code: text(body["error_code"]), display_message: text(body["display_message"])) if body["error_code"].present?
+      if body["error_code"].present?
+        raise PlaidApi::Error.new(error_code: text(body["error_code"]), error_type: text(body["error_type"]), display_message: text(body["display_message"]),
+          status: response.code.to_i)
+      end
 
-      raise PlaidApi::Error, "Plaid answered #{response.code}."
+      raise PlaidApi::Error.new("Plaid answered #{response.code}.", status: response.code.to_i)
     end
 
     def perform(request)
@@ -119,6 +138,34 @@ class PlaidApi::Client
         subtype: text(entry["subtype"]), iso_currency_code: text(balances["iso_currency_code"]), unofficial_currency_code: text(balances["unofficial_currency_code"]),
         current_balance: decimal(balances["current"]), available_balance: decimal(balances["available"])
       )
+    end
+
+    def list(value)
+      value.is_a?(Array) ? value : []
+    end
+
+    # A transaction with no id can't be matched to anything, so it's left out; anything else that can't be read is nil, for the sync to judge.
+    def transaction(entry)
+      return unless entry.is_a?(Hash) && (id = text(entry["transaction_id"]))
+
+      PlaidApi::Transaction.new(
+        id: id, account_id: text(entry["account_id"]), amount: decimal(entry["amount"]), iso_currency_code: text(entry["iso_currency_code"]),
+        unofficial_currency_code: text(entry["unofficial_currency_code"]), date: date(entry["date"]), authorized_date: date(entry["authorized_date"]),
+        original_description: entry["original_description"].is_a?(String) ? entry["original_description"] : nil,
+        name: entry["name"].is_a?(String) ? entry["name"] : nil, pending: entry["pending"] == true
+      )
+    end
+
+    def removed_transaction(entry)
+      return unless entry.is_a?(Hash) && (id = text(entry["transaction_id"]))
+
+      PlaidApi::RemovedTransaction.new(id: id, account_id: text(entry["account_id"]))
+    end
+
+    def date(value)
+      Date.iso8601(value) if value.is_a?(String)
+    rescue Date::Error
+      nil
     end
 
     def text(value)

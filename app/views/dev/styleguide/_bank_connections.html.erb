@@ -9,7 +9,7 @@
 
 <section id="bank-connections" aria-labelledby="bank-connections-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="bank-connections-heading" class="text-xl font-semibold">Connecting a bank</h2>
-  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then the panel a synced Account's page has in place of Import.</p>
+  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, and one the bank stopped accepting.</p>
 
   <div class="mx-auto max-w-xl space-y-4">
     <%= render "plaid_choices/currency_hint", currency: "CAD" %>
@@ -22,8 +22,10 @@
     <% end %>
   </div>
 
-  <%= render "accounts/plaid_connection", bank: "TD Canada Trust", external_name: "TD Every Day Chequing", external_mask: "4821",
-        others: [ [ "TD Savings", "#" ] ], last_synced: "Not synced yet." %>
-  <%= render "accounts/plaid_connection", bank: "Tartan-Dominion Bank of Canada", external_name: "Plaid Credit Card", external_mask: nil,
-        others: [], last_synced: "Not synced yet." %>
+  <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Every Day Chequing", external_mask: "4821",
+        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#" %>
+  <%= render "accounts/plaid_connection", bank: "Tartan-Dominion Bank of Canada", short_name: "Tartan", external_name: "Plaid Credit Card", external_mask: nil,
+        others: [], last_synced: "Not synced yet.", sync_path: "#" %>
+  <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Savings", external_mask: "0042",
+        others: [ [ "TD Every Day Chequing", "#" ] ], last_synced: "Last synced 3 days ago.", needs_reconnect: true %>
 </section>

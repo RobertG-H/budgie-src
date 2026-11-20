@@ -1,7 +1,7 @@
 require "rails_helper"
 
-# The Accounts a bank connected through Plaid syncs (ADR 0018), before their sync is built: they're on the Accounts list saying where they're from, each one's page
-# has a panel for its connection in place of Import, they take no CSV Import from any way in, and nothing that syncs or disconnects Splitwise reaches them yet.
+# The Accounts a bank connected through Plaid syncs (ADR 0018): they're on the Accounts list saying where they're from, each one's page has a panel for its connection
+# in place of Import, with Sync TD now, they take no CSV Import from any way in, and what reconnects or disconnects Splitwise doesn't reach them yet.
 RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
   let(:budget) { create(:budget, currency: "CAD") }
   let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust") }
@@ -45,10 +45,23 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       expect(visible_text).to include("No bank transactions yet. Bank transactions from TD Canada Trust appear here once they're synced.")
     end
 
-    it "offers none of Splitwise's actions, which come later for a bank" do
+    it "offers Sync TD now, named for the bank, and none of Splitwise's other actions, which come later for a bank" do
       get account_path(chequing)
 
+      assert_select "form[action='#{account_connection_sync_path(chequing)}'] button[data-turbo-submits-with]", text: "Sync TD now"
       expect(visible_text).not_to include("Sync now", "Reconnect", "Disconnect", "expense")
+    end
+
+    it "offers no Sync TD now where Plaid isn't set up, or once the bank stopped accepting the connection, which it says" do
+      PlaidApi.client = PlaidFake.new(configured: false)
+      get account_path(chequing)
+      assert_select "button", text: "Sync TD now", count: 0
+
+      PlaidApi.client = PlaidFake.new
+      connection.needs_reconnect!
+      get account_path(chequing)
+      assert_select "button", text: "Sync TD now", count: 0
+      assert_select "[role=status].alert-warning", text: "TD Canada Trust stopped accepting the connection, so this Account isn't syncing."
     end
 
     it "has the date to read from, under a closed details, in bank transactions" do
@@ -118,32 +131,107 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
     end
   end
 
-  describe "what's Splitwise's alone, until a later ticket" do
-    it "is a 404: Sync now, Reconnect and Disconnect, which forgets no token without Plaid being told" do
+  describe "Sync TD now" do
+    def adds(*transactions)
+      plaid.adds(connection.access_token, *transactions)
+    end
+
+    it "brings the posted transactions of every Account of the connection in, says what it did, and says when it last synced", :aggregate_failures do
+      adds plaid.transaction("tx-1", account: chequing.external_account_id, amount: "82.45", date: "2026-10-03", description: "LOBLAWS #1234"),
+        plaid.transaction("tx-2", account: savings.external_account_id, amount: "-100.00", date: "2026-10-04", description: "TRANSFER IN"),
+        plaid.transaction("tx-3", account: chequing.external_account_id, currency: "USD")
+
       post account_connection_sync_path(chequing)
-      expect(response).to have_http_status(:not_found)
+
+      expect(response).to redirect_to(account_path(chequing))
+      expect(flash[:notice]).to eq("Synced from TD Canada Trust: 2 new. 1 skipped.")
+      expect(chequing.bank_transactions.pluck(:description, :amount)).to eq([ [ "LOBLAWS #1234", BigDecimal("-82.45") ] ])
+      expect(savings.bank_transactions.pluck(:amount)).to eq([ BigDecimal("100.00") ])
+
+      follow_redirect!
+      expect(visible_text).to include("Last synced less than a minute ago.", "LOBLAWS #1234")
+    end
+
+    it "links Review them to the To review state of every Account when Filing rules filed some, since they file in each of the connection's Accounts" do
+      create(:budget_filing_rule, budget: budget, text: "loblaws")
+      adds plaid.transaction("tx-1", account: chequing.external_account_id, description: "LOBLAWS #1234")
+
+      post account_connection_sync_path(savings)
+      follow_redirect!
+
+      assert_select "[role=status]", text: /Synced from TD Canada Trust: 1 new\. Filing rules filed 1 of them\. Review them/
+      assert_select "[role=status] a[href='#{bank_transactions_path(filter: { state: "to_review" })}']", text: "Review them"
+    end
+
+    it "says the bank stopped accepting the connection, and changes nothing, when Plaid says it needs signing in again" do
+      adds plaid.transaction("tx-1", account: chequing.external_account_id)
+      plaid.fails_once(:transactions_sync, PlaidApi::Error.new(error_code: "ITEM_LOGIN_REQUIRED", error_type: "ITEM_ERROR", status: 400))
+
+      post account_connection_sync_path(chequing)
+
+      expect(flash[:alert]).to eq("TD Canada Trust stopped accepting the connection, so nothing was synced.")
+      expect(connection.reload).to be_needs_reconnect
+      expect(chequing.bank_transactions).to be_empty
+    end
+
+    it "is turned away where Plaid isn't set up" do
+      PlaidApi.client = PlaidFake.new(configured: false)
+
+      post account_connection_sync_path(chequing)
+
+      expect(response).to redirect_to(accounts_path)
+      expect(flash[:alert]).to eq("Plaid isn't set up here, so it can't be synced.")
+    end
+
+    it "is synced by the hourly job too" do
+      adds plaid.transaction("tx-1", account: chequing.external_account_id)
+
+      SyncBankConnectionsJob.perform_now
+
+      expect(chequing.bank_transactions.count).to eq(1)
+    end
+  end
+
+  describe "a bank transaction the bank removed" do
+    let!(:removed) { create(:budget_bank_transaction, :removed, account: chequing, description: "LOBLAWS #1234", date: Date.new(2026, 10, 3)) }
+    let!(:filed) { create(:budget_bank_transaction, :removed, :filed, account: savings, description: "COSTCO #99", date: Date.new(2026, 10, 4)) }
+
+    def badges(description)
+      css_select("main ul.list li").find { it.text.include?(description) }.css(".badge").map { it.text.squish }
+    end
+
+    it "says the bank removed it, beside Un-file when it was filed, on the Bank transactions page and on its Account's page", :aggregate_failures do
+      get bank_transactions_path(filter: { date_from: "2026-10-01", date_to: "2026-10-31" })
+
+      expect(badges("LOBLAWS #1234")).to eq([ "Removed by TD Canada Trust" ])
+      expect(badges("COSTCO #99")).to eq([ "Filed", "Removed by TD Canada Trust" ])
+      expect(visible_text).to include("Un-file it, or keep its records.")
+
+      get account_path(chequing)
+
+      expect(badges("LOBLAWS #1234")).to eq([ "Removed by TD Canada Trust" ])
+    end
+
+    it "leaves the Unfiled state, and filing it is refused in the bank's words" do
+      get bank_transactions_path(filter: { state: "unfiled" })
+      expect(visible_text).not_to include("LOBLAWS #1234")
+
+      envelope = create(:budget_envelope, budget: budget)
+      post bank_transaction_filing_path(removed),
+        params: { filing: { records: { "0" => { kind: "spend", envelope_id: envelope.id, description: "Loblaws", date: "2026-10-03", amount: "10", notes: "" } } } }
+
+      expect(flash[:alert]).to eq("This bank transaction was removed by TD Canada Trust, so it can't be filed.")
+    end
+  end
+
+  describe "what's Splitwise's alone, until a later ticket" do
+    it "is a 404: Reconnect and Disconnect, which forgets no token without Plaid being told" do
       post account_connection_path(chequing)
       expect(response).to have_http_status(:not_found)
       delete account_connection_path(chequing)
       expect(response).to have_http_status(:not_found)
 
       expect(connection.reload).to be_connected
-    end
-
-    it "is a 404 for Sync now even where Splitwise isn't set up, rather than Splitwise's own refusal" do
-      Splitwise.client = SplitwiseFake.new(configured: false)
-
-      post account_connection_sync_path(chequing)
-
-      expect(response).to have_http_status(:not_found)
-    end
-
-    it "isn't synced by the hourly job" do
-      allow(SyncSplitwise).to receive(:call).and_call_original
-
-      SyncBankConnectionsJob.perform_now
-
-      expect(SyncSplitwise).not_to have_received(:call)
     end
   end
 end

@@ -69,12 +69,21 @@ RSpec.describe "budget rake tasks", type: :task do
       expect(run_task("budget:sync_connections")).to eq("Synced 1 connection.\n")
     end
 
-    it "says Splitwise isn't set up, and syncs nothing, where it isn't" do
+    it "says neither provider is set up, and syncs nothing, where neither is" do
       account = connected_account("1")
       Splitwise.client = SplitwiseFake.new(configured: false)
+      PlaidApi.client = PlaidFake.new(configured: false)
 
-      expect(run_task("budget:sync_connections")).to eq("Splitwise isn't set up here, so nothing can be synced.\n")
+      expect(run_task("budget:sync_connections")).to eq("Neither Splitwise nor Plaid is set up here, so nothing can be synced.\n")
       expect(account.bank_transactions).to be_empty
+    end
+
+    it "counts only the connections whose provider is set up here" do
+      connected_account("1")
+      create(:budget_account, :plaid)
+      Splitwise.client = SplitwiseFake.new(configured: false)
+
+      expect(run_task("budget:sync_connections")).to eq("Synced 1 connection.\n")
     end
 
     it "says so when no connection can be synced" do

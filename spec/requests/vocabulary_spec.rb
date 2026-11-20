@@ -1111,4 +1111,48 @@ RSpec.describe "The words on the pages", type: :request do
       expect(splitwise_text).not_to match(/\w+_\w+/)
     end
   end
+
+  describe "a bank's sync" do
+    let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust") }
+    let!(:chequing) { create(:budget_account, :plaid, budget: budget, name: "TD Chequing", bank_connection: connection, external_account_id: "acc-1") }
+
+    it "uses only these words for syncing: Sync TD now, when it last synced, and what a sync says it did or why it couldn't, and never a retired term" do
+      create(:budget_filing_rule, budget: budget, text: "loblaws", envelope: bills)
+      plaid.adds(connection.access_token, plaid.transaction("tx-1", account: "acc-1", description: "LOBLAWS #1234"),
+        plaid.transaction("tx-2", account: "acc-1", description: "AMAZON.COM", currency: "USD"))
+
+      get account_path(chequing)
+      expect(visible_text).to include("Sync TD now", "Not synced yet.")
+
+      post account_connection_sync_path(chequing)
+      follow_redirect!
+      expect(visible_text).to include("Synced from TD Canada Trust: 1 new. 1 skipped. Filing rules filed 1 of them. Review them", "Last synced")
+      expect(visible_text).not_to match(retired_terms)
+      expect(visible_text).not_to match(/\w+_\w+/)
+
+      plaid.fails_once(:transactions_sync, PlaidApi::Error.new(error_code: "RATE_LIMIT_EXCEEDED", status: 429))
+      post account_connection_sync_path(chequing)
+      follow_redirect!
+      expect(visible_text).to include("Plaid is limiting how often Budgie can ask, so nothing was synced. Try again later.")
+
+      plaid.fails_once(:transactions_sync, PlaidApi::Error.new(error_code: "ITEM_LOGIN_REQUIRED", status: 400))
+      post account_connection_sync_path(chequing)
+      follow_redirect!
+      expect(visible_text).to include("TD Canada Trust stopped accepting the connection, so nothing was synced.",
+        "TD Canada Trust stopped accepting the connection, so this Account isn't syncing.")
+      expect(visible_text).not_to match(retired_terms)
+    end
+
+    it "says a bank transaction the bank removed was Removed by TD Canada Trust, on both lists" do
+      create(:budget_bank_transaction, :removed, account: chequing, description: "Gone", date: Date.new(2026, 10, 3))
+
+      [ account_path(chequing), bank_transactions_path(filter: { date_from: "2026-01-01", date_to: "2026-12-31" }) ].each do |path|
+        get path
+
+        expect(visible_text).to include("Removed by TD Canada Trust")
+        expect(visible_text).not_to include("Deleted in Splitwise")
+        expect(visible_text).not_to match(retired_terms)
+      end
+    end
+  end
 end

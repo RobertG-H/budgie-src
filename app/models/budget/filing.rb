@@ -97,6 +97,9 @@ class Budget::Filing
       ids = entries.map { |entry| entry.bank_transaction.id }
       locked = Budget::BankTransaction.where(id: @budget.bank_transactions.where(id: ids).select(:id)).lock.index_by(&:id)
       filed = Budget::BankTransaction.links_by_record.values.flat_map { |link| link.where(bank_transaction_id: ids).distinct.pluck(:bank_transaction_id) }.to_set
+      # What a removed one says depends on where it was synced from, which is looked up only when there is one, for them all at once.
+      removed = locked.values.select(&:removed?)
+      ActiveRecord::Associations::Preloader.new(records: removed, associations: { account: :bank_connection }).call if removed.any?
 
       entries.each do |entry|
         current = locked[entry.bank_transaction.id]
@@ -108,7 +111,7 @@ class Budget::Filing
         elsif filed.include?(current.id)
           entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:filed))
         elsif current.removed?
-          entry.errors.add(:base, Budget::BankTransaction::FILING_REFUSALS.fetch(:removed))
+          entry.errors.add(:base, current.removed_refusal)
         end
       end
     end

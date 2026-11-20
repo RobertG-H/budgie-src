@@ -13,7 +13,7 @@ module SyncedAccountScoped
       @connection = @account.bank_connection or raise ActiveRecord::RecordNotFound
     end
 
-    # What only a Splitwise connection does so far (Sync now, Reconnect, Disconnect): for a bank's, which gets its own in later tickets, it's a 404.
+    # What only a Splitwise connection does so far (Reconnect and Disconnect): for a bank's, which gets its own in later tickets, it's a 404.
     def require_splitwise_connection
       raise ActiveRecord::RecordNotFound unless @connection.splitwise?
     end

@@ -176,6 +176,69 @@ RSpec.describe PlaidApi::Client do
     end
   end
 
+  describe "#transactions_sync" do
+    def plaid_transaction(**overrides)
+      { transaction_id: "tx-1", account_id: "acc-1", amount: 12.34, iso_currency_code: "CAD", unofficial_currency_code: nil, date: "2026-10-03",
+        authorized_date: "2026-10-01", original_description: "LOBLAWS #1234 TORONTO", name: "Loblaws", merchant_name: "Loblaws", pending: false,
+        pending_transaction_id: nil, category: [ "Shops" ], something_new: { nested: true } }.merge(overrides)
+    end
+
+    it "asks for a page of 500 since the cursor, with the bank's own description from the start" do
+      answer(200, added: [], modified: [], removed: [], next_cursor: "cursor-2", has_more: false)
+
+      client.transactions_sync("access-sandbox-xyz", cursor: "cursor-1")
+
+      expect(sent.last.path).to eq("/transactions/sync")
+      expect(sent_body).to eq("access_token" => "access-sandbox-xyz", "cursor" => "cursor-1", "count" => 500, "options" => { "include_original_description" => true })
+    end
+
+    it "sends no cursor the first time, which is the whole history" do
+      answer(200, added: [], modified: [], removed: [], next_cursor: "cursor-1", has_more: false)
+
+      client.transactions_sync("access-sandbox-xyz", cursor: nil)
+
+      expect(sent_body).not_to have_key("cursor")
+    end
+
+    it "reads what was added, modified and removed, with the amount as a decimal from the JSON's own text, as Plaid signs it", :aggregate_failures do
+      answer(200, '{"added":[' + plaid_transaction.to_json.sub("12.34", "0.1") + "]," \
+        '"modified":[' + plaid_transaction(transaction_id: "tx-2", amount: -2500, pending: true, authorized_date: nil, original_description: nil).to_json + "]," \
+        '"removed":[{"transaction_id":"tx-3","account_id":"acc-1"}],"next_cursor":"cursor-2","has_more":true,"request_id":"req-1"}')
+
+      page = client.transactions_sync("access-sandbox-xyz", cursor: nil)
+
+      expect(page).to have_attributes(next_cursor: "cursor-2", has_more: true)
+      expect(page.added.sole).to have_attributes(id: "tx-1", account_id: "acc-1", amount: BigDecimal("0.1"), iso_currency_code: "CAD", unofficial_currency_code: nil,
+        date: Date.new(2026, 10, 3), authorized_date: Date.new(2026, 10, 1), original_description: "LOBLAWS #1234 TORONTO", name: "Loblaws", pending: false)
+      expect(page.added.sole.amount).to be_a(BigDecimal)
+      expect(page.modified.sole).to have_attributes(id: "tx-2", amount: BigDecimal("-2500"), pending: true, authorized_date: nil, original_description: nil)
+      expect(page.removed.sole).to have_attributes(id: "tx-3", account_id: "acc-1")
+    end
+
+    it "leaves out what it can't read, and reads a page with nothing in it as nothing", :aggregate_failures do
+      answer(200, added: [ "not a transaction", plaid_transaction(transaction_id: nil), plaid_transaction(date: "not a date", amount: "12.34", pending: "yes") ], removed: [ {} ])
+
+      page = client.transactions_sync("access-sandbox-xyz", cursor: nil)
+
+      expect(page.added.sole).to have_attributes(id: "tx-1", date: nil, amount: nil, pending: false)
+      expect(page).to have_attributes(modified: [], removed: [], next_cursor: "", has_more: false)
+    end
+
+    it "carries Plaid's error type and the status, so an Item's error and being asked too often can be told apart" do
+      answer(400, error_type: "ITEM_ERROR", error_code: "ITEM_LOGIN_REQUIRED", display_message: nil)
+
+      expect { client.transactions_sync("access-sandbox-xyz", cursor: nil) }.to raise_error(PlaidApi::Error) { |error|
+        expect(error).to have_attributes(error_type: "ITEM_ERROR", error_code: "ITEM_LOGIN_REQUIRED", status: 400)
+      }
+
+      answer(429, error_type: "RATE_LIMIT_EXCEEDED", error_code: "TRANSACTIONS_SYNC_LIMIT")
+
+      expect { client.transactions_sync("access-sandbox-xyz", cursor: nil) }.to raise_error(PlaidApi::Error) { |error|
+        expect(error).to be_rate_limited
+      }
+    end
+  end
+
   describe "errors" do
     it "carries Plaid's code and its message for a person, and says the message" do
       answer(400, plaid_error("ITEM_LIMIT", display_message: "You've connected as many banks as this app allows."))
