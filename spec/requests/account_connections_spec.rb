@@ -4,7 +4,7 @@ require "rails_helper"
 # bank transactions and what they were filed as. Reconnecting the same Splitwise user keeps them too, and a different one is refused here.
 RSpec.describe "An Account's connection", type: :request do
   let(:budget) { create(:budget, currency: "CAD") }
-  let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "7654321", login_name: "Robert G.", access_token: "its-token", read_from: Date.new(2026, 10, 1)) }
+  let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "7654321", login_name: "Robert G.", access_token: "its-token") }
   let!(:account) { create(:budget_account, :synced, budget: budget, name: "Shared expenses", bank_connection: connection) }
 
   before { sign_in_as budget.user }
@@ -138,7 +138,7 @@ RSpec.describe "An Account's connection", type: :request do
       get account_path(account)
 
       assert_select "form[action='#{account_connection_path(account)}'] input[name=_method][value=patch]"
-      assert_select "input[type=date][name='bank_connection[read_from]'][value='2026-10-01'][required]"
+      assert_select "input[type=date][name='account[read_from]'][value='2026-10-01'][required]"
       assert_select "form input[type=submit][value='Change date']"
       expect(visible_text).to include("Splitwise expenses dated before this are never read.")
       expect(visible_text).to include("Changing it makes the next sync read every expense dated from it again. What's already here stays as it is.")
@@ -324,20 +324,21 @@ RSpec.describe "An Account's connection", type: :request do
     before { connection.update_columns(sync_cursor: "2026-10-05T12:00:00Z", synced_at: Time.zone.local(2026, 10, 5, 12)) }
 
     it "changes the date and forgets the marker, so the next sync reads every expense dated from it again, and says so" do
-      patch account_connection_path(account), params: { bank_connection: { read_from: "2026-09-01" } }
+      patch account_connection_path(account), params: { account: { read_from: "2026-09-01" } }
 
       expect(response).to redirect_to(account_path(account))
       expect(flash[:notice]).to eq("Now reading expenses dated from Sep 1, 2026. The next sync reads them again.")
-      expect(connection.reload).to have_attributes(read_from: Date.new(2026, 9, 1), sync_cursor: nil)
+      expect(account.reload.read_from).to eq(Date.new(2026, 9, 1))
+      expect(connection.reload).to have_attributes(sync_cursor: nil)
       expect(connection.synced_at).to be_present
     end
 
     it "leaves what's already in the Account as it is, when it moves later, and the Account's bank transactions untouched" do
       filed = create(:budget_bank_transaction, :filed, account: account, date: Date.new(2026, 10, 2))
 
-      patch account_connection_path(account), params: { bank_connection: { read_from: Date.new(2026, 10, 6).iso8601 } }
+      patch account_connection_path(account), params: { account: { read_from: Date.new(2026, 10, 6).iso8601 } }
 
-      expect(connection.reload.read_from).to eq(Date.new(2026, 10, 6))
+      expect(account.reload.read_from).to eq(Date.new(2026, 10, 6))
       expect(account.bank_transactions).to eq([ filed ])
       expect(filed.reload).to be_filed
     end
@@ -345,48 +346,63 @@ RSpec.describe "An Account's connection", type: :request do
     it "refuses a date that isn't one, a date in the future and one before 1990, and changes nothing" do
       { "" => "Read from can't be blank", "not a date" => "Read from can't be blank", "2099-01-01" => "Read from can't be in the future",
         "1989-12-31" => "Read from can't be before 1990" }.each do |date, message|
-        patch account_connection_path(account), params: { bank_connection: { read_from: date } }
+        patch account_connection_path(account), params: { account: { read_from: date } }
 
         expect(response).to redirect_to(account_path(account))
         expect(flash[:alert]).to eq("#{message}.")
-        expect(connection.reload).to have_attributes(read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
+        expect(account.reload.read_from).to eq(Date.new(2026, 10, 1))
+        expect(connection.reload.sync_cursor).to eq("2026-10-05T12:00:00Z")
       end
     end
 
     it "changes nothing else, whatever else is sent: the login, the token and the budget are never params" do
       other = create(:budget)
 
-      patch account_connection_path(account), params: { bank_connection: { read_from: "2026-09-01", login_id: "1", login_name: "Eve", access_token: "stolen", budget_id: other.id, needs_reconnect: "1" } }
+      patch account_connection_path(account), params: { account: { read_from: "2026-09-01", name: "Renamed", bank_connection_id: other.id, external_account_id: "1",
+        budget_id: other.id, files_with_rules: "1" }, bank_connection: { login_id: "1", login_name: "Eve", access_token: "stolen", needs_reconnect: "1" } }
 
+      expect(account.reload).to have_attributes(read_from: Date.new(2026, 9, 1), name: "Shared expenses", bank_connection_id: connection.id, external_account_id: "7654321",
+        budget_id: budget.id, files_with_rules: false)
       expect(connection.reload).to have_attributes(login_id: "7654321", login_name: "Robert G.", access_token: "its-token", budget_id: budget.id, needs_reconnect: false)
     end
 
     it "can be done for a connection that's disconnected, since it's only what a later sync reads from" do
       connection.disconnect!
 
-      patch account_connection_path(account), params: { bank_connection: { read_from: "2026-09-01" } }
+      patch account_connection_path(account), params: { account: { read_from: "2026-09-01" } }
 
-      expect(connection.reload.read_from).to eq(Date.new(2026, 9, 1))
+      expect(account.reload.read_from).to eq(Date.new(2026, 9, 1))
+    end
+
+    it "can be done when the key the connection's token was kept under has been lost, since it never reads the token" do
+      garbage = { "p" => Base64.strict_encode64("not-the-payload"), "h" => { "iv" => Base64.strict_encode64("0123456789ab"), "at" => Base64.strict_encode64("0123456789abcdef") } }.to_json
+      Budget::BankConnection.connection.execute(Budget::BankConnection.sanitize_sql_array([ "UPDATE budget_bank_connections SET access_token = ? WHERE id = ?", garbage, connection.id ]))
+
+      patch account_connection_path(account), params: { account: { read_from: "2026-09-01" } }
+
+      expect(flash[:notice]).to eq("Now reading expenses dated from Sep 1, 2026. The next sync reads them again.")
+      expect(account.reload.read_from).to eq(Date.new(2026, 9, 1))
+      expect(Budget::BankConnection.find(connection.id).sync_cursor).to be_nil
     end
 
     it "is a 404 for an Account that isn't synced, and another user's, and changes nothing" do
       csv = create(:budget_account, budget: budget)
       others = create(:budget_account, :synced)
 
-      patch account_connection_path(csv), params: { bank_connection: { read_from: "2026-09-01" } }
+      patch account_connection_path(csv), params: { account: { read_from: "2026-09-01" } }
       expect(response).to have_http_status(:not_found)
-      patch account_connection_path(others), params: { bank_connection: { read_from: "2026-09-01" } }
+      patch account_connection_path(others), params: { account: { read_from: "2026-09-01" } }
       expect(response).to have_http_status(:not_found)
-      expect(others.bank_connection.reload.read_from).to eq(Date.new(2026, 10, 1))
+      expect(others.reload.read_from).to eq(Date.new(2026, 10, 1))
     end
 
     it "requires sign-in" do
       delete session_path
 
-      patch account_connection_path(account), params: { bank_connection: { read_from: "2026-09-01" } }
+      patch account_connection_path(account), params: { account: { read_from: "2026-09-01" } }
 
       expect(response).to redirect_to(sign_in_path)
-      expect(connection.reload.read_from).to eq(Date.new(2026, 10, 1))
+      expect(account.reload.read_from).to eq(Date.new(2026, 10, 1))
     end
   end
 
@@ -410,8 +426,9 @@ RSpec.describe "An Account's connection", type: :request do
 
       expect(response).to redirect_to(account_path(account))
       expect(flash[:notice]).to eq("Reconnected Splitwise as Rob G.")
-      expect(connection.reload).to have_attributes(access_token: "a-new-token", login_name: "Rob G.", needs_reconnect: false, read_from: Date.new(2026, 10, 1))
-      expect(account.reload.bank_transactions).to eq([ filed ])
+      expect(connection.reload).to have_attributes(access_token: "a-new-token", login_name: "Rob G.", needs_reconnect: false)
+      expect(account.reload.read_from).to eq(Date.new(2026, 10, 1))
+      expect(account.bank_transactions).to eq([ filed ])
       expect(filed.reload).to be_filed
     end
 
@@ -497,7 +514,8 @@ RSpec.describe "An Account's connection", type: :request do
       expect(response).to redirect_to(account_path(account))
       expect(response).to have_http_status(:see_other)
       expect(flash[:notice]).to eq("Disconnected from Splitwise.")
-      expect(connection.reload).to have_attributes(access_token: nil, needs_reconnect: false, login_name: "Robert G.", read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
+      expect(connection.reload).to have_attributes(access_token: nil, needs_reconnect: false, login_name: "Robert G.", sync_cursor: "2026-10-05T12:00:00Z")
+      expect(account.reload.read_from).to eq(Date.new(2026, 10, 1))
       expect(connection).to be_disconnected
       expect(filed.reload).to be_filed
       expect(ignored.reload).to be_ignored

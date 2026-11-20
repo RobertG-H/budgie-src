@@ -143,10 +143,10 @@ end
 # Sync now says Splitwise doesn't accept the sign-in, but it gives the Accounts page and an Account's page a synced Account to show. It's only made when there isn't one for
 # its connection, so a developer's changes to it stay. Its name can't clash with an Account a developer made by hand.
 splitwise = budget.bank_connections.find_or_create_by!(provider: Budget::BankConnection::SPLITWISE, login_id: "1000000") do |connection|
-  connection.assign_attributes(login_name: "Dev B.", access_token: "development-token-not-real", read_from: this_month)
+  connection.assign_attributes(login_name: "Dev B.", access_token: "development-token-not-real")
 end
 splitwise_account = budget.accounts.find_or_create_by!(bank_connection: splitwise) do |account|
-  account.assign_attributes(name: "Splitwise (sample)", external_account_id: splitwise.login_id, files_with_rules: false)
+  account.assign_attributes(name: "Splitwise (sample)", external_account_id: splitwise.login_id, files_with_rules: false, read_from: this_month)
 end
 
 # What a sync would have brought into it, one of each thing a bank transaction from Splitwise can be, so the Bank transactions page and the Account's page have them

@@ -482,8 +482,9 @@ Splitwise's own payment and the e-transfer that settles it, is ignored as a tran
 Splitwise Account has its Filing rules off, so every share waits in the Unfiled state for the person, which is its review queue.
 
 A connection (`budget_bank_connections`) is a sign-in to a provider that Accounts are synced through: Splitwise first, and a bank-sync provider fits it later. It belongs to its budget, holds the provider's id for the login
-(the Splitwise user's id) and its name for display, the access token, the date to read expenses from, a sync marker and the time of the last sync, and whether it needs reconnecting. An Account has a
-nullable connection and an id for itself at the provider, which for Splitwise is the Splitwise user's id, so a connection has one Account. The token is encrypted with Active Record encryption, and never appears in a page,
+(the Splitwise user's id) and its name for display, the access token, a sync cursor (text the provider's sync owns: for Splitwise, the marker below) and the time of the last sync, and whether it needs reconnecting. An Account has a
+nullable connection and an id for itself at the provider, which for Splitwise is the Splitwise user's id, so a connection has one Account. The date to read from is the Account's, set only on a synced Account, so that a
+connection with several Accounts, as a bank's through Plaid will be, can give each its own ([ADR 0018](adr/0018-a-plaid-connection-is-an-item-whose-accounts-become-new-or-existing-accounts.md)). The token is encrypted with Active Record encryption, and never appears in a page,
 a log or an error.
 
 "Connect Splitwise" on the Accounts page opens a form for the Account's name and the date to read from, which starts where the budget's bank transactions start, so that a shared expense the person paid for gets its share

@@ -5,7 +5,7 @@ require "rails_helper"
 # holds the expenses and answers a page at a time, as Splitwise does.
 RSpec.describe SyncSplitwise do
   let(:budget) { create(:budget, currency: "CAD") }
-  let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "4321", login_name: "Robert G.", access_token: "its-token", read_from: Date.new(2026, 10, 1)) }
+  let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "4321", login_name: "Robert G.", access_token: "its-token") }
   let!(:account) { create(:budget_account, :synced, budget: budget, name: "Splitwise", bank_connection: connection) }
 
   before { splitwise.signs_in("code", as: Splitwise::Person.new(id: "4321", name: "Robert G."), token: "its-token") }
@@ -511,6 +511,18 @@ RSpec.describe SyncSplitwise do
   end
 
   describe "the sync marker" do
+    it "is Splitwise's time of the latest change a sync read, kept on the connection as the ISO 8601 text it was sent as" do
+      connection.update_columns(sync_cursor: "2026-10-05T12:34:56Z")
+
+      expect(described_class.sync_marker(connection)).to eq(Time.utc(2026, 10, 5, 12, 34, 56))
+      expect(described_class.sync_marker(connection)).to be_a(Time)
+    end
+
+    it "is nothing before a sync has run, and for a cursor that isn't a time" do
+      expect(described_class.sync_marker(build(:budget_bank_connection, sync_cursor: nil))).to be_nil
+      expect(described_class.sync_marker(build(:budget_bank_connection, sync_cursor: "not a time"))).to be_nil
+    end
+
     it "moves to the latest `updated_at` it read when a sync finishes, and says when it ran", :aggregate_failures do
       splitwise.expense(1, "Dinner", net_balance: "-5.00", updated_at: Time.utc(2026, 10, 5, 9, 0, 0))
       splitwise.expense(2, "Groceries", net_balance: "-6.00", updated_at: Time.utc(2026, 10, 6, 15, 30, 45))
@@ -520,7 +532,7 @@ RSpec.describe SyncSplitwise do
       end
 
       expect(connection.reload.sync_cursor).to eq("2026-10-06T15:30:45Z")
-      expect(connection.sync_marker).to eq(Time.utc(2026, 10, 6, 15, 30, 45))
+      expect(described_class.sync_marker(connection)).to eq(Time.utc(2026, 10, 6, 15, 30, 45))
       expect(connection.synced_at).to eq(Time.utc(2026, 10, 7, 12))
     end
 
@@ -560,7 +572,7 @@ RSpec.describe SyncSplitwise do
       sync
       expect(transactions.map(&:external_id)).to eq([ "2" ])
 
-      connection.change_read_from(Date.new(2026, 9, 1))
+      account.change_read_from(Date.new(2026, 9, 1))
       result = sync
 
       expect(splitwise.expense_requests.last[:updated_after]).to be_nil
@@ -573,7 +585,7 @@ RSpec.describe SyncSplitwise do
       sync
 
       travel_to Time.utc(2026, 10, 20, 15) do
-        connection.change_read_from(Date.new(2026, 10, 15))
+        account.change_read_from(Date.new(2026, 10, 15))
         sync
       end
 
@@ -692,7 +704,7 @@ RSpec.describe SyncSplitwise do
     def queries_for(total, rules: false)
       splitwise.forget_expenses
       other_budget = create(:budget, currency: "CAD")
-      other_connection = create(:budget_bank_connection, budget: other_budget, login_id: "4321", access_token: "its-token", read_from: Date.new(2026, 10, 1))
+      other_connection = create(:budget_bank_connection, budget: other_budget, login_id: "4321", access_token: "its-token")
       create(:budget_account, :synced, budget: other_budget, bank_connection: other_connection, files_with_rules: rules)
       create(:budget_filing_rule, budget: other_budget, text: "expense") if rules
       existing = total * 7 / 10

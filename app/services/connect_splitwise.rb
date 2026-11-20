@@ -3,8 +3,9 @@
 # make the connection:
 #
 # - a login the budget has already connected is reconnected: the connection gets the new token and the name Splitwise has for the login now, and
-#   needs-reconnect is cleared. Its Account and its bank transactions stay, and so does the date it reads from.
-# - a login that isn't connected is a new connection, with a new Account of its own, in one database transaction: if either can't be made, neither is.
+#   needs-reconnect is cleared. Its Account and its bank transactions stay, and so does the Account's date to read from.
+# - a login that isn't connected is a new connection, with a new Account of its own that reads from `read_from`, in one database transaction: if either
+#   can't be made, neither is.
 #   The Account has Filing rules off, so every bank transaction waits for a person (ADR 0016), and its external id is the Splitwise user's id.
 #
 # `account` is the Account being reconnected, when that's what the person asked for: only its own login can reconnect it, and any other login is
@@ -64,8 +65,8 @@ class ConnectSplitwise
     end
 
     def create(token, person)
-      connection = @budget.bank_connections.create!(provider: Budget::BankConnection::SPLITWISE, login_id: person.id, login_name: person.name, access_token: token, read_from: @read_from)
-      account = @budget.accounts.create!(name: @name, bank_connection: connection, external_account_id: person.id, files_with_rules: false)
+      connection = @budget.bank_connections.create!(provider: Budget::BankConnection::SPLITWISE, login_id: person.id, login_name: person.name, access_token: token)
+      account = @budget.accounts.create!(name: @name, read_from: @read_from, bank_connection: connection, external_account_id: person.id, files_with_rules: false)
       Result.new(connection: connection, account: account, reconnected: false, failure: nil)
     end
 

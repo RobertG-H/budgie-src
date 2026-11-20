@@ -9,7 +9,7 @@ RSpec.describe "Connecting Splitwise", type: :request do
   before { sign_in_as budget.user }
 
   def connect_form(name: "Splitwise", read_from: "2026-10-01")
-    { account: { name: name }, bank_connection: { read_from: read_from } }
+    { account: { name: name, read_from: read_from } }
   end
 
   # The person submits the form and is sent to Splitwise, which answers with the `state` that was sent along.
@@ -29,8 +29,8 @@ RSpec.describe "Connecting Splitwise", type: :request do
       assert_select "form[action='#{splitwise_connection_path}'][method=post]" do
         assert_select "label[for='account_name']", text: "Account name"
         assert_select "input[type=text][name='account[name]'][value=Splitwise][required]"
-        assert_select "label[for='bank_connection_read_from']", text: "Read expenses dated from"
-        assert_select "input[type=date][name='bank_connection[read_from]'][required]"
+        assert_select "label[for='account_read_from']", text: "Read expenses dated from"
+        assert_select "input[type=date][name='account[read_from]'][required]"
         assert_select "input[type=submit][value='Continue to Splitwise']"
       end
       expect(response.body).to include("Splitwise expenses dated before this are never read.")
@@ -47,7 +47,7 @@ RSpec.describe "Connecting Splitwise", type: :request do
     it "starts the date as the 1st of this month when the budget has no bank transactions" do
       get new_splitwise_connection_path
 
-      assert_select "input[name='bank_connection[read_from]'][value='2026-10-01']"
+      assert_select "input[name='account[read_from]'][value='2026-10-01']"
     end
 
     it "starts the date as the date of the budget's earliest bank transaction, in any Account and any state" do
@@ -59,7 +59,7 @@ RSpec.describe "Connecting Splitwise", type: :request do
 
       get new_splitwise_connection_path
 
-      assert_select "input[name='bank_connection[read_from]'][value='2026-07-03']"
+      assert_select "input[name='account[read_from]'][value='2026-07-03']"
     end
 
     it "isn't offered when Splitwise isn't set up here, and says so" do
@@ -132,7 +132,7 @@ RSpec.describe "Connecting Splitwise", type: :request do
         expect(response).to have_http_status(:unprocessable_content), date
         assert_select "[role=alert] li", text: message
         assert_select "input[name='account[name]'][value='My Splitwise']"
-        assert_select "input[name='bank_connection[read_from]'][aria-invalid=true]"
+        assert_select "input[name='account[read_from]'][aria-invalid=true]"
       end
       expect(splitwise.authorizations).to be_empty
     end

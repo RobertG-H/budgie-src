@@ -120,7 +120,7 @@ Do this on each environment once a Splitwise Account is connected, with a real S
 - [ ] **Deletes.** Delete an expense in Splitwise, and **Sync now** shows **Deleted in Splitwise** on its bank transaction: beside **Un-file** if you had filed it, and out of the Unfiled state (and the header's count) if you hadn't. Restore it in Splitwise, and the next sync clears that
 - [ ] **Filing.** Money in from Splitwise starts as a **Refund** on the filing form. **File and next** and **File N as guessed** work on the Account's Unfiled state, which is its review queue
 - [ ] **The hourly job.** An hour or so later, the Account says `Last synced` a time within the last hour, without anyone pressing anything
-- [ ] **The date to read from.** Under **Date to read from** on the Account's page, move it earlier and press **Change date**: the next **Sync now** brings in the older expenses and nothing is duplicated. Moving it later leaves what's already there as it is
+- [ ] **The date to read from.** It's the Account's own, not the connection's. Under **Date to read from** on the Account's page, move it earlier and press **Change date**: the next **Sync now** brings in the older expenses and nothing is duplicated. Moving it later leaves what's already there as it is. **Disconnect** and **Reconnect** leave the date as it was
 - [ ] **A token that stopped working.** Remove Budgie from your Splitwise apps, then **Sync now**: it says Splitwise stopped accepting the sign-in, the Account says it needs reconnecting, and **Reconnect** puts it right
 
 ## Rotating and losing things

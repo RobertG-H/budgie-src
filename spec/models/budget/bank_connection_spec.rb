@@ -72,33 +72,8 @@ RSpec.describe Budget::BankConnection, type: :model do
     end
   end
 
-  describe "the date to read from" do
-    it { is_expected.to validate_presence_of(:read_from) }
-
-    it "can be today, or the day after, which is today for someone ahead of Eastern time" do
-      travel_to Time.utc(2026, 10, 6, 16) do
-        expect(build(:budget_bank_connection, read_from: Date.new(2026, 10, 6))).to be_valid
-        expect(build(:budget_bank_connection, read_from: Date.new(2026, 10, 7))).to be_valid
-      end
-    end
-
-    it "can't be before 1990 in the database either, since that limit doesn't depend on the day" do
-      expect { create(:budget_bank_connection).tap { |connection| connection.update_columns(read_from: Date.new(1989, 12, 31)) } }
-        .to raise_error(ActiveRecord::CheckViolation, /budget_bank_connections_read_from_not_before_1990/)
-    end
-
-    it "can't be more than a day after today, or before 1990" do
-      travel_to Time.utc(2026, 10, 6, 16) do
-        later = build(:budget_bank_connection, read_from: Date.new(2026, 10, 8))
-        earlier = build(:budget_bank_connection, read_from: Date.new(1989, 12, 31))
-
-        expect(later).not_to be_valid
-        expect(later.errors[:read_from]).to eq([ "can't be in the future" ])
-        expect(earlier).not_to be_valid
-        expect(earlier.errors[:read_from]).to eq([ "can't be before 1990" ])
-        expect(build(:budget_bank_connection, read_from: Date.new(1990, 1, 1))).to be_valid
-      end
-    end
+  it "has no date to read from, which is each of its Accounts' own" do
+    expect(described_class.column_names).not_to include("read_from")
   end
 
   describe "its token" do
@@ -165,16 +140,17 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect { create(:budget_bank_connection, access_token: nil, needs_reconnect: true) }.to raise_error(ActiveRecord::StatementInvalid, /budget_bank_connections_needs_reconnect_has_token/)
     end
 
-    it "keeps everything else when it's disconnected: the login, the date to read from, the marker and its Account" do
+    it "keeps everything else when it's disconnected: the login, the marker and its Account, with its date to read from" do
       account = create(:budget_account, :synced)
       connection = account.bank_connection
       connection.update!(sync_cursor: "2026-10-05T12:00:00Z", synced_at: Time.zone.local(2026, 10, 5, 12))
 
       connection.disconnect!
 
-      expect(connection.reload).to have_attributes(login_name: "Robert G.", read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
+      expect(connection.reload).to have_attributes(login_name: "Robert G.", sync_cursor: "2026-10-05T12:00:00Z")
       expect(connection.synced_at).to be_present
       expect(connection.accounts).to eq([ account ])
+      expect(account.reload.read_from).to eq(Date.new(2026, 10, 1))
     end
 
     it "is connected again, and no longer needs reconnecting, with the new token and the login's name as Splitwise has it now" do
@@ -206,56 +182,21 @@ RSpec.describe Budget::BankConnection, type: :model do
     end
   end
 
-  describe "the sync marker, which is where the last sync got to" do
-    it "is the provider's time of the latest change it read, kept as the ISO 8601 text it was sent as" do
-      connection = create(:budget_bank_connection, sync_cursor: "2026-10-05T12:34:56Z")
-
-      expect(connection.sync_marker).to eq(Time.utc(2026, 10, 5, 12, 34, 56))
-      expect(connection.sync_marker).to be_a(Time)
+  describe "the sync cursor, which is where the last sync got to" do
+    it "is plain text the provider's sync owns, with no meaning here" do
+      expect(described_class.new).not_to respond_to(:sync_marker)
     end
 
-    it "is nothing before a sync has run, and for a cursor that isn't a time" do
-      expect(build(:budget_bank_connection, sync_cursor: nil).sync_marker).to be_nil
-      expect(build(:budget_bank_connection, sync_cursor: "not a time").sync_marker).to be_nil
-    end
+    it "is forgotten by #forget_sync_cursor!, so the next sync starts again" do
+      connection = create(:budget_bank_connection, sync_cursor: "2026-10-05T12:00:00Z")
 
-    it "is cleared when the date to read from is changed, so the next sync reads from the new date again" do
-      connection = create(:budget_bank_connection, read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
-
-      expect(connection.change_read_from(Date.new(2026, 9, 1))).to be(true)
-
-      expect(connection.reload).to have_attributes(read_from: Date.new(2026, 9, 1), sync_cursor: nil)
-    end
-
-    it "is cleared when the date to read from moves later, too" do
-      connection = create(:budget_bank_connection, read_from: Date.new(2026, 9, 1), sync_cursor: "2026-10-05T12:00:00Z")
-
-      connection.change_read_from(Date.new(2026, 10, 1))
+      connection.forget_sync_cursor!
 
       expect(connection.reload.sync_cursor).to be_nil
     end
 
-    it "is kept when the date is set to what it already is, which changes nothing" do
-      connection = create(:budget_bank_connection, read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
-
-      expect(connection.change_read_from(Date.new(2026, 10, 1))).to be(true)
-
-      expect(connection.reload.sync_cursor).to eq("2026-10-05T12:00:00Z")
-    end
-
-    it "is kept, with the date, when the new date can't be used, and the reasons are on the connection" do
-      connection = create(:budget_bank_connection, read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
-
-      expect(connection.change_read_from(nil)).to be(false)
-      expect(connection.errors.full_messages).to eq([ "Read from can't be blank" ])
-      expect(connection.change_read_from(Date.new(1989, 12, 31))).to be(false)
-      expect(connection.errors.full_messages).to eq([ "Read from can't be before 1990" ])
-
-      expect(connection.reload).to have_attributes(read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
-    end
-
     it "is kept when anything else changes" do
-      connection = create(:budget_bank_connection, read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z")
+      connection = create(:budget_bank_connection, sync_cursor: "2026-10-05T12:00:00Z")
 
       connection.update!(login_name: "Rob G.")
 
@@ -309,12 +250,12 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect(described_class.find(stuck.id)).to be_disconnected
     end
 
-    it "can still have its date to read from changed, which never reads the token either" do
-      stuck = unreadable(create(:budget_bank_connection, read_from: Date.new(2026, 10, 1), sync_cursor: "2026-10-05T12:00:00Z"))
+    it "can still have its sync cursor forgotten, which never reads the token either" do
+      stuck = unreadable(create(:budget_bank_connection, sync_cursor: "2026-10-05T12:00:00Z"))
 
-      expect(stuck.change_read_from(Date.new(2026, 9, 1))).to be(true)
+      stuck.forget_sync_cursor!
 
-      expect(described_class.find(stuck.id)).to have_attributes(read_from: Date.new(2026, 9, 1), sync_cursor: nil)
+      expect(described_class.find(stuck.id).sync_cursor).to be_nil
     end
 
     it "can still be reconnected, which is how it's put right" do

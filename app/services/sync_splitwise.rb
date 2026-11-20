@@ -6,7 +6,7 @@
 # one reads from a little before the marker, and reading an expense twice is harmless, because every expense is matched by its id.
 #
 # What it reads: `get_expenses`, a page at a time (`PAGE_SIZE`, with the limit and offset always set) until a short page, for what changed since the marker and is
-# dated from the connection's read-from date. Each expense, by its id, is one of:
+# dated from the Account's date to read from. Each expense, by its id, is one of:
 #
 # - a new bank transaction, when the person has a share of it (net share other than 0, in the budget's currency, not deleted). Its amount is their net share,
 #   signed, its date the day Splitwise shows (Splitwise::Expense), and its content key and occurrence are written once, as for an Import's rows. A settle-up (Splitwise's
@@ -59,6 +59,14 @@ class SyncSplitwise
     new(connection).call
   end
 
+  # Where the last sync got to, as a time: Splitwise's own `updated_at` for the latest change it read, which the connection's `sync_cursor` keeps as the ISO 8601
+  # text it was sent as. Nothing before the first sync has finished, or for a cursor that isn't a time.
+  def self.sync_marker(connection)
+    Time.iso8601(connection.sync_cursor).utc if connection.sync_cursor.present?
+  rescue ArgumentError
+    nil
+  end
+
   def initialize(connection)
     @connection = connection
     @counts = Hash.new(0)
@@ -96,9 +104,9 @@ class SyncSplitwise
     def sync
       @account = @connection.accounts.first!
       @currency = @connection.budget.currency
-      @read_from = @connection.read_from
+      @read_from = @account.read_from
       @now = Time.current
-      @latest = @connection.sync_marker
+      @latest = self.class.sync_marker(@connection)
       token = @connection.access_token
       updated_after = @latest && (@latest - OVERLAP)
       # The day before, as a time, since it isn't documented whether Splitwise's bound includes its own day. Whatever it leaves in that's before the read-from

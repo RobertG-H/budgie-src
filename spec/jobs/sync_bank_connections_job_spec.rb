@@ -7,7 +7,7 @@ RSpec.describe SyncBankConnectionsJob, type: :job do
   # A budget with a connected Splitwise Account, signed in as a user of its own, with the expense `dinner` for them.
   def connected_budget(user_id:, token:)
     budget = create(:budget, currency: "CAD")
-    connection = create(:budget_bank_connection, budget: budget, login_id: user_id, access_token: token, read_from: Date.new(2026, 10, 1))
+    connection = create(:budget_bank_connection, budget: budget, login_id: user_id, access_token: token)
     account = create(:budget_account, :synced, budget: budget, bank_connection: connection)
     splitwise.signs_in("code-#{user_id}", as: Splitwise::Person.new(id: user_id, name: "Person #{user_id}"), token: token)
     [ connection, account ]

@@ -13,7 +13,7 @@
       </div>
     <% else %>
       <p class="text-base-content/70">
-        Synced from <%= connection.provider_name %> as <%= connection.login_name %>, reading expenses dated from <%= spelled_date(connection.read_from) %>.
+        Synced from <%= connection.provider_name %> as <%= connection.login_name %>, reading expenses dated from <%= spelled_date(account.read_from) %>.
       </p>
     <% end %>
     <p class="mt-1 text-sm text-base-content/70"><%= last_synced_text(connection) %></p>
@@ -36,10 +36,10 @@
   <details class="rounded-box border border-base-300">
     <summary class="cursor-pointer p-4">
       <span class="font-semibold">Date to read from</span>
-      <span class="block text-sm text-base-content/70">Expenses dated from <%= spelled_date(connection.read_from) %></span>
+      <span class="block text-sm text-base-content/70">Expenses dated from <%= spelled_date(account.read_from) %></span>
     </summary>
     <div class="border-t border-base-300 p-4">
-      <%= form_with model: connection, scope: :bank_connection, url: account_connection_path(account), method: :patch, class: "space-y-6" do |form| %>
+      <%= form_with model: account, url: account_connection_path(account), method: :patch, class: "space-y-6" do |form| %>
         <%= render "components/field", form: form, attribute: :read_from, label: "Read expenses dated from",
               hint: "Splitwise expenses dated before this are never read. Changing it makes the next sync read every expense dated from it again. What's already here stays as it is." do |field| %>
           <%= form.date_field :read_from, required: true, **field %>
