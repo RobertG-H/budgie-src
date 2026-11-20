@@ -42,6 +42,16 @@ RSpec.describe ConnectPlaid do
       expect(started.map(&:read_from)).to all(eq(Date.new(2026, 8, 3)))
     end
 
+    it "reads the bank's first word up to a hyphen or space, so an account named for it isn't named twice, and a longer word isn't taken for it" do
+      tartan = PendingPlaidLink.new(public_token: "p", institution_id: "ins_43", institution_name: "Tartan-Dominion Bank of Canada", accounts: [], linked_at: linked_at, budget_id: budget.id)
+      named = ->(name) { described_class.default_name(tartan, PendingPlaidLink::SharedAccount.new(id: "a", name: name, mask: nil, subtype: nil)) }
+
+      expect(named.("Tartan U.S. Dollar")).to eq("Tartan U.S. Dollar")
+      expect(named.("tartan-dominion chequing")).to eq("tartan-dominion chequing")
+      expect(named.("Plaid Checking")).to eq("Tartan-Dominion Bank of Canada Plaid Checking")
+      expect(named.("Tartanic Savings")).to eq("Tartan-Dominion Bank of Canada Tartanic Savings")
+    end
+
     it "keeps what was sent, by each account's place, and nothing for an account that wasn't sent" do
       kept = choices("0" => { becomes: "leave", name: "Kept", read_from: "2026-09-01" })
 

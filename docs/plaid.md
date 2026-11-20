@@ -36,7 +36,10 @@ Production's values go in only after that ticket: until then, connecting a bank 
 In the Dashboard, under Link → Link customization, edit the `default` customization (the one a link token gets when it names none):
 
 - [ ] **Account Select** is set to **Multi select**, so the person chooses which of the bank's accounts to share, and Link sends only those
-- [ ] Its **countries** are exactly `CA` and its **language** is `en`, which is what Budgie's link token asks for: a customization applies only when they match exactly
+- [ ] Its **countries** are exactly Canada and its **language** English (`CA` and `en`), which is what Budgie's link token asks for: a customization applies only when they match exactly. They're under the **gear** beside the customization's name ("default"), not in the list of panes on the right
+- [ ] **Publish changes**
+
+The preview's banks are the United States' whatever the countries are set to; Link itself shows the banks of the countries the link token asks for.
 
 ## 3. Data Transparency Messaging
 

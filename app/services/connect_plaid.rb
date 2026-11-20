@@ -60,10 +60,13 @@ class ConnectPlaid
     end
   end
 
-  # The bank and the account ("TD Canada Trust Visa Infinite"), unless the account's name already starts with the bank's first word ("TD Every Day Chequing").
+  # The bank and the account ("TD Canada Trust Visa Infinite"), unless the account's name already starts with the bank's first word ("TD Every Day Chequing"),
+  # which is its letters up to a hyphen or a space, so "Tartan U.S. Dollar" at Tartan-Dominion Bank of Canada isn't named for the bank twice, and "Tartanic" isn't
+  # taken for "Tartan".
   def self.default_name(link, shared)
-    first_word = link.institution_name.to_s.split.first.to_s
-    shared.name.downcase.start_with?("#{first_word.downcase} ") ? shared.name : "#{link.institution_name} #{shared.name}".squish
+    first_word = link.institution_name.to_s[/\A[[:alnum:]]+/]
+    named_for_the_bank = first_word && shared.name.match?(/\A#{Regexp.escape(first_word)}(?![[:alnum:]])/i)
+    named_for_the_bank ? shared.name : "#{link.institution_name} #{shared.name}".squish
   end
 
   def self.call(...)
