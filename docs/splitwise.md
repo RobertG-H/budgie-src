@@ -71,7 +71,7 @@ SPLITWISE_CLIENT_SECRET=
 ```
 
 Compose loads `.env` into the `web` container, and git ignores it.
-Restart with `docker compose up` (or `docker compose restart web`), since the container reads its environment when it starts.
+Recreate the container with `docker compose up -d web`, since Compose reads `.env` only when it creates the container: `docker compose restart web` keeps the old environment.
 Add the two `ACTIVE_RECORD_ENCRYPTION_…` variables as well only if you want development's tokens under keys of your own.
 
 ### Testing and production

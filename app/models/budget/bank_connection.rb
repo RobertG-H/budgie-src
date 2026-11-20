@@ -13,10 +13,15 @@
 # It's connected while there's a token that works. The token can stop working, which only a sync finds out and says by `needs_reconnect`, and
 # Disconnect forgets it. Reconnecting the same login gives the connection a new token, so its Account and bank transactions stay (see
 # ConnectSplitwise); a different login is a different connection, with an Account of its own.
+#
+# A bank connected through Plaid (ADR 0018) is one Plaid Item: `login_id` is the Item's id, `login_name` the bank's name ("TD Canada Trust"), and `institution_id`
+# Plaid's id for the bank ("ins_42"), which the check before an exchange compares (ConnectPlaid). It has an Account for each of the bank's accounts that the person
+# chose to connect, each with Plaid's id, name and mask for it. It isn't synced yet: SyncBankConnectionsJob and Sync now only reach Splitwise ones.
 class Budget::BankConnection < ApplicationRecord
   # The providers a connection can be to, which a check constraint says too, and what each is called.
   SPLITWISE = "splitwise".freeze
-  PROVIDER_NAMES = { SPLITWISE => "Splitwise" }.freeze
+  PLAID = "plaid".freeze
+  PROVIDER_NAMES = { SPLITWISE => "Splitwise", PLAID => "Plaid" }.freeze
   PROVIDERS = PROVIDER_NAMES.keys.freeze
 
   belongs_to :budget
@@ -31,12 +36,29 @@ class Budget::BankConnection < ApplicationRecord
   validates :provider, inclusion: { in: PROVIDERS, message: "isn't supported" }
   validates :login_id, :login_name, presence: true
   validates :login_id, uniqueness: { scope: [ :budget_id, :provider ], message: "is already connected" }
+  validates :institution_id, presence: true, if: :plaid?
 
   # The ones that can be synced: there's a token, and nothing has found out it stopped working. What the hourly job reads.
   scope :syncable, -> { where(needs_reconnect: false).where.not(access_token: nil) }
+  scope :splitwise, -> { where(provider: SPLITWISE) }
+  scope :plaid, -> { where(provider: PLAID) }
 
   def splitwise?
     provider == SPLITWISE
+  end
+
+  def plaid?
+    provider == PLAID
+  end
+
+  # What it reads, in words: Splitwise's expenses (its own word for them, which a person knows them by) or a bank's bank transactions.
+  def reads
+    splitwise? ? "expenses" : "bank transactions"
+  end
+
+  # What a person knows it by: the bank's name for a bank ("TD Canada Trust"), and the provider's for Splitwise. Never the word for Plaid's own idea of it.
+  def name
+    plaid? ? login_name : provider_name
   end
 
   # Whether the provider's login is itself the one external account, as a Splitwise user is: their Account holds their share of every expense, so its external id is the

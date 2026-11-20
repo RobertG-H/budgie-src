@@ -45,7 +45,8 @@ Rails.application.routes.draw do
   resources :accounts do
     resources :imports, only: [ :new, :create ]
     # What a synced Account is synced from: Reconnect (create) sends the person to sign in to Splitwise again, Disconnect (destroy) forgets its token, and the date it
-    # reads expenses from is changed (update). Sync now (the sync's create) brings its expenses in by hand, which the hourly job also does.
+    # reads expenses from is changed (update). Sync now (the sync's create) brings its expenses in by hand, which the hourly job also does. Only the date is for a
+    # bank connected through Plaid so far.
     resource :connection, only: [ :create, :update, :destroy ], controller: "account_connections" do
       resource :sync, only: :create, controller: "account_connection_syncs"
     end
@@ -55,6 +56,10 @@ Rails.application.routes.draw do
   # isn't one of the OmniAuth providers above. The callback URL has to match the one registered with Splitwise exactly (docs/development.md).
   resource :splitwise_connection, only: [ :new, :create ], path: "splitwise/connection"
   get "splitwise/callback" => "splitwise_callbacks#show", as: :splitwise_callback
+  # Connecting a bank through Plaid (ADR 0018): the page that opens Plaid Link (new), where what Link gives back is sent and kept in the session (create), and
+  # the page after it where the person chooses what each account they shared becomes (the choice's show), which connects (create) or keeps nothing (destroy).
+  resource :plaid_connection, only: [ :new, :create ], path: "plaid/connection"
+  resource :plaid_choice, only: [ :show, :create, :destroy ], path: "plaid/connection/accounts"
   # An Import from anywhere: the whole form (new, create), with the Account chosen on it, and the file alone (guess), which works out which CSV
   # format reads it and which Account it's for, and imports it straight away only when both are certain (ADR 0014).
   post "imports/guess" => "import_guesses#create", as: :import_guess

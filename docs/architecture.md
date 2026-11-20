@@ -516,8 +516,21 @@ An Account that's synced takes no CSV Import: its page has none, the Import form
 can't be deleted and one without takes its connection with it. Specs never call Splitwise: everything that asks it questions sits behind `Splitwise.client`, which every spec replaces. Connecting needs Splitwise's client id and
 secret and the keys the token is encrypted with, and without them it isn't offered ([Splitwise setup](splitwise.md)).
 
+**A bank, through Plaid.** A bank is connected through Plaid ([ADR 0018](adr/0018-a-plaid-connection-is-an-item-whose-accounts-become-new-or-existing-accounts.md)): one Plaid Item is one connection
+(`provider` `plaid`, its `login_id` the Item's id, its `login_name` the bank's name and `institution_id` Plaid's id for the bank), with an Account for each of the bank's accounts the person chose, each holding Plaid's
+id, name and mask for it (`external_account_id`, `external_name`, `external_mask`), its own date to read from, and its Filing rules on. "Connect a bank" on the Accounts page opens a page that makes a link token as it
+renders and loads Plaid's `link-initialize.js` from Plaid's CDN in its `<head>` (never pinned or vendored); a `plaid-link` Stimulus controller waits for Plaid's script, opens Link, and on success puts the public token,
+the bank and each shared account's id, name, mask and kind in an ordinary form and submits it. That is kept in the session with the time Link finished and the budget's id, and the next page lists each account
+with a "Becomes" select: a new Account, with its name and date to read from, or Leave out. Submitting it runs `ConnectPlaid`, whose checks go in order so that nothing before the exchange spends an Item (on Plaid's
+Trial, 10 for good): the 30 minutes since Link finished, the choices, a duplicate check (the same bank and an account whose name and mask are one of a live connection's Accounts is refused, and pointed at that Account),
+then the exchange, then `/accounts/get`, whose answer is what's stored, whose ids must include every one chosen, and whose currency leaves out an account in another (named in the notice, and with none left the Item is
+removed); then the connection and its Accounts are made in one database transaction. Cancel, the deadline and every refusal keep nothing, and an Item that was exchanged but not kept is removed. A bank's Account takes no
+CSV Import, its page has a panel for its connection that names the other Accounts it syncs, and nothing syncs it yet: the hourly job and Sync now only reach Splitwise's. Specs never call Plaid: `PlaidApi.client`
+(a plain `Net::HTTP` client, named so it can't clash with the `plaid` gem) is replaced in every spec by a fake. Connecting needs Plaid's client id, secret and environment (Sandbox in development and testing) and the
+encryption keys, and without them it isn't offered ([Plaid setup](plaid.md)).
+
 The header's top row has Import, the primary button, beside the menu, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
-bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
+bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise or a bank, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
 count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state, and of the ones to review ("8 to review"), a link to the To review state: both come from one query, counting at most 100 of each and read once per request, so every page with the header costs one query more.
 
 ### Frontend
@@ -546,6 +559,7 @@ What the running application depends on. Everything here is reached from the app
 | --- | --- | --- | --- |
 | [Google OAuth 2.0](google-oauth.md) | The only way to sign in. One OAuth client per environment, in one Google Cloud project | `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` | Nobody can sign in |
 | [Splitwise](splitwise.md) | Where a connected Account's bank transactions will come from. People sign in to it with OAuth 2 from the Accounts page to connect an Account, one Splitwise app per environment | `SPLITWISE_CLIENT_ID` and `SPLITWISE_CLIENT_SECRET`, and `ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` for the token | "Connect Splitwise" isn't offered |
+| [Plaid](plaid.md) | Where a bank's Accounts' bank transactions will come from. People connect a bank with Plaid Link, whose script comes from `cdn.plaid.com`, on the Accounts page; Sandbox in development and testing | `PLAID_CLIENT_ID`, `PLAID_SECRET` and `PLAID_ENV`, and the same encryption keys for the token | "Connect a bank" isn't offered |
 | [Zedmail SMTP relay](email.md) | Delivers invite email from `budgiebuddie.com` on testing and production | `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `MAILER_FROM` | Invites can't be sent, so nobody new can join |
 | `letter_opener_web` | Catches mail in development at `/letter_opener` instead of delivering it | Mounted in development only | — |
 | PostgreSQL 18 | The primary database, plus the cache, queue and cable databases next to it | `DB_HOST` and `BUDGIE_DATABASE_PASSWORD`; `config/database.yml` | The app won't boot |

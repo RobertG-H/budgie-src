@@ -1,0 +1,13 @@
+<%# locals: (bank:, external_name:, external_mask:, others:, last_synced:) %>
+<%# The panel on the page of an Account synced from a bank through Plaid, in place of Import: which of the bank's accounts it is, and which other Accounts the same connection syncs, with links, since what's done to the connection here (Sync now, Reconnect, Choose accounts and Disconnect, which come later) is done to them too. It takes plain values, so /styleguide can draw it: `others` is each other Account's name and page. %>
+<%= render "components/panel", class: "mt-4" do %>
+  <h2 class="font-semibold"><%= bank %></h2>
+  <p class="mt-1 text-base-content/70">
+    Synced from <%= bank %>, <%= external_name %><% if external_mask.present? %> ••<%= external_mask %><% end %>.
+    <% if others.any? %>
+      The same connection syncs <%= safe_join(others.map { |name, href| link_to(name, href, class: "link") }, ", ") %>,
+      so what's done here is done to <%= others.one? ? "it" : "them" %> too.
+    <% end %>
+  </p>
+  <p class="mt-1 text-sm text-base-content/70"><%= last_synced %></p>
+<% end %>

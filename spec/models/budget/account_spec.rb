@@ -14,8 +14,10 @@ RSpec.describe Budget::Account, type: :model do
     expect(Budget::Account.model_name).to have_attributes(route_key: "accounts", param_key: "account")
   end
 
-  it "has no balance, currency, kind or last four digits, since Budgie doesn't track what's in it" do
-    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "bank_connection_id", "external_account_id", "read_from", "created_at", "updated_at")
+  # Plaid's name and mask for a synced account only say which real account it is (the ADR 0001 addendum), and aren't anything tracked about it.
+  it "has no balance, currency or kind, since Budgie doesn't track what's in it" do
+    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "bank_connection_id", "external_account_id",
+      "external_name", "external_mask", "read_from", "created_at", "updated_at")
   end
 
   describe "name" do
@@ -169,8 +171,52 @@ RSpec.describe Budget::Account, type: :model do
     it "is found among the Accounts a CSV file can be imported into only when it isn't synced" do
       csv = create(:budget_account, budget: budget)
       create(:budget_account, :synced, budget: budget)
+      create(:budget_account, :plaid, budget: budget)
 
       expect(Budget::Account.importable).to eq([ csv ])
+    end
+
+    describe "from a bank through Plaid" do
+      let(:plaid) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust") }
+
+      it "is one of the connection's Accounts, with Plaid's id, name and mask for it" do
+        account = create(:budget_account, budget: budget, bank_connection: plaid, external_account_id: "acc-1",
+          external_name: "TD Every Day Chequing", external_mask: "4821", read_from: Date.new(2026, 10, 1))
+
+        expect(account.reload).to be_synced
+        expect(account).to have_attributes(external_name: "TD Every Day Chequing", external_mask: "4821")
+      end
+
+      it "says it's synced from the bank, by name, and takes no Import" do
+        account = create(:budget_account, :plaid, budget: budget, bank_connection: plaid)
+
+        expect(account.synced_from).to eq("TD Canada Trust")
+        expect(account.import_refusal).to eq("is synced from TD Canada Trust, so it takes no Import")
+      end
+
+      it "starts money in as a Deposit, as a bank's does, where Splitwise's starts as a Refund" do
+        expect(create(:budget_account, :plaid, budget: budget).money_in_kind).to eq("deposit")
+        expect(create(:budget_account, :synced, budget: budget).money_in_kind).to eq("refund")
+      end
+
+      it "has no Plaid name or mask when it isn't synced, which the database checks too" do
+        account = build(:budget_account, budget: budget, external_name: "Chequing", external_mask: "4821")
+
+        expect(account).not_to be_valid
+        expect(account.errors[:external_name]).to eq([ "needs a connection" ])
+        expect(account.errors[:external_mask]).to eq([ "needs a connection" ])
+        expect { account.save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /budget_accounts_external_name_when_synced/)
+      end
+
+      it "leaves the connection when another of its Accounts is still synced from it, and takes it with the last" do
+        first = create(:budget_account, :plaid, budget: budget, bank_connection: plaid)
+        second = create(:budget_account, :plaid, budget: budget, bank_connection: plaid)
+
+        first.destroy!
+        expect(Budget::BankConnection.exists?(plaid.id)).to be(true)
+        second.destroy!
+        expect(Budget::BankConnection.exists?(plaid.id)).to be(false)
+      end
     end
 
     it "has a connection and an external id together or not at all, which the database checks too" do

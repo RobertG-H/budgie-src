@@ -1,0 +1,19 @@
+<%# locals: (account:) %>
+<%# A synced Account's date to read from, which is rarely changed, so it's under a closed details whose summary says what's in it. Changing it makes the next sync read from it again. What it reads is expenses from Splitwise and bank transactions from a bank. %>
+<% noun = account.bank_connection.reads %>
+<% one = noun.singularize %>
+<details class="rounded-box border border-base-300">
+  <summary class="cursor-pointer p-4">
+    <span class="font-semibold">Date to read from</span>
+    <span class="block text-sm text-base-content/70"><%= noun.upcase_first %> dated from <%= spelled_date(account.read_from) %></span>
+  </summary>
+  <div class="border-t border-base-300 p-4">
+    <%= form_with model: account, url: account_connection_path(account), method: :patch, class: "space-y-6" do |form| %>
+      <%= render "components/field", form: form, attribute: :read_from, label: "Read #{noun} dated from",
+            hint: "#{account.synced_from} #{noun} dated before this are never read. Changing it makes the next sync read every #{one} dated from it again. What's already here stays as it is." do |field| %>
+        <%= form.date_field :read_from, required: true, **field %>
+      <% end %>
+      <%= form.submit "Change date", class: "btn" %>
+    <% end %>
+  </div>
+</details>

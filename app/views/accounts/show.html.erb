@@ -14,7 +14,12 @@
 </div>
 
 <%# What it's synced from, when it is. Otherwise which CSV format its bank's files use, when it has one. %>
-<% if @account.synced? %>
+<% if @account.bank_connection&.plaid? %>
+  <% connection = @account.bank_connection %>
+  <%= render "plaid_connection", bank: connection.name, external_name: @account.external_name, external_mask: @account.external_mask,
+        others: @account.connection_siblings.map { [ it.name, account_path(it) ] }, last_synced: last_synced_text(connection) %>
+  <div class="mt-4"><%= render "read_from", account: @account %></div>
+<% elsif @account.synced? %>
   <%= render "connection", account: @account %>
 <% elsif @account.default_csv_format %>
   <p class="mt-2 text-base-content/70">Default CSV format: <%= @account.default_csv_format.name %></p>
@@ -51,7 +56,7 @@
       <%= link_to "Back to the first page", account_path(@account), class: "btn" %>
     <% end %>
   <% elsif @account.synced? %>
-    <%= render "components/empty_state", message: "No bank transactions yet. Expenses from #{@account.synced_from} appear here once they're synced." %>
+    <%= render "components/empty_state", message: "No bank transactions yet. #{@account.bank_connection.reads.upcase_first} from #{@account.synced_from} appear here once they're synced." %>
   <% else %>
     <%= render "components/empty_state", message: "No bank transactions yet." do %>
       <%= link_to "Import", new_account_import_path(@account), class: "btn btn-primary" %>

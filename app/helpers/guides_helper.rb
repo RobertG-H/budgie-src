@@ -12,6 +12,7 @@ module GuidesHelper
     "archiving" => "Archiving an envelope",
     "records" => "Records",
     "importing" => "Importing from your bank",
+    "connecting-a-bank" => "Connecting a bank",
     "filing" => "Filing bank transactions",
     "filing-rules" => "Filing rules and To review",
     "guesses" => "Guesses",

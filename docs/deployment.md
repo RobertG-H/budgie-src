@@ -86,7 +86,10 @@ Each environment has sixteen secrets, named the same way `.env.testing` and `.en
 | `TESTING_SMTP_PASSWORD` / `PRODUCTION_SMTP_PASSWORD` | That destination's Zedmail API key |
 | `TESTING_SPLITWISE_CLIENT_ID` / `PRODUCTION_SPLITWISE_CLIENT_ID` | That destination's Splitwise app's Consumer Key. May be empty: Connect Splitwise isn't offered then |
 | `TESTING_SPLITWISE_CLIENT_SECRET` / `PRODUCTION_SPLITWISE_CLIENT_SECRET` | The same app's Consumer Secret |
-| `TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` / `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` | The key that destination encrypts a Splitwise token under |
+| `TESTING_PLAID_CLIENT_ID` / `PRODUCTION_PLAID_CLIENT_ID` | The Plaid team's client id. May be empty: Connect a bank isn't offered then. Production's stays empty until linking onto an existing Account ships ([Plaid setup](plaid.md)) |
+| `TESTING_PLAID_SECRET` / `PRODUCTION_PLAID_SECRET` | The Plaid team's Sandbox secret for testing, and its Production secret for production |
+| `TESTING_PLAID_ENV` / `PRODUCTION_PLAID_ENV` | `sandbox` for testing, `production` for production |
+| `TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` / `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` | The key that destination encrypts a Splitwise or bank connection's token under |
 | `TESTING_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` / `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` | The salt its keys are derived with |
 | `TESTING_BACKUP_R2_ENDPOINT` / `PRODUCTION_BACKUP_R2_ENDPOINT` | The R2 endpoint of that destination's backup bucket |
 | `TESTING_BACKUP_R2_ACCESS_KEY_ID` / `PRODUCTION_BACKUP_R2_ACCESS_KEY_ID` | That destination's **read-only** R2 token, its access key ID |
@@ -234,6 +237,9 @@ Every file is loaded into every run, which is why each destination's names carry
     "TESTING_SMTP_PASSWORD=" \
     "TESTING_SPLITWISE_CLIENT_ID=" \
     "TESTING_SPLITWISE_CLIENT_SECRET=" \
+    "TESTING_PLAID_CLIENT_ID=" \
+    "TESTING_PLAID_SECRET=" \
+    "TESTING_PLAID_ENV=" \
     "TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=" \
     "TESTING_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=" > .env.testing
   printf '%s\n' \
@@ -246,6 +252,9 @@ Every file is loaded into every run, which is why each destination's names carry
     "PRODUCTION_SMTP_PASSWORD=" \
     "PRODUCTION_SPLITWISE_CLIENT_ID=" \
     "PRODUCTION_SPLITWISE_CLIENT_SECRET=" \
+    "PRODUCTION_PLAID_CLIENT_ID=" \
+    "PRODUCTION_PLAID_SECRET=" \
+    "PRODUCTION_PLAID_ENV=" \
     "PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=" \
     "PRODUCTION_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=" > .env.production
   chmod 600 .env.kamal .env.testing .env.production
@@ -254,7 +263,7 @@ Every file is loaded into every run, which is why each destination's names carry
 
 It fills in the values that are only random: each destination's `SECRET_KEY_BASE`, the same kind of value `bin/rails secret` prints, and its database password. Everything else starts empty, and only you can read the files.
 `set -C` makes it refuse to overwrite a file that already exists. That matters once a destination is running: a new `SECRET_KEY_BASE` signs everyone out, and a new database password locks the app out of its database.
-If you created the files before Splitwise was added, add its four lines to each yourself: `set -C` means the commands above refuse to overwrite them.
+If you created the files before Splitwise or Plaid was added, add their lines to each yourself (four for Splitwise, three for Plaid): `set -C` means the commands above refuse to overwrite them.
 
 **2. Fill in the rest** in your editor, as each one becomes available:
 
@@ -270,6 +279,8 @@ If you created the files before Splitwise was added, add its four lines to each 
 | `PRODUCTION_SPLITWISE_CLIENT_ID` and `PRODUCTION_SPLITWISE_CLIENT_SECRET` | The **Budgie production** Splitwise app's |
 | `TESTING_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `TESTING_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` | A set of encryption keys for testing, from `bin/rails db:encryption:init`. See [Splitwise setup](splitwise.md#2-generate-the-encryption-keys) |
 | `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `PRODUCTION_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` | A different set for production |
+| `TESTING_PLAID_CLIENT_ID`, `TESTING_PLAID_SECRET` and `TESTING_PLAID_ENV` | The Plaid team's client id, its **Sandbox** secret, and `sandbox`. See [Plaid setup](plaid.md#5-give-the-values-to-the-app) |
+| `PRODUCTION_PLAID_CLIENT_ID`, `PRODUCTION_PLAID_SECRET` and `PRODUCTION_PLAID_ENV` | Left empty until linking onto an existing Account ships; then the client id, the **Production** secret, and `production` |
 
 Write values without quotes, unless one contains a `$`: Compose expands `$` in unquoted and double-quoted values, so that one needs single quotes.
 
@@ -284,7 +295,7 @@ docker compose run --rm -T kamal secrets print -d production | grep -E '^[A-Z_]+
 
 Both print nothing. A line names a secret that's empty, usually because of a typo in its env file.
 The pipe keeps the values themselves off your screen.
-The four Splitwise secrets can show up here until [Splitwise is set up](splitwise.md): empty means Connect Splitwise isn't offered, and nothing else.
+The four Splitwise secrets can show up here until [Splitwise is set up](splitwise.md): empty means Connect Splitwise isn't offered, and nothing else. So can the three Plaid ones until [Plaid is set up](plaid.md), and production's stay empty until linking onto an existing Account ships: empty means Connect a bank isn't offered.
 The IP addresses aren't secrets, so this doesn't list them. If one isn't set, every command for that destination stops with `key not found` and the variable's name.
 
 Each destination has its own `SECRET_KEY_BASE`, so a cookie or signed ID from one is useless on the other.

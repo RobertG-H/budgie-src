@@ -4,6 +4,8 @@
 class AccountConnectionSyncsController < ApplicationController
   include SyncedAccountScoped
 
+  # Only a Splitwise connection syncs so far: a bank connected through Plaid is synced by a later ticket, and until then it's a 404 here, whatever's set up.
+  before_action :require_splitwise_connection
   before_action :require_splitwise_configured
 
   def create

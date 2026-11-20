@@ -6,6 +6,9 @@ class AccountConnectionsController < ApplicationController
   include SplitwiseSignIn
   include SyncedAccountScoped
 
+  # Reconnect and Disconnect are Splitwise's alone for now: a bank's come with Plaid's update mode and `/item/remove`, in later tickets, so for one of its Accounts
+  # they're a 404 and never a token forgotten without Plaid being told.
+  before_action :require_splitwise_connection, only: %i[ create destroy ]
   before_action :require_splitwise, only: :create
 
   def create
@@ -15,7 +18,7 @@ class AccountConnectionsController < ApplicationController
   # Only the Account's date: the login, the token and the budget are never params. Back to the Account's page either way, saying what was wrong when it can't be used.
   def update
     if @account.change_read_from(params.expect(account: [ :read_from ])[:read_from])
-      redirect_to account_path(@account), status: :see_other, notice: "Now reading expenses dated from #{helpers.spelled_date(@account.read_from)}. The next sync reads them again."
+      redirect_to account_path(@account), status: :see_other, notice: "Now reading #{@connection.reads} dated from #{helpers.spelled_date(@account.read_from)}. The next sync reads them again."
     else
       redirect_to account_path(@account), status: :see_other, alert: "#{@account.errors.full_messages.to_sentence}."
     end

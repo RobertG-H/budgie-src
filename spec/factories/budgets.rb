@@ -103,6 +103,14 @@ FactoryBot.define do
       external_account_id { bank_connection.login_id }
       files_with_rules { false }
     end
+
+    # Synced from a bank through a Plaid connection of its budget, as connecting makes it: Plaid's id, name and mask for the account, and its Filing rules on.
+    trait :plaid do
+      bank_connection { association :budget_bank_connection, :plaid, budget: budget }
+      sequence(:external_account_id) { |n| "plaid-account-#{n}" }
+      external_name { "Every Day Chequing" }
+      external_mask { "4821" }
+    end
   end
 
   # A Splitwise sign-in of a budget, with a token that works. The date to read from is its Account's.
@@ -112,6 +120,15 @@ FactoryBot.define do
     sequence(:login_id) { |n| (1000 + n).to_s }
     login_name { "Robert G." }
     access_token { "splitwise-access-token" }
+
+    # A bank connected through Plaid: one Item, named for its bank.
+    trait :plaid do
+      provider { "plaid" }
+      sequence(:login_id) { |n| "plaid-item-#{n}" }
+      login_name { "TD Canada Trust" }
+      institution_id { "ins_42" }
+      access_token { "access-sandbox-token" }
+    end
   end
 
   # Of an Account, with a CSV format of its budget unless given another. The file is gone, so only its name is kept.
