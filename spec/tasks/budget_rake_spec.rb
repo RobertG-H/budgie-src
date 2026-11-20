@@ -48,7 +48,7 @@ RSpec.describe "budget rake tasks", type: :task do
     # A budget with a connected Splitwise Account, and an expense Splitwise has for its person.
     def connected_account(user_id)
       budget = create(:budget, currency: "CAD")
-      connection = create(:budget_bank_connection, budget: budget, login_id: user_id, access_token: "token-#{user_id}", read_from: Date.new(2026, 10, 1))
+      connection = create(:budget_bank_connection, budget: budget, login_id: user_id, access_token: "token-#{user_id}")
       splitwise.signs_in("code-#{user_id}", as: Splitwise::Person.new(id: user_id, name: "Person #{user_id}"), token: "token-#{user_id}")
       create(:budget_account, :synced, budget: budget, bank_connection: connection)
     end

@@ -15,7 +15,7 @@ RSpec.describe Budget::Account, type: :model do
   end
 
   it "has no balance, currency, kind or last four digits, since Budgie doesn't track what's in it" do
-    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "bank_connection_id", "external_account_id", "created_at", "updated_at")
+    expect(Budget::Account.column_names).to contain_exactly("id", "budget_id", "name", "default_csv_format_id", "files_with_rules", "bank_connection_id", "external_account_id", "read_from", "created_at", "updated_at")
   end
 
   describe "name" do
@@ -217,6 +217,142 @@ RSpec.describe Budget::Account, type: :model do
       account.bank_connection.disconnect!
 
       expect { account.destroy! }.to change(Budget::BankConnection, :count).by(-1)
+    end
+  end
+
+  # Each synced Account has its own date to read from, so that a connection with several can give each its own (ADR 0018).
+  describe "the date to read from" do
+    let(:budget) { create(:budget) }
+    let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "4321") }
+
+    def synced(**attributes)
+      build(:budget_account, budget: budget, bank_connection: connection, external_account_id: "4321", **attributes)
+    end
+
+    it "is needed by a synced Account, and has no use on one that isn't" do
+      without_date = synced(read_from: nil)
+      unsynced = build(:budget_account, budget: budget, read_from: Date.new(2026, 10, 1))
+
+      expect(without_date).not_to be_valid
+      expect(without_date.errors[:read_from]).to eq([ "can't be blank" ])
+      expect(unsynced).not_to be_valid
+      expect(unsynced.errors[:read_from]).to eq([ "needs a connection" ])
+      expect(build(:budget_account, budget: budget)).to be_valid
+    end
+
+    it "can be today, or the day after, which is today for someone ahead of Eastern time" do
+      travel_to Time.utc(2026, 10, 6, 16) do
+        expect(synced(read_from: Date.new(2026, 10, 6))).to be_valid
+        expect(synced(read_from: Date.new(2026, 10, 7))).to be_valid
+      end
+    end
+
+    it "can't be more than a day after today, or before 1990" do
+      travel_to Time.utc(2026, 10, 6, 16) do
+        later = synced(read_from: Date.new(2026, 10, 8))
+        earlier = synced(read_from: Date.new(1989, 12, 31))
+
+        expect(later).not_to be_valid
+        expect(later.errors[:read_from]).to eq([ "can't be in the future" ])
+        expect(earlier).not_to be_valid
+        expect(earlier.errors[:read_from]).to eq([ "can't be before 1990" ])
+        expect(synced(read_from: Date.new(1990, 1, 1))).to be_valid
+      end
+    end
+
+    it "is kept when its connection is disconnected" do
+      account = create(:budget_account, :synced, budget: budget, read_from: Date.new(2026, 9, 1))
+
+      account.bank_connection.disconnect!
+
+      expect(account.reload.read_from).to eq(Date.new(2026, 9, 1))
+    end
+
+    describe "in the database" do
+      def update_account(account, assignments)
+        Budget::Account.transaction(requires_new: true) { Budget::Account.where(id: account.id).update_all(assignments) }
+      end
+
+      it "is there for a synced Account and not for one that isn't" do
+        expect { update_account(create(:budget_account, :synced, budget: budget), read_from: nil) }
+          .to raise_error(ActiveRecord::CheckViolation, /budget_accounts_read_from_when_synced/)
+        expect { update_account(create(:budget_account, budget: budget), read_from: Date.new(2026, 10, 1)) }
+          .to raise_error(ActiveRecord::CheckViolation, /budget_accounts_read_from_when_synced/)
+      end
+
+      it "can't be before 1990 either, since that limit doesn't depend on the day" do
+        expect { update_account(create(:budget_account, :synced, budget: budget), read_from: Date.new(1989, 12, 31)) }
+          .to raise_error(ActiveRecord::CheckViolation, /budget_accounts_read_from_not_before_1990/)
+      end
+    end
+
+    describe ".default_read_from" do
+      it "is the date of the budget's earliest bank transaction, so a shared expense the person paid for gets its share back" do
+        account = create(:budget_account, budget: budget)
+        create(:budget_bank_transaction, account: account, date: Date.new(2026, 7, 3))
+        create(:budget_bank_transaction, account: account, date: Date.new(2026, 9, 1))
+        create(:budget_bank_transaction, date: Date.new(2020, 1, 1))
+
+        expect(Budget::Account.default_read_from(budget)).to eq(Date.new(2026, 7, 3))
+      end
+
+      it "is the 1st of this month when there are none" do
+        travel_to Time.zone.local(2026, 10, 19, 12) do
+          expect(Budget::Account.default_read_from(budget)).to eq(Date.new(2026, 10, 1))
+        end
+      end
+    end
+
+    describe "#change_read_from" do
+      let(:account) { create(:budget_account, :synced, budget: budget, read_from: Date.new(2026, 10, 1)) }
+
+      before { account.bank_connection.update_columns(sync_cursor: "2026-10-05T12:00:00Z") }
+
+      it "writes the Account and clears its connection's sync marker, so the next sync reads from the new date again" do
+        expect(account.change_read_from(Date.new(2026, 9, 1))).to be(true)
+
+        expect(account.reload.read_from).to eq(Date.new(2026, 9, 1))
+        expect(account.bank_connection.reload.sync_cursor).to be_nil
+      end
+
+      it "clears the marker when the date moves later, too" do
+        account.change_read_from(Date.new(2026, 10, 2))
+
+        expect(account.bank_connection.reload.sync_cursor).to be_nil
+      end
+
+      it "keeps the marker when the date is set to what it already is, which changes nothing" do
+        expect(account.change_read_from(Date.new(2026, 10, 1))).to be(true)
+
+        expect(account.bank_connection.reload.sync_cursor).to eq("2026-10-05T12:00:00Z")
+      end
+
+      it "keeps the date and the marker when the new date can't be used, and the reasons are on the Account" do
+        expect(account.change_read_from(nil)).to be(false)
+        expect(account.errors.full_messages).to eq([ "Read from can't be blank" ])
+        expect(account.change_read_from(Date.new(1989, 12, 31))).to be(false)
+        expect(account.errors.full_messages).to eq([ "Read from can't be before 1990" ])
+
+        expect(account.reload.read_from).to eq(Date.new(2026, 10, 1))
+        expect(account.bank_connection.reload.sync_cursor).to eq("2026-10-05T12:00:00Z")
+      end
+
+      it "keeps the marker when anything else about the Account changes" do
+        account.update!(name: "Shared")
+
+        expect(account.bank_connection.reload.sync_cursor).to eq("2026-10-05T12:00:00Z")
+      end
+
+      it "works when the key the connection's token was encrypted under has been lost, since it never reads the token" do
+        garbage = { "p" => Base64.strict_encode64("not-the-payload"), "h" => { "iv" => Base64.strict_encode64("0123456789ab"), "at" => Base64.strict_encode64("0123456789abcdef") } }.to_json
+        Budget::BankConnection.connection.execute(Budget::BankConnection.sanitize_sql_array([ "UPDATE budget_bank_connections SET access_token = ? WHERE id = ?", garbage, account.bank_connection_id ]))
+        stuck = Budget::Account.find(account.id)
+
+        expect(stuck.change_read_from(Date.new(2026, 9, 1))).to be(true)
+
+        expect(Budget::Account.find(account.id).read_from).to eq(Date.new(2026, 9, 1))
+        expect(Budget::BankConnection.find(account.bank_connection_id).sync_cursor).to be_nil
+      end
     end
   end
 

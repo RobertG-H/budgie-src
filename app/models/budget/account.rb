@@ -13,6 +13,9 @@
 #
 # It's either imported into from CSV files or synced from a connection (`bank_connection`, with the provider's id for it in `external_account_id`), never both:
 # a synced Account takes no Import (see Budget::Import), and a Splitwise connection has exactly one Account, which goes when the Account does (ADR 0016).
+#
+# A synced Account has the date it reads from (`read_from`): what the provider has dated before it is never read. It's the Account's and not the connection's,
+# so that a connection with several Accounts can give each its own (ADR 0018), and an Account that isn't synced has none.
 class Budget::Account < ApplicationRecord
   belongs_to :budget
   belongs_to :default_csv_format, class_name: "Budget::CsvFormat", optional: true
@@ -36,6 +39,10 @@ class Budget::Account < ApplicationRecord
   validates :external_account_id, presence: true, if: :bank_connection_id
   validates :external_account_id, absence: { message: "needs a connection" }, unless: :bank_connection_id
   validates :external_account_id, uniqueness: { scope: :bank_connection_id, message: "is already synced" }, if: :bank_connection_id
+  # Asked of the connection itself and not its id, so the form that connects one can check the date against a connection that isn't made yet.
+  validates :read_from, presence: true, if: :bank_connection
+  validates :read_from, absence: { message: "needs a connection" }, unless: :bank_connection
+  validate :read_from_is_a_date_that_could_be_real
 
   # Its connection goes with it when no other Account is synced from it, which is always so for Splitwise. After the Account's own row has gone,
   # since its foreign key is what keeps the connection from being deleted, and only reached when nothing refused the delete.
@@ -47,6 +54,12 @@ class Budget::Account < ApplicationRecord
   scope :without_filing_rules, -> { where(files_with_rules: false) }
   # The Accounts a CSV file can be imported into: the ones that aren't synced from a connection.
   scope :importable, -> { where(bank_connection_id: nil) }
+
+  # Where a new synced Account starts reading from: the date of the budget's earliest bank transaction, so that a shared expense the person paid for, whose
+  # card charge is already there, gets its share back, or the 1st of this month when there are none.
+  def self.default_read_from(budget)
+    budget.bank_transactions.minimum(:date) || Budget.current_month
+  end
 
   # Whether its bank transactions come from a connection, such as Splitwise, rather than from CSV files. It stays so when the connection is
   # disconnected, since what's there came from it and a CSV file read in would count some of it twice.
@@ -76,7 +89,34 @@ class Budget::Account < ApplicationRecord
     imports.latest_first.first
   end
 
+  # Changes the date to read from, which is true when it was changed or already was that, and false with the reasons on `errors` when it can't be. A new date means every
+  # expense dated from it is to be read again, which a sync marker that's already past them would skip, so the connection's marker is forgotten with it. What's already in
+  # the Account stays as it is, and what's read again is matched by id, so nothing is brought in twice. Nothing reads the connection's token, so it works for a connection
+  # whose key has been lost too.
+  def change_read_from(date)
+    self.read_from = date
+    return false unless valid?
+    return true unless read_from_changed?
+
+    transaction do
+      update_columns(read_from: read_from, updated_at: Time.current)
+      bank_connection.forget_sync_cursor!
+    end
+    true
+  end
+
   private
+    # The same limits as a CSV file's dates (Budget::CsvFormat::Reader): the day after today is allowed, since someone ahead of Eastern time may already be there.
+    def read_from_is_a_date_that_could_be_real
+      return if read_from.blank?
+
+      if read_from > Date.current.tomorrow
+        errors.add(:read_from, "can't be in the future")
+      elsif read_from < Budget::CsvFormat::Reader::EARLIEST_DATE
+        errors.add(:read_from, "can't be before #{Budget::CsvFormat::Reader::EARLIEST_DATE.year}")
+      end
+    end
+
     # A synced Account has no files, so no CSV format to read them with. Its form doesn't offer one, and this refuses it from any other way in.
     def no_default_csv_format_when_synced
       errors.add(:default_csv_format, "isn't used by an Account that's synced") if synced? && default_csv_format_id.present?

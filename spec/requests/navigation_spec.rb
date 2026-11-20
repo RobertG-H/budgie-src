@@ -110,7 +110,7 @@ RSpec.describe "Navigation", type: :request do
     assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"
     assert_select "nav[aria-label=Sections] a[aria-current=page]", count: 1
 
-    post splitwise_connection_path, params: { account: { name: "" }, bank_connection: { read_from: "2026-10-01" } }
+    post splitwise_connection_path, params: { account: { name: "", read_from: "2026-10-01" } }
 
     expect(response).to have_http_status(:unprocessable_content)
     assert_select "nav[aria-label=Sections] a[href='#{accounts_path}'][aria-current=page]", text: "Accounts"

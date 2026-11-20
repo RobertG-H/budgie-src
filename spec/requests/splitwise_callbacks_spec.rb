@@ -11,7 +11,7 @@ RSpec.describe "Splitwise's callback", type: :request do
   before { sign_in_as budget.user }
 
   def connect_form(name: "Splitwise", read_from: "2026-10-01")
-    { account: { name: name }, bank_connection: { read_from: read_from } }
+    { account: { name: name, read_from: read_from } }
   end
 
   # The person submits the form and is sent to Splitwise, which answers with the `state` that was sent along.
@@ -33,8 +33,8 @@ RSpec.describe "Splitwise's callback", type: :request do
       connection = budget.bank_connections.sole
       account = budget.accounts.sole
       expect(connection).to have_attributes(provider: "splitwise", login_id: "4321", login_name: "Robert G.", access_token: "its-access-token",
-        read_from: Date.new(2026, 9, 15), needs_reconnect: false, sync_cursor: nil, synced_at: nil)
-      expect(account).to have_attributes(name: "My Splitwise", bank_connection: connection, external_account_id: "4321", files_with_rules: false)
+        needs_reconnect: false, sync_cursor: nil, synced_at: nil)
+      expect(account).to have_attributes(name: "My Splitwise", read_from: Date.new(2026, 9, 15), bank_connection: connection, external_account_id: "4321", files_with_rules: false)
       expect(splitwise.exchanges).to eq([ { code: "good-code", redirect_uri: "http://www.example.com/splitwise/callback" } ])
       expect(splitwise.lookups).to eq([ "its-access-token" ])
       expect(response).to redirect_to(account_path(account))
@@ -220,17 +220,17 @@ RSpec.describe "Splitwise's callback", type: :request do
 
     context "when the Splitwise login is already connected" do
       let!(:connection) do
-        create(:budget_bank_connection, budget: budget, login_id: "4321", login_name: "Rob G.", access_token: "old-token", read_from: Date.new(2026, 8, 1), needs_reconnect: true)
+        create(:budget_bank_connection, budget: budget, login_id: "4321", login_name: "Rob G.", access_token: "old-token", needs_reconnect: true)
       end
-      let!(:account) { create(:budget_account, budget: budget, name: "Splitwise", bank_connection: connection, external_account_id: "4321") }
+      let!(:account) { create(:budget_account, budget: budget, name: "Splitwise", bank_connection: connection, external_account_id: "4321", read_from: Date.new(2026, 8, 1)) }
 
       it "updates its token and name, clears needs-reconnect, and keeps the Account, its name and what it reads from" do
         state = start_connecting(name: "A different name", read_from: "2026-10-01")
 
         expect { get splitwise_callback_path(code: "good-code", state: state) }.not_to change { [ Budget::Account.count, Budget::BankConnection.count ] }
 
-        expect(connection.reload).to have_attributes(access_token: "its-access-token", login_name: "Robert G.", needs_reconnect: false, read_from: Date.new(2026, 8, 1))
-        expect(account.reload.name).to eq("Splitwise")
+        expect(connection.reload).to have_attributes(access_token: "its-access-token", login_name: "Robert G.", needs_reconnect: false)
+        expect(account.reload).to have_attributes(name: "Splitwise", read_from: Date.new(2026, 8, 1))
         expect(response).to redirect_to(account_path(account))
         expect(flash[:notice]).to eq("Reconnected Splitwise as Robert G. It was already connected, so its Account and the date it reads from stay as they are.")
       end

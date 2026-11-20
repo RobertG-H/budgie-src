@@ -94,6 +94,8 @@ FactoryBot.define do
   factory :budget_account, class: "Budget::Account" do
     budget
     sequence(:name) { |n| "Account #{n}" }
+    # The date a synced Account reads from, which only a synced Account has.
+    read_from { Date.new(2026, 10, 1) if bank_connection }
 
     # Synced from a Splitwise connection of its budget, as connecting makes it: its external id is the Splitwise user's id, and its Filing rules start off.
     trait :synced do
@@ -103,14 +105,13 @@ FactoryBot.define do
     end
   end
 
-  # A Splitwise sign-in of a budget, with a token that works and the date its Account reads expenses from.
+  # A Splitwise sign-in of a budget, with a token that works. The date to read from is its Account's.
   factory :budget_bank_connection, class: "Budget::BankConnection" do
     budget
     provider { "splitwise" }
     sequence(:login_id) { |n| (1000 + n).to_s }
     login_name { "Robert G." }
     access_token { "splitwise-access-token" }
-    read_from { Date.new(2026, 10, 1) }
   end
 
   # Of an Account, with a CSV format of its budget unless given another. The file is gone, so only its name is kept.

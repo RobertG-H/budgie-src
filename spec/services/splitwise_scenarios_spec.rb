@@ -6,7 +6,7 @@ require "rails_helper"
 RSpec.describe "Splitwise scenarios (ADR 0016)" do
   let(:budget) { create(:budget, currency: "CAD") }
   let!(:bank) { create(:budget_account, budget: budget, name: "Visa") }
-  let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "4321", access_token: "its-token", read_from: Date.new(2026, 10, 1)) }
+  let(:connection) { create(:budget_bank_connection, budget: budget, login_id: "4321", access_token: "its-token") }
   let!(:splitwise_account) { create(:budget_account, :synced, budget: budget, name: "Splitwise", bank_connection: connection) }
 
   let!(:dining_out) { create(:budget_envelope, budget: budget, name: "Dining out") }

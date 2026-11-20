@@ -1050,7 +1050,7 @@ RSpec.describe "The words on the pages", type: :request do
       expect(splitwise_text).not_to match(retired_terms)
       expect(splitwise_text).not_to match(/\w+_\w+/)
 
-      patch account_connection_path(roommates), params: { bank_connection: { read_from: "2026-09-01" } }
+      patch account_connection_path(roommates), params: { account: { read_from: "2026-09-01" } }
       follow_redirect!
       expect(visible_text).to include("Now reading expenses dated from Sep 1, 2026. The next sync reads them again.")
       expect(splitwise_text).not_to match(retired_terms)
@@ -1095,7 +1095,7 @@ RSpec.describe "The words on the pages", type: :request do
     it "uses the same words in what's said when connecting is refused or done, and never a term that's retired" do
       Splitwise.client = SplitwiseFake.new
       splitwise.signs_in("good-code", as: Splitwise::Person.new(id: "55", name: "Robin B."))
-      post splitwise_connection_path, params: { account: { name: "Housemates" }, bank_connection: { read_from: "2026-10-01" } }
+      post splitwise_connection_path, params: { account: { name: "Housemates", read_from: "2026-10-01" } }
       state = state_sent_to_splitwise
 
       get splitwise_callback_path(code: "wrong-code", state: state)
@@ -1103,7 +1103,7 @@ RSpec.describe "The words on the pages", type: :request do
       expect(visible_text).to include("Splitwise wasn't connected. Splitwise didn't accept the sign-in (400). Nothing was kept. Try again.")
       expect(splitwise_text).not_to match(retired_terms)
 
-      post splitwise_connection_path, params: { account: { name: "Housemates" }, bank_connection: { read_from: "2026-10-01" } }
+      post splitwise_connection_path, params: { account: { name: "Housemates", read_from: "2026-10-01" } }
       get splitwise_callback_path(code: "good-code", state: state_sent_to_splitwise)
       follow_redirect!
       expect(visible_text).to include("Connected Splitwise as Robin B.")
