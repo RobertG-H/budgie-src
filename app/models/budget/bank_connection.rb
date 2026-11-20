@@ -51,6 +51,11 @@ class Budget::BankConnection < ApplicationRecord
     provider == PLAID
   end
 
+  # What it reads, in words: Splitwise's expenses (its own word for them, which a person knows them by) or a bank's bank transactions.
+  def reads
+    splitwise? ? "expenses" : "bank transactions"
+  end
+
   # What a person knows it by: the bank's name for a bank ("TD Canada Trust"), and the provider's for Splitwise. Never the word for Plaid's own idea of it.
   def name
     plaid? ? login_name : provider_name

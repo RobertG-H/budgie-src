@@ -14,7 +14,7 @@ class PlaidChoicesController < ApplicationController
   end
 
   def create
-    result = ConnectPlaid.call(budget: Current.budget, link: @link, choices: ConnectPlaid.choices(Current.budget, @link, params.dig(:plaid_choice, :accounts)))
+    result = ConnectPlaid.call(budget: Current.budget, link: @link, choices: ConnectPlaid.choices(Current.budget, @link, choice_params))
 
     if result.invalid?
       @choices = result.choices
@@ -40,6 +40,11 @@ class PlaidChoicesController < ApplicationController
       return redirect_to(accounts_path, alert: "Nothing is waiting to be connected. Connect a bank to choose its accounts.") if @link.nil?
 
       raise ActiveRecord::RecordNotFound unless @link.for?(Current.budget)
+    end
+
+    # Each account's choice, by its place in the list. `budget_id`, the connection and the Plaid ids are never params.
+    def choice_params
+      params.fetch(:plaid_choice, {}).permit(accounts: [ :becomes, :name, :read_from ])[:accounts]
     end
 
     def refuse(alert)

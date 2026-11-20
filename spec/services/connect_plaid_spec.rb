@@ -21,9 +21,9 @@ RSpec.describe ConnectPlaid do
     ])
   end
 
-  # The choices as the page sends them, by the account's place in the list.
+  # The choices as the controller permits them from the page, by the account's place in the list.
   def choices(rows = { "0" => { becomes: "new", name: "Chequing", read_from: "2026-10-01" }, "1" => { becomes: "leave" } })
-    ConnectPlaid.choices(budget, link, ActionController::Parameters.new(rows))
+    ConnectPlaid.choices(budget, link, ActionController::Parameters.new(rows).permit!)
   end
 
   def connect(given = choices)
@@ -174,6 +174,13 @@ RSpec.describe ConnectPlaid do
       expect(connect).to be_connected
     end
 
+    it "reads a stored name as it reads the one Link sent, so spaces Plaid's answer has don't hide the overlap" do
+      create(:budget_account, :plaid, budget: budget, bank_connection: existing, external_name: "TD  ePremium   Savings ", external_mask: "1100")
+
+      expect(connect).to be_refused
+      expect(plaid.exchanges).to be_empty
+    end
+
     it "takes a missing mask to equal only another missing mask" do
       link.accounts[0] = link.accounts[0].with(mask: nil)
       with_a_mask = create(:budget_account, :plaid, budget: budget, bank_connection: existing, external_name: "TD Every Day Chequing", external_mask: "4821")
@@ -281,6 +288,14 @@ RSpec.describe ConnectPlaid do
 
       expect(result).to be_refused
       expect(result.alert).to eq("Nothing was connected. Name has already been taken.")
+      expect(plaid.removals).to eq([ "access-for-public-1" ])
+      expect(Budget::BankConnection.count).to eq(0)
+    end
+
+    it "removes the Item and raises when something else goes wrong after the exchange, so no Item is left at Plaid" do
+      allow(budget).to receive(:with_lock).and_raise(ActiveRecord::LockWaitTimeout)
+
+      expect { connect }.to raise_error(ActiveRecord::LockWaitTimeout)
       expect(plaid.removals).to eq([ "access-for-public-1" ])
       expect(Budget::BankConnection.count).to eq(0)
     end

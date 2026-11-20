@@ -82,8 +82,9 @@ class PendingPlaidLink
   end
   alias_method :to_s, :inspect
 
+  # A string as it's kept: squished, at most MAX_LENGTH characters, and nil when it's blank or isn't a string. The duplicate check reads a stored Account's Plaid
+  # name and mask the same way, so the two compare equal (ConnectPlaid).
   def self.clean(value)
     value.to_s.squish.first(MAX_LENGTH).presence if value.is_a?(String)
   end
-  private_class_method :clean
 end

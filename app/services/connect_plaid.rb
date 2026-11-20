@@ -49,14 +49,14 @@ class ConnectPlaid
   NONE_CHOSEN = "Choose at least one account to connect.".freeze
 
   # The choices for `link`'s accounts: what was sent for each, by its place in the list (`params`, the form's `accounts`), or, for the page as it starts, a new
-  # Account each, named for the bank and the account and reading from where the budget's bank transactions start.
+  # Account each, named for the bank and the account and reading from where the budget's bank transactions start. `params` is what the controller permitted.
   def self.choices(budget, link, params = nil)
     read_from = Budget::Account.default_read_from(budget)
 
     link.accounts.each_with_index.map do |shared, index|
-      sent = params&.fetch(index.to_s, nil)
-      sent = sent.respond_to?(:permit) ? sent.permit(:becomes, :name, :read_from).to_h : {}
-      Choice.new(shared_account: shared, becomes: Choice::NEW, name: default_name(link, shared), read_from: read_from, **sent.symbolize_keys)
+      sent = params.respond_to?(:to_h) ? params.to_h.with_indifferent_access[index.to_s] : nil
+      sent = sent.respond_to?(:slice) ? sent.slice(:becomes, :name, :read_from).to_h.symbolize_keys : {}
+      Choice.new(shared_account: shared, becomes: Choice::NEW, name: default_name(link, shared), read_from: read_from, **sent)
     end
   end
 
@@ -126,12 +126,16 @@ class ConnectPlaid
 
     # The Account of a live Plaid connection at the same bank whose Plaid name and mask are one of the shared accounts', which means this is a login the budget
     # already has. A connection that was disconnected is a later ticket's to link onto, so it's no reason to refuse. A missing mask equals only another missing one.
+    # Both sides are read as PendingPlaidLink reads what Link sends, so a name stored from Plaid's answer compares equal to the same name from the browser.
     def already_connected_account
-      shared = @link.accounts.map { [ it.name, it.mask.presence ] }
+      shared = @link.accounts.map { [ it.name, it.mask ] }
 
+      live_connections_at_this_bank.flat_map { it.accounts.sort_by { |account| account.name.downcase } }
+        .find { shared.include?([ PendingPlaidLink.clean(it.external_name), PendingPlaidLink.clean(it.external_mask) ]) }
+    end
+
+    def live_connections_at_this_bank
       @budget.bank_connections.plaid.where(institution_id: @link.institution_id).includes(:accounts).reject(&:disconnected?)
-        .flat_map { it.accounts.sort_by { |account| account.name.downcase } }
-        .find { shared.include?([ it.external_name, it.external_mask.presence ]) }
     end
 
     # From here there's an Item at Plaid, which is removed when anything stops it being connected.
@@ -157,6 +161,10 @@ class ConnectPlaid
     rescue ActiveRecord::RecordNotUnique
       # Another request made the same connection or Account between the check and the insert, which only the unique indexes see.
       remove(exchange, refused("Nothing was connected, since another request connected it a moment ago."))
+    rescue StandardError
+      # Anything else is a failure of Budgie's own, which is raised as it is, but the Item it exchanged isn't left at Plaid.
+      remove(exchange, nil)
+      raise
     end
 
     def save(exchange, answer, pairs)

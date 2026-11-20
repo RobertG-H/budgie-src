@@ -8,7 +8,7 @@ module AccountsHelper
   # What's asked before an Account is deleted, which says what goes with it: the Filing rules pinned to it, and the connection it's synced from when no other
   # Account is synced from it, which is always so for Splitwise. It only reaches an Account without bank transactions, which is the only one that can be deleted.
   def account_delete_question(account)
-    connection = " Its connection to #{account.synced_from} is removed with it." if account.synced? && account.bank_connection.accounts.where.not(id: account.id).none?
+    connection = " Its connection to #{account.synced_from} is removed with it." if account.synced? && account.connection_siblings.none?
 
     "Delete the #{account.name_was} account?#{filing_rules_deleted_with(account)}#{connection}"
   end

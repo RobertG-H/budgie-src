@@ -14,11 +14,11 @@
   <div class="mx-auto max-w-xl space-y-4">
     <%= render "plaid_choices/currency_hint", currency: "CAD" %>
     <%= form_with url: "#", scope: :plaid_choice, data: { turbo: false } do |form| %>
-      <ol class="list rounded-box border border-base-300">
+      <%= render "components/record_list" do %>
         <%= render "plaid_choices/choice", form: form, choice: chequing, index: 0 %>
         <%= render "plaid_choices/choice", form: form, choice: usd, index: 1 %>
         <%= render "plaid_choices/choice", form: form, choice: taken, index: 2 %>
-      </ol>
+      <% end %>
     <% end %>
   </div>
 

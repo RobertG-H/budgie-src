@@ -4,8 +4,9 @@
 class AccountConnectionSyncsController < ApplicationController
   include SyncedAccountScoped
 
-  before_action :require_splitwise_configured
+  # Only a Splitwise connection syncs so far: a bank connected through Plaid is synced by a later ticket, and until then it's a 404 here, whatever's set up.
   before_action :require_splitwise_connection
+  before_action :require_splitwise_configured
 
   def create
     result = SyncSplitwise.call(@connection)
@@ -27,10 +28,5 @@ class AccountConnectionSyncsController < ApplicationController
     # A token can't be read without Splitwise's keys, which not every host has.
     def require_splitwise_configured
       redirect_to accounts_path, alert: "Splitwise isn't set up here, so it can't be synced." unless Splitwise.configured?
-    end
-
-    # Only a Splitwise connection syncs so far: a bank connected through Plaid is synced by a later ticket, and until then it's a 404 here.
-    def require_splitwise_connection
-      raise ActiveRecord::RecordNotFound unless @connection.splitwise?
     end
 end

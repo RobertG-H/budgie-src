@@ -130,6 +130,14 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       expect(connection.reload).to be_connected
     end
 
+    it "is a 404 for Sync now even where Splitwise isn't set up, rather than Splitwise's own refusal" do
+      Splitwise.client = SplitwiseFake.new(configured: false)
+
+      post account_connection_sync_path(chequing)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "isn't synced by the hourly job" do
       allow(SyncSplitwise).to receive(:call).and_call_original
 

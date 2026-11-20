@@ -74,6 +74,13 @@ class Budget::Account < ApplicationRecord
     bank_connection&.name
   end
 
+  # The other Accounts synced from the same connection, which what's done to the connection reaches too. None for one that isn't synced, or for Splitwise's.
+  def connection_siblings
+    return Budget::Account.none unless bank_connection
+
+    bank_connection.accounts.where.not(id: id).alphabetical
+  end
+
   # What money in starts as when one of its bank transactions is filed: a Deposit, as for a bank, except from Splitwise, where it's almost always friends paying
   # back a share, which is a Refund (ADR 0016). Only where the filing form starts: a Guess and a Filing rule say what they like.
   def money_in_kind

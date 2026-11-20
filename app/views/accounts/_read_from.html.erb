@@ -1,6 +1,7 @@
 <%# locals: (account:) %>
 <%# A synced Account's date to read from, which is rarely changed, so it's under a closed details whose summary says what's in it. Changing it makes the next sync read from it again. What it reads is expenses from Splitwise and bank transactions from a bank. %>
-<% noun, one = account.bank_connection.splitwise? ? [ "expenses", "expense" ] : [ "bank transactions", "bank transaction" ] %>
+<% noun = account.bank_connection.reads %>
+<% one = noun.singularize %>
 <details class="rounded-box border border-base-300">
   <summary class="cursor-pointer p-4">
     <span class="font-semibold">Date to read from</span>

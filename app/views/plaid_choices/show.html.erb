@@ -17,11 +17,11 @@
   <%= form_with url: plaid_choice_path, scope: :plaid_choice, class: "mt-8 space-y-8" do |form| %>
     <%= render "form_errors", messages: [ @error, *@choices.flat_map { |choice| choice.errors.full_messages.map { "#{choice.shared_account.name}: #{it}" } } ].compact %>
 
-    <ol class="list rounded-box border border-base-300">
+    <%= render "components/record_list" do %>
       <% @choices.each_with_index do |choice, index| %>
         <%= render "plaid_choices/choice", form: form, choice: choice, index: index %>
       <% end %>
-    </ol>
+    <% end %>
 
     <div class="flex flex-wrap items-center gap-4">
       <%= form.submit "Connect #{@link.institution_name}", class: "btn btn-primary" %>
