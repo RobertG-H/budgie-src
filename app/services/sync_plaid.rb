@@ -46,6 +46,11 @@ class SyncPlaid
       new(bank: bank, created: 0, changed: 0, removed: 0, skipped: 0, filed_by_rules: 0, ignored_by_rules: 0, not_ready: false, failure: failure, error: error)
     end
 
+    # A sync that worked, and found Plaid hasn't gathered the bank's transactions yet, so nothing was read or kept.
+    def self.not_ready(bank)
+      new(bank: bank, created: 0, changed: 0, removed: 0, skipped: 0, filed_by_rules: 0, ignored_by_rules: 0, not_ready: true, failure: nil, error: nil)
+    end
+
     def success?
       failure.nil?
     end
@@ -117,7 +122,7 @@ class SyncPlaid
       @currency = @connection.budget.currency
       @now = Time.current
       changes, cursor = read_everything(@connection.access_token)
-      return Result.failed(bank, nil).with(not_ready: true) if cursor.empty?
+      return Result.not_ready(bank) if cursor.empty?
 
       changes.each_slice(BATCH_SIZE) { apply(it) }
       filed = apply_filing_rules
