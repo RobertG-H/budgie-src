@@ -55,7 +55,7 @@ Sandbox's test users have accounts in US dollars, and Budgie leaves out an accou
 
 ### Development
 
-Put the Sandbox client id and secret in `.env`, then restart the app (`docker compose restart web`):
+Put the Sandbox client id and secret in `.env`, then recreate the app's container with `docker compose up -d web`. `docker compose restart web` isn't enough: Compose reads `.env` only when it creates the container, so a restart keeps the old environment and "Connect a bank" stays hidden.
 
 ```sh
 PLAID_CLIENT_ID=
