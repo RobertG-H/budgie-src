@@ -70,6 +70,7 @@ below already has a Splitwise Account with a made-up token and bank transactions
 **6a. Optionally, connect a bank through Plaid's Sandbox.** Put the Plaid team's Sandbox client id and secret in `.env` as `PLAID_CLIENT_ID` and `PLAID_SECRET`, with `PLAID_ENV=sandbox`, and recreate the app's container with `docker compose up -d web` (a `restart` keeps the environment it was created with).
 The Accounts page then has "Connect a bank", which opens Plaid Link from Plaid's own script; follow [Plaid setup](plaid.md) for the Link customization and a Sandbox user with Canadian dollars. Nothing is synced yet.
 The sample data below has a bank connection with two Accounts and a made-up token, for looking at their pages without Plaid.
+The seeded budget is in USD, so in development only a USD account connects: the [Sandbox user in Plaid setup](plaid.md#4-a-sandbox-user-with-canadian-dollars) connects its Tartan U.S. Dollar account and leaves out the CAD ones, and Plaid's own `user_good` / `pass_good` has only USD accounts. Recreate the app's container after changing `.env`, as above, or Connect a bank stays hidden.
 
 **7. Optionally, load the sample data.**
 

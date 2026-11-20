@@ -46,10 +46,44 @@ Link in Production needs a Data Transparency Messaging use case, set in the Dash
 
 ## 4. A Sandbox user with Canadian dollars
 
-Sandbox's test users have accounts in US dollars, and Budgie leaves out an account that isn't in the budget's currency, so a CAD budget would be left with nothing to connect. Make a custom user with CAD accounts in **Sandbox Studio** (Build → Sandbox), at **Tartan-Dominion Bank of Canada** (`ins_43`), Sandbox's one Canadian bank:
+Sandbox's test users have accounts in US dollars, and Budgie leaves out an account that isn't in the budget's currency, so a CAD budget would be left with nothing to connect. Make a custom user with CAD accounts in **Sandbox Studio** (Build → Sandbox): **+ Create** on its Users tab, editing the JSON rather than describing the user. Then sign in to **Tartan-Dominion Bank of Canada** (`ins_43`), Sandbox's one Canadian bank, with it in Link.
+
+This one has been connected through Budgie in development. Its USD account is there to be left out of a CAD budget (and is the only one a USD budget keeps). In Plaid's amounts, positive is money out; nothing syncs them until #155.
+
+```json
+{
+  "override_accounts": [
+    {
+      "type": "depository", "subtype": "checking", "currency": "CAD", "starting_balance": 2500,
+      "meta": { "name": "Tartan Chequing", "mask": "4821" },
+      "transactions": [
+        { "date_transacted": "2026-11-03", "date_posted": "2026-11-04", "currency": "CAD", "amount": 82.45, "description": "LOBLAWS #1029" },
+        { "date_transacted": "2026-11-14", "date_posted": "2026-11-14", "currency": "CAD", "amount": -2800, "description": "PAYROLL DEPOSIT" }
+      ]
+    },
+    {
+      "type": "depository", "subtype": "savings", "currency": "CAD", "starting_balance": 8000,
+      "meta": { "name": "Tartan Savings", "mask": "1100" }, "transactions": []
+    },
+    {
+      "type": "credit", "subtype": "credit card", "currency": "CAD", "starting_balance": 450,
+      "meta": { "name": "Tartan Visa", "mask": "9001", "limit": 5000 },
+      "transactions": [
+        { "date_transacted": "2026-11-10", "date_posted": "2026-11-11", "currency": "CAD", "amount": 14.99, "description": "NETFLIX.COM" }
+      ]
+    },
+    {
+      "type": "depository", "subtype": "checking", "currency": "USD", "starting_balance": 300,
+      "meta": { "name": "Tartan U.S. Dollar", "mask": "7777" }, "transactions": []
+    }
+  ]
+}
+```
+
+Once it's saved, choose it in the **Credentials** dropdown at the top of Sandbox Studio, which shows the username and password to type into Link.
 
 - [ ] A custom user with a chequing account, a savings account and a credit card, each with `"currency": "CAD"`, and one account with `"currency": "USD"` to see it left out
-- [ ] Its name and password written down where you test from: sign in to Tartan-Dominion Bank of Canada in Link as `user_custom` with the user's JSON, or as the saved custom user's name
+- [ ] Its name and password written down where you test from, from the **Credentials** dropdown
 
 ## 5. Give the values to the app
 
