@@ -1,0 +1,5 @@
+<% content_for :title, "Reconnect #{@connection.name} · Budgie" %>
+
+<%= render "plaid_connections/link", link_token: @link_token, title: "Reconnect #{@connection.name}", mode: "reconnect",
+      url: account_connection_reconnect_path(@account), cancel_path: account_path(@account),
+      description: "Sign in to #{@connection.name} again through Plaid. The connection stays the same, and so do its Accounts, their bank transactions and what they were filed as." %>

@@ -1,0 +1,5 @@
+<% content_for :title, "Choose accounts on #{@connection.name} · Budgie" %>
+
+<%= render "plaid_connections/link", link_token: @link_token, title: "Choose accounts on #{@connection.name}", mode: "choose",
+      url: account_connection_selection_path(@account), cancel_path: account_path(@account),
+      description: "Choose which of #{@connection.name}'s accounts to share through Plaid. Then you choose what each new one becomes here. An account you stop sharing keeps its bank transactions, and nothing new comes into it." %>

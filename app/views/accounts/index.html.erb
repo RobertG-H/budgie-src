@@ -17,7 +17,7 @@
     <%= render "components/record_list" do %>
       <% @accounts.each do |account| %>
         <%= render "components/link_row", href: account_path(account), name: account.name,
-              detail: account_detail(account, @transaction_counts.fetch(account.id, 0)) %>
+              detail: account_detail(account, @transaction_counts.fetch(account.id, 0)), warning: ("Needs reconnecting" if account.bank_connection&.needs_reconnect?) %>
       <% end %>
     <% end %>
   <% else %>

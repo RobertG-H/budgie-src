@@ -1,17 +1,19 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Opens Plaid Link on the Connect a bank page (app/views/plaid_connections/new.html.erb), with the link token the server made as it rendered.
+// Opens Plaid Link on the Connect a bank page, and on a bank's Reconnect and Choose accounts pages (app/views/plaid_connections/_link.html.erb), with the
+// link token the server made as it rendered.
 // Plaid's script (link-initialize.js, which must come from cdn.plaid.com) is in the page's <head>, and Turbo appends a new head script on a
 // visit without waiting for it to load, so this waits for window.Plaid before it calls Plaid.create, and destroys the handler, which removes
 // Link's iframe, when it disconnects.
 //
 // When the person finishes, Link gives a public token and the bank and accounts they shared. They go into the ordinary form's hidden fields
 // and the form is submitted, so Turbo sends them with the CSRF token and follows the redirect to the page where each account's choice is made.
-// The server trusts them only to skip an exchange. Leaving Link changes nothing, except a link token Plaid no longer accepts, which reloads
+// The server trusts them only to skip an exchange. `mode` says how much of it is sent: all of it to connect ("connect"), only the accounts now
+// shared for Choose accounts ("choose"), and nothing for Reconnect ("reconnect"), since update mode keeps the Item and has nothing to exchange. Leaving Link changes nothing, except a link token Plaid no longer accepts, which reloads
 // the page for a new one.
 export default class extends Controller {
   static targets = [ "button", "form", "fields", "unavailable" ]
-  static values = { token: String }
+  static values = { token: String, mode: { type: String, default: "connect" } }
 
   // How long to wait for Plaid's script before saying it couldn't be loaded, in milliseconds.
   static WAIT = 20000
@@ -49,18 +51,24 @@ export default class extends Controller {
 
   succeeded(publicToken, metadata) {
     this.fieldsTarget.replaceChildren()
-    this.add("plaid_link[public_token]", publicToken)
-    this.add("plaid_link[institution_id]", metadata.institution?.institution_id)
-    this.add("plaid_link[institution_name]", metadata.institution?.name)
-    ;(metadata.accounts || []).forEach((account, index) => {
+    if (this.modeValue === "connect") {
+      this.add("plaid_link[public_token]", publicToken)
+      this.add("plaid_link[institution_id]", metadata.institution?.institution_id)
+      this.add("plaid_link[institution_name]", metadata.institution?.name)
+    }
+    if (this.modeValue !== "reconnect") this.addAccounts(metadata.accounts || [])
+
+    this.buttonTarget.disabled = true
+    this.formTarget.requestSubmit()
+  }
+
+  addAccounts(accounts) {
+    accounts.forEach((account, index) => {
       this.add(`plaid_link[accounts][${index}][id]`, account.id)
       this.add(`plaid_link[accounts][${index}][name]`, account.name)
       this.add(`plaid_link[accounts][${index}][mask]`, account.mask)
       this.add(`plaid_link[accounts][${index}][subtype]`, account.subtype)
     })
-
-    this.buttonTarget.disabled = true
-    this.formTarget.requestSubmit()
   }
 
   exited(error) {

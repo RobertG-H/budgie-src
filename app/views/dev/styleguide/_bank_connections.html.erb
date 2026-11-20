@@ -1,15 +1,19 @@
 <%# locals: () %>
-<%# Connecting a bank through Plaid, drawn from plain values: the rows of the page after Plaid Link (a new Account, and one left out), the hint above them, and the panel on a synced Account's page. The form goes nowhere: it's only here to be looked at. %>
+<%# Connecting a bank through Plaid, drawn from plain values: the rows of the page after Plaid Link (a new Account, one left out, and on Choose accounts one in another currency that can only be left out), the hint above them, and the panel on a synced Account's page in each of its states. The forms go nowhere: they're only here to be looked at. %>
 <% chequing = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "a", name: "TD Every Day Chequing", mask: "4821", subtype: "checking"),
      becomes: ConnectPlaid::Choice::NEW, name: "TD Every Day Chequing", read_from: Date.new(2026, 1, 2)) %>
 <% usd = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "b", name: "TD U.S. Dollar Account", mask: "1100", subtype: "savings"),
      becomes: ConnectPlaid::Choice::LEAVE, name: "TD U.S. Dollar Account", read_from: Date.new(2026, 1, 2)) %>
+<% visa = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "d", name: "TD Visa Infinite", mask: "7000", subtype: "credit card"),
+     becomes: ConnectPlaid::Choice::NEW, name: "TD Visa Infinite", read_from: Date.new(2026, 1, 2)) %>
+<% usd_left_out = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "e", name: "TD U.S. Dollar Account", mask: "2200", subtype: "savings"),
+     becomes: ConnectPlaid::Choice::LEAVE, left_out_reason: "It's in USD and your budget is in CAD, so it can only be left out.") %>
 <% taken = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "c", name: "Visa Infinite", mask: nil, subtype: "credit card"),
      becomes: ConnectPlaid::Choice::NEW, name: "Visa", read_from: Date.new(2026, 1, 2)).tap { it.errors.add(:name, "has already been taken") } %>
 
 <section id="bank-connections" aria-labelledby="bank-connections-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="bank-connections-heading" class="text-xl font-semibold">Connecting a bank</h2>
-  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, and one the bank stopped accepting.</p>
+  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then Choose accounts' rows, where an account in another currency can only be left out. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, one the bank stopped accepting, and an Account the bank no longer shares.</p>
 
   <div class="mx-auto max-w-xl space-y-4">
     <%= render "plaid_choices/currency_hint", currency: "CAD" %>
@@ -22,10 +26,22 @@
     <% end %>
   </div>
 
+  <div class="mx-auto max-w-xl space-y-4">
+    <h3 class="font-semibold">Choose accounts on TD Canada Trust</h3>
+    <%= form_with url: "#", scope: :plaid_choice, data: { turbo: false } do |form| %>
+      <%= render "components/record_list" do %>
+        <%= render "plaid_choices/choice", form: form, choice: visa, index: 3 %>
+        <%= render "plaid_choices/choice", form: form, choice: usd_left_out, index: 4 %>
+      <% end %>
+    <% end %>
+  </div>
+
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Every Day Chequing", external_mask: "4821",
-        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#" %>
+        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#", reconnect_path: "#", choose_path: "#" %>
   <%= render "accounts/plaid_connection", bank: "Tartan-Dominion Bank of Canada", short_name: "Tartan", external_name: "Plaid Credit Card", external_mask: nil,
-        others: [], last_synced: "Not synced yet.", sync_path: "#" %>
+        others: [], last_synced: "Not synced yet.", sync_path: "#", reconnect_path: "#", choose_path: "#" %>
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Savings", external_mask: "0042",
-        others: [ [ "TD Every Day Chequing", "#" ] ], last_synced: "Last synced 3 days ago.", needs_reconnect: true %>
+        others: [ [ "TD Every Day Chequing", "#" ], [ "TD Visa", "#" ] ], last_synced: "Last synced 3 days ago.", reconnect_path: "#", choose_path: "#", needs_reconnect: true %>
+  <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD ePremium Savings", external_mask: "1100",
+        others: [ [ "TD Every Day Chequing", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#", reconnect_path: "#", choose_path: "#", unshared: true %>
 </section>

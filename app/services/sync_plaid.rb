@@ -11,7 +11,8 @@
 # asks from the start again.
 #
 # Each transaction is matched to an Account of the connection by Plaid's account id, and to a bank transaction by its id (`external_id`). One in an account that
-# isn't an Account's (left out when connecting), a pending one (only posted ones are kept: a pending one that posts arrives again, as a new one) and one dated
+# isn't an Account's (left out when connecting, or whose Account was deleted), or whose Account is no longer shared (de-selected in Choose accounts, which leaves
+# what it has as it is), a pending one (only posted ones are kept: a pending one that posts arrives again, as a new one) and one dated
 # before its Account's date to read from are left out and not counted. Otherwise it's one of:
 #
 # - a new bank transaction: its amount is Plaid's negated, since Plaid's positive is money out, its date the date it posted on, which decides the month it's
@@ -118,7 +119,7 @@ class SyncPlaid
     end
 
     def sync
-      @accounts = @connection.accounts.to_a.index_by(&:external_account_id)
+      @accounts = @connection.accounts.shared.to_a.index_by(&:external_account_id)
       @currency = @connection.budget.currency
       @now = Time.current
       changes, cursor = read_everything(@connection.access_token)

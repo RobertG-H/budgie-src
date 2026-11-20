@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_19_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_20_044544) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -26,12 +26,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_140000) do
     t.date "read_from"
     t.string "external_name"
     t.string "external_mask"
+    t.datetime "unshared_at"
     t.index "budget_id, lower((name)::text)", name: "index_budget_accounts_on_budget_id_and_lower_name", unique: true
     t.index ["bank_connection_id", "external_account_id"], name: "index_budget_accounts_on_connection_and_external_id", unique: true
     t.index ["default_csv_format_id"], name: "index_budget_accounts_on_default_csv_format_id"
     t.check_constraint "(bank_connection_id IS NULL) = (external_account_id IS NULL)", name: "budget_accounts_connection_with_external_id"
     t.check_constraint "(bank_connection_id IS NULL) = (read_from IS NULL)", name: "budget_accounts_read_from_when_synced"
     t.check_constraint "bank_connection_id IS NOT NULL OR external_name IS NULL AND external_mask IS NULL", name: "budget_accounts_external_name_when_synced"
+    t.check_constraint "bank_connection_id IS NOT NULL OR unshared_at IS NULL", name: "budget_accounts_unshared_when_synced"
     t.check_constraint "btrim(name::text) <> ''::text", name: "budget_accounts_name_not_blank"
     t.check_constraint "read_from >= '1990-01-01'::date", name: "budget_accounts_read_from_not_before_1990"
   end
