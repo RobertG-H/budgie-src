@@ -1,15 +1,17 @@
 # What a synced Account is synced from: Reconnect sends the person to sign in to Splitwise again, and the callback gives the same connection a new token
-# when it's the same Splitwise user (SplitwiseCallbacksController); Disconnect forgets the token. Neither touches the Account, its bank transactions or
-# what they were filed as. The date it reads expenses from can be changed too, which makes the next sync read from it again (Budget::Account#change_read_from).
+# when it's the same Splitwise user (SplitwiseCallbacksController); Disconnect forgets the token, after removing a bank's Item at Plaid. Neither touches the Account,
+# its bank transactions or what they were filed as. The date it reads expenses from can be changed too, which makes the next sync read from it again (Budget::Account#change_read_from).
 # It's found through the budget's Accounts, so another user's Account is a 404, and so is an Account that isn't synced.
 class AccountConnectionsController < ApplicationController
   include SplitwiseSignIn
   include SyncedAccountScoped
+  include PlaidRefusal
 
-  # Reconnect and Disconnect here are Splitwise's: a bank's Reconnect is Plaid's update mode (AccountConnectionReconnectsController), and its Disconnect comes with
-  # `/item/remove` in a later ticket, so for one of its Accounts these are a 404 and never a token forgotten without Plaid being told.
-  before_action :require_splitwise_connection, only: %i[ create destroy ]
+  # Reconnect here is Splitwise's: a bank's is Plaid's update mode (AccountConnectionReconnectsController), so for one of its Accounts it's a 404. Disconnect is both's,
+  # but a bank's needs Plaid set up here and a token to remove the Item with, and is never a token forgotten without Plaid being told.
+  before_action :require_splitwise_connection, only: :create
   before_action :require_splitwise, only: :create
+  before_action :require_connected_plaid, only: :destroy, if: -> { @connection.plaid? }
 
   def create
     send_to_splitwise(account_id: @account.id)
@@ -24,8 +26,15 @@ class AccountConnectionsController < ApplicationController
     end
   end
 
+  # Splitwise's token is forgotten at once. A bank's Item is removed at Plaid first, and Plaid being unreachable, or refusing, changes nothing, so it can be tried again.
   def destroy
-    @connection.disconnect!
-    redirect_to account_path(@account), status: :see_other, notice: "Disconnected from #{@connection.provider_name}."
+    if @connection.plaid?
+      @connection.disconnect_from_plaid!
+    else
+      @connection.disconnect!
+    end
+    redirect_to account_path(@account), status: :see_other, notice: "Disconnected from #{@connection.name}."
+  rescue *PlaidRefusal::REFUSALS => error
+    redirect_to account_path(@account), status: :see_other, alert: plaid_refusal(error, "#{@connection.name} wasn't disconnected", @connection.name)
   end
 end

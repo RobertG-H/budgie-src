@@ -162,6 +162,65 @@ RSpec.describe Budget::BankConnection, type: :model do
     end
   end
 
+  describe "removing a bank's Item at Plaid" do
+    let(:connection) { create(:budget_bank_connection, :plaid, access_token: "its-token", needs_reconnect: true) }
+
+    it "asks Plaid to remove it with the connection's token, then forgets the token and that it needed reconnecting, keeping the rest" do
+      connection.update_columns(sync_cursor: "cursor-4")
+
+      connection.disconnect_from_plaid!
+
+      expect(plaid.removals).to eq([ "its-token" ])
+      expect(connection.reload).to be_disconnected
+      expect(connection).not_to be_needs_reconnect
+      expect(connection.sync_cursor).to eq("cursor-4")
+    end
+
+    [ PlaidFake.item_not_found, PlaidFake.invalid_access_token ].each do |error|
+      it "counts #{error.error_code} as already removed, and forgets the token" do
+        plaid.fails(:remove_item, error)
+
+        expect { connection.disconnect_from_plaid! }.not_to raise_error
+
+        expect(connection.reload).to be_disconnected
+      end
+    end
+
+    it "raises Plaid's error, and keeps the token, when Plaid can't be reached" do
+      plaid.fails(:remove_item, PlaidFake.unreachable)
+
+      expect { connection.disconnect_from_plaid! }.to raise_error(PlaidApi::Error, "Plaid couldn't be reached.")
+
+      expect(connection.reload).not_to be_disconnected
+      expect(connection).to be_needs_reconnect
+    end
+
+    it "raises any other error of Plaid's, and keeps the token" do
+      plaid.fails(:remove_item, PlaidApi::Error.new(error_code: "INTERNAL_SERVER_ERROR", status: 500))
+
+      expect { connection.disconnect_from_plaid! }.to raise_error(PlaidApi::Error, "Plaid refused it (INTERNAL_SERVER_ERROR).")
+
+      expect(connection.reload).not_to be_disconnected
+    end
+
+    it "refuses, without asking Plaid, where Plaid isn't set up" do
+      PlaidApi.client = PlaidFake.new(configured: false)
+
+      expect { connection.disconnect_from_plaid! }.to raise_error(PlaidApi::Error, "Plaid isn't set up here.")
+
+      expect(connection.reload).not_to be_disconnected
+    end
+
+    it "doesn't ask Plaid again for one that's already disconnected" do
+      connection.disconnect_from_plaid!
+      plaid.removals.clear
+
+      connection.reload.disconnect_from_plaid!
+
+      expect(plaid.removals).to be_empty
+    end
+  end
+
   describe "its state" do
     it "is connected while there's a token, and it isn't known to have stopped working" do
       connection = build(:budget_bank_connection)
@@ -301,6 +360,15 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect(stuck).not_to be_disconnected
       expect(stuck).to be_connected
       expect { stuck.access_token }.to raise_error(ActiveRecord::Encryption::Errors::Decryption)
+    end
+
+    it "can't be removed at Plaid, which needs the token, so Disconnect raises and keeps it" do
+      stuck = unreadable(create(:budget_bank_connection, :plaid))
+
+      expect { stuck.disconnect_from_plaid! }.to raise_error(ActiveRecord::Encryption::Errors::Decryption)
+
+      expect(described_class.find(stuck.id)).not_to be_disconnected
+      expect(plaid.removals).to be_empty
     end
 
     it "can still be disconnected, since forgetting a token needs nothing of it" do

@@ -6,7 +6,7 @@ Without any of this, nothing breaks: "Connect a bank" just isn't offered, and it
 
 This page is for the operator: Claude edits the config and these docs, and never handles a Plaid secret, an encryption key or a token. The research behind it is [Plaid's Sandbox, Trial and Production](research/plaid-sandbox-trial-production.md) and [Plaid Link in a Rails app](research/plaid-link-rails-importmap.md).
 
-**What's built so far** is connecting, syncing, Reconnect and Choose accounts (the `roadmap` issue #152's first build ticket, #155 and #156): a connection and its Accounts are made, **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)), and **Reconnect** and **Choose accounts** use Link's update mode to sign in again and to change which accounts are shared ([Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)). Disconnect comes in a later ticket. Deleting a bank connection's last Account deletes the connection in Budgie without telling Plaid, until Disconnect is built: harmless on Sandbox.
+**What's built so far** is connecting, syncing, Reconnect, Choose accounts and Disconnect (the `roadmap` issue #152's first build ticket, #155, #156 and #157): a connection and its Accounts are made, **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)), and **Reconnect** and **Choose accounts** use Link's update mode to sign in again and to change which accounts are shared ([Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)). **Disconnect TD** removes the Item at Plaid and forgets the token, and deleting a bank connection's last Account removes the Item too ([Disconnect](#9-check-disconnect)). Linking onto an existing Account comes in a later ticket.
 
 - [1. The Plaid team and its keys](#1-the-plaid-team-and-its-keys)
 - [2. Link customization](#2-link-customization)
@@ -15,6 +15,7 @@ This page is for the operator: Claude edits the config and these docs, and never
 - [5. Give the values to the app](#5-give-the-values-to-the-app)
 - [6. Check it](#6-check-it)
 - [7. Check syncing](#7-check-syncing)
+- [9. Check Disconnect](#9-check-disconnect)
 - [The Trial's 10 Items](#the-trials-10-items)
 - [Coverage](#coverage)
 
@@ -154,9 +155,21 @@ Do this on testing, with the custom user connected and at least two of its accou
 - [ ] **The ids that stayed are unchanged.** `/accounts/get` on the Item (from the Dashboard's API explorer) after both shows the same `account_id` for every account that stayed selected as before, and Budgie's Accounts for them still sync. If an id changed, tell Claude
 - [ ] **Sharing it again.** Choose accounts once more and tick it again: `… is shared again.`, the warning is gone, and the next sync brings in what's new without bringing in twice what it already had
 
+## 9. Check Disconnect
+
+Do this on testing, with the custom user connected and at least two of its accounts made Accounts. **Disconnect TD** is final, and on Sandbox it costs nothing, so connect the bank again afterwards (Section 6) to check the rest. On production's Trial, removing an Item frees no slot, so don't try it there.
+
+- [ ] **The question names the Accounts and the Trial.** On an Account's page, **Disconnect Tartan** (named for your bank) asks `Disconnect Tartan-Dominion Bank of Canada? … stop syncing and keep their bank transactions. Connecting Tartan-Dominion Bank of Canada again later counts as a new connection on Plaid's Trial.`, naming every Account the connection syncs. Cancel leaves everything as it was
+- [ ] **Disconnect removes the Sandbox Item.** Confirming says `Disconnected from Tartan-Dominion Bank of Canada.` In the Plaid Dashboard's activity log (Developers, Logs) there's a successful `/item/remove` for the Item, and the Item's access token no longer works (`/accounts/get` on it answers `INVALID_ACCESS_TOKEN`)
+- [ ] **The Accounts keep what they had.** Each Account's page says `Was synced from Tartan-Dominion Bank of Canada, which was disconnected.` with no **Sync Tartan now**, **Reconnect**, **Choose accounts** or **Disconnect**, and still has its bank transactions, its Filing rules and its **Date to read from**. The Accounts list says the same under each name, with no **Needs reconnecting** badge, and an Account still takes no Import
+- [ ] **The hourly job skips it.** At twenty past the hour, **Last synced** doesn't move
+- [ ] **Removed outside Budgie.** Connect again, then remove the Item at my.plaid.com (or `/item/remove` from the API explorer) and press **Sync Tartan now**: it says `Tartan-Dominion Bank of Canada was disconnected, since Plaid says it's no longer there, so nothing was synced.` and the Accounts now say they were disconnected
+- [ ] **Deleting the last Account.** On a connection with an Account that has no bank transactions, delete the others first, then the last: the question says `Its connection to Tartan-Dominion Bank of Canada is removed with it, and Budgie stops having access to Tartan-Dominion Bank of Canada.`, and afterwards the Dashboard's log has a `/item/remove` for the Item and the Account and connection are gone. Deleting an Account of a disconnected connection makes no `/item/remove` call
+- [ ] **Plaid refusing it.** With `PLAID_SECRET` changed to a wrong one in `.env.testing` (restore it after), **Disconnect** and deleting a last Account are each refused with an alert saying `Plaid refused it (…), so … and nothing was changed. Try again later.`, and the connection and its Accounts are as they were
+
 ## The Trial's 10 Items
 
-On the Trial, a team can make 10 Items in Production, ever. Every public token exchanged for an access token counts, and **removing an Item (`/item/remove`) frees none**. Budgie keeps no count: it exchanges only when the person presses Connect on the choice page, after the duplicate check, so no Item is spent by leaving Link or the page, and once the 10 are used Plaid refuses the exchange and the Accounts page says so in Plaid's words. Sandbox has no limit.
+On the Trial, a team can make 10 Items in Production, ever. Every public token exchanged for an access token counts, and **removing an Item (`/item/remove`) frees none**, so Disconnect doesn't either, and connecting a bank again after it is a new Item. Budgie keeps no count: it exchanges only when the person presses Connect on the choice page, after the duplicate check, so no Item is spent by leaving Link or the page, and once the 10 are used Plaid refuses the exchange and the Accounts page says so in Plaid's words. Sandbox has no limit.
 
 Budgie removes an Item it exchanged but couldn't keep, such as one where every account chosen was in another currency, so Plaid stops reading the bank for it, but that Item still counts.
 

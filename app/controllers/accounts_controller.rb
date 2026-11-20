@@ -1,5 +1,6 @@
 class AccountsController < ApplicationController
   include Paginated
+  include PlaidRefusal
 
   before_action :set_account, only: %i[ show edit update destroy ]
 
@@ -40,13 +41,16 @@ class AccountsController < ApplicationController
     end
   end
 
-  # An Account with bank transactions can't be deleted: its page says why, and stays.
+  # An Account with bank transactions can't be deleted: its page says why, and stays. A bank connection's last Account takes its Item at Plaid with it, which is refused,
+  # with nothing changed, when Plaid can't be reached.
   def destroy
-    if @account.destroy
+    if @account.destroy_with_connection
       redirect_to accounts_path, status: :see_other, notice: "Account deleted."
     else
       redirect_to account_path(@account), status: :see_other, alert: @account.errors.full_messages.to_sentence
     end
+  rescue *PlaidRefusal::REFUSALS => error
+    redirect_to account_path(@account), status: :see_other, alert: plaid_refusal(error, "#{@account.name} wasn't deleted", @account.synced_from)
   end
 
   private

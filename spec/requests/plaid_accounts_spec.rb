@@ -68,13 +68,14 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       expect(visible_text).to include("No bank transactions yet. Bank transactions from TD Canada Trust appear here once they're synced.")
     end
 
-    it "offers Sync TD now, named for the bank, as the primary button, then Reconnect and Choose accounts, and no Disconnect yet" do
+    it "offers Sync TD now, named for the bank, as the primary button, then Reconnect and Choose accounts, and Disconnect TD" do
       get account_path(chequing)
 
       assert_select "form[action='#{account_connection_sync_path(chequing)}'] button.btn-primary[data-turbo-submits-with]", text: "Sync TD now"
       assert_select "a.btn:not(.btn-primary)[href='#{new_account_connection_reconnect_path(chequing)}']", text: "Reconnect"
       assert_select "a.btn:not(.btn-primary)[href='#{new_account_connection_selection_path(chequing)}']", text: "Choose accounts"
-      expect(visible_text).not_to include("Sync now", "Disconnect", "expense")
+      assert_select "form[action='#{account_connection_path(chequing)}'] button", text: "Disconnect TD"
+      expect(visible_text).not_to include("Sync now", "expense")
     end
 
     it "offers none of its actions where Plaid isn't set up" do
@@ -82,6 +83,7 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       get account_path(chequing)
 
       assert_select "button", text: "Sync TD now", count: 0
+      assert_select "button", text: "Disconnect TD", count: 0
       assert_select "a", text: "Reconnect", count: 0
       assert_select "a", text: "Choose accounts", count: 0
     end
@@ -150,7 +152,7 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
 
       savings.destroy!
       get edit_account_path(chequing)
-      expect(response.body).to include("Its connection to TD Canada Trust is removed with it.")
+      expect(response.body).to include("Its connection to TD Canada Trust is removed with it, and Budgie stops having access to TD Canada Trust.")
     end
 
     it "leaves the deleted one's bank account unmapped, so a sync skips it" do
@@ -161,12 +163,13 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
       expect(Budget::BankTransaction.count).to eq(0)
     end
 
-    it "deletes the connection with its last Account, without asking Plaid" do
+    it "deletes the connection with its last Account, removing its Item first (see spec/requests/plaid_disconnect_spec.rb)" do
       delete account_path(chequing)
+      expect(plaid.removals).to be_empty
       delete account_path(savings)
 
       expect(Budget::BankConnection.exists?(connection.id)).to be(false)
-      expect(plaid.removals).to be_empty
+      expect(plaid.removals).to eq([ connection.access_token ])
     end
   end
 
@@ -285,11 +288,9 @@ RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
     end
   end
 
-  describe "what's Splitwise's alone, until a later ticket" do
-    it "is a 404: Splitwise's Reconnect, and Disconnect, which forgets no token without Plaid being told" do
+  describe "what's Splitwise's alone" do
+    it "is a 404: Splitwise's Reconnect, which a bank's Accounts have their own of" do
       post account_connection_path(chequing)
-      expect(response).to have_http_status(:not_found)
-      delete account_connection_path(chequing)
       expect(response).to have_http_status(:not_found)
 
       expect(connection.reload).to be_connected

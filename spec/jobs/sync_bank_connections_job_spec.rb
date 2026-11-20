@@ -173,16 +173,30 @@ RSpec.describe SyncBankConnectionsJob, type: :job do
       expect(plaid.transaction_requests.map(&:first)).to eq([ "bank-2", "bank-2" ])
     end
 
-    it "fails the run, after the rest are done, for any other error of Plaid's" do
-      bank_account("bank-1")
+    it "disconnects a connection whose Item is gone, and doesn't fail the run" do
+      gone, = bank_account("bank-1")
       _, other = bank_account("bank-2")
       allow(plaid).to receive(:transactions_sync).and_wrap_original do |original, token, **options|
-        raise PlaidApi::Error.new(error_code: "ITEM_NOT_FOUND", status: 400) if token == "bank-1"
+        raise PlaidFake.item_not_found if token == "bank-1"
 
         original.call(token, **options)
       end
 
-      expect { described_class.perform_now }.to raise_error(PlaidApi::Error, "Plaid refused it (ITEM_NOT_FOUND).")
+      expect { described_class.perform_now }.not_to raise_error
+      expect(gone.reload).to be_disconnected
+      expect(other.bank_transactions.count).to eq(1)
+    end
+
+    it "fails the run, after the rest are done, for any other error of Plaid's" do
+      bank_account("bank-1")
+      _, other = bank_account("bank-2")
+      allow(plaid).to receive(:transactions_sync).and_wrap_original do |original, token, **options|
+        raise PlaidApi::Error.new(error_code: "INTERNAL_SERVER_ERROR", status: 500) if token == "bank-1"
+
+        original.call(token, **options)
+      end
+
+      expect { described_class.perform_now }.to raise_error(PlaidApi::Error, "Plaid refused it (INTERNAL_SERVER_ERROR).")
       expect(other.bank_transactions.count).to eq(1)
     end
   end
