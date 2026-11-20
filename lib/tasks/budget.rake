@@ -8,11 +8,13 @@ namespace :budget do
     puts "Started the new months of #{behind} #{"budget".pluralize(behind)}."
   end
 
-  desc "Sync every connected Splitwise Account that can be synced, as the hourly job does"
+  desc "Sync every connection, Splitwise's and banks', that can be synced, as the hourly job does"
   task sync_connections: :environment do
-    next puts("Splitwise isn't set up here, so nothing can be synced.") unless Splitwise.configured?
+    unless Splitwise.configured? || PlaidApi.configured?
+      next puts("Neither Splitwise nor Plaid is set up here, so nothing can be synced.")
+    end
 
-    connections = Budget::BankConnection.syncable.count
+    connections = Budget::BankConnection.syncable.count(&:provider_configured?)
     next puts("No connection can be synced.") if connections.zero?
 
     SyncBankConnectionsJob.perform_now

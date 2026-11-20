@@ -6,8 +6,9 @@
 # The token is encrypted at rest (Active Record encryption, with keys from the environment: see config/initializers/active_record_encryption.rb), and
 # is never shown: not in a page, a log or an error message.
 #
-# Syncing reads from it (SyncSplitwise), holding its row lock so two syncs never run at once. `sync_cursor` is where the last sync got to, as text the
-# provider's sync owns and nothing else reads (for Splitwise, a time: SyncSplitwise.sync_marker); `synced_at` is when one last finished. Changing an
+# Syncing reads from it (`sync`, which is SyncSplitwise or SyncPlaid), holding its row lock so two syncs never run at once. `sync_cursor` is where the last sync got
+# to, as text the provider's sync owns and nothing else reads (for Splitwise, a time: SyncSplitwise.sync_marker; for Plaid, Plaid's own cursor); `synced_at` is when
+# one last finished. Changing an
 # Account's date to read from forgets it (`forget_sync_cursor!`), so the next sync reads everything dated from the new date again.
 #
 # It's connected while there's a token that works. The token can stop working, which only a sync finds out and says by `needs_reconnect`, and
@@ -16,7 +17,7 @@
 #
 # A bank connected through Plaid (ADR 0018) is one Plaid Item: `login_id` is the Item's id, `login_name` the bank's name ("TD Canada Trust"), and `institution_id`
 # Plaid's id for the bank ("ins_42"), which the check before an exchange compares (ConnectPlaid). It has an Account for each of the bank's accounts that the person
-# chose to connect, each with Plaid's id, name and mask for it. It isn't synced yet: SyncBankConnectionsJob and Sync now only reach Splitwise ones.
+# chose to connect, each with Plaid's id, name and mask for it, and one cursor for all of them.
 class Budget::BankConnection < ApplicationRecord
   # The providers a connection can be to, which a check constraint says too, and what each is called.
   SPLITWISE = "splitwise".freeze
@@ -59,6 +60,26 @@ class Budget::BankConnection < ApplicationRecord
   # What a person knows it by: the bank's name for a bank ("TD Canada Trust"), and the provider's for Splitwise. Never the word for Plaid's own idea of it.
   def name
     plaid? ? login_name : provider_name
+  end
+
+  # The bank's name as far as its first word goes ("TD" for "TD Canada Trust", "Tartan" for "Tartan-Dominion Bank of Canada"), which a button that has to be short
+  # names it by ("Sync TD now"), and the whole of a name that has no word.
+  def self.short_name(name)
+    name.to_s[/\A[[:alnum:]]+/] || name.to_s
+  end
+
+  def short_name
+    self.class.short_name(name)
+  end
+
+  # Brings what's new in, through its provider's sync, and says what it did (SyncSplitwise::Result or SyncPlaid::Result, which answer the same questions).
+  def sync
+    (splitwise? ? SyncSplitwise : SyncPlaid).call(self)
+  end
+
+  # Whether its provider is set up on this host, which syncing needs: without the provider's keys, and the ones the token is encrypted under, nothing can be read.
+  def provider_configured?
+    splitwise? ? Splitwise.configured? : PlaidApi.configured?
   end
 
   # Whether the provider's login is itself the one external account, as a Splitwise user is: their Account holds their share of every expense, so its external id is the

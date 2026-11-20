@@ -40,6 +40,6 @@ class BankTransactionFilingsController < ApplicationController
   private
     # Only an unfiled bank transaction can be filed: one that isn't says why, where the form was opened from.
     def require_unfiled
-      redirect_to origin_path, alert: Budget::BankTransaction::FILING_REFUSALS.fetch(@bank_transaction.state) unless @bank_transaction.unfiled?
+      redirect_to origin_path, alert: @bank_transaction.filing_refusal unless @bank_transaction.unfiled?
     end
 end

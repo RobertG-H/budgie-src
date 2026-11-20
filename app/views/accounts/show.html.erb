@@ -16,8 +16,9 @@
 <%# What it's synced from, when it is. Otherwise which CSV format its bank's files use, when it has one. %>
 <% if @account.bank_connection&.plaid? %>
   <% connection = @account.bank_connection %>
-  <%= render "plaid_connection", bank: connection.name, external_name: @account.external_name, external_mask: @account.external_mask,
-        others: @account.connection_siblings.map { [ it.name, account_path(it) ] }, last_synced: last_synced_text(connection) %>
+  <%= render "plaid_connection", bank: connection.name, short_name: connection.short_name, external_name: @account.external_name, external_mask: @account.external_mask,
+        others: @account.connection_siblings.map { [ it.name, account_path(it) ] }, last_synced: last_synced_text(connection),
+        sync_path: (account_connection_sync_path(@account) if connection.connected? && connection.provider_configured?), needs_reconnect: connection.needs_reconnect? %>
   <div class="mt-4"><%= render "read_from", account: @account %></div>
 <% elsif @account.synced? %>
   <%= render "connection", account: @account %>

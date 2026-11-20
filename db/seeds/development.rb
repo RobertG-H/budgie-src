@@ -190,7 +190,7 @@ if splitwise_account.bank_transactions.none?
 end
 
 # A bank connected through Plaid, with two Accounts on the one connection, and a token that isn't real: nothing reaches Plaid in development unless its Sandbox keys
-# are in .env, and a Plaid connection doesn't sync yet, but the Accounts page and an Account's page have a bank's Accounts to show. Only made when the budget has no
+# are in .env, and Plaid refuses this token if they are, but the Accounts page and an Account's page have a bank's Accounts to show. Only made when the budget has no
 # Plaid connection, so a developer's own, made through Plaid's Sandbox, is left as it is. Its bank's id is none of Plaid's, so the check for a bank that's already
 # connected never mistakes a Sandbox login at a real Sandbox bank, whose accounts have these names and masks, for this one.
 if budget.bank_connections.plaid.none?
@@ -200,4 +200,32 @@ if budget.bank_connections.plaid.none?
     budget.accounts.create!(name: name, bank_connection: bank, external_account_id: "development-account-#{index}", external_name: external_name, external_mask: mask,
       read_from: this_month)
   end
+end
+
+# What a sync would have brought into the sample bank's chequing Account (SyncPlaid), so its page and the Bank transactions page have a bank's bank transactions to show:
+# unfiled ones, money in and out, with the dates they were authorised, a filed one, and one the bank removed before it was filed and one after. Only made while its
+# Accounts have none, so what a developer has done to them since isn't redone by seeding again.
+sample_bank = budget.bank_connections.plaid.find_by(login_id: "development-item-not-real")
+if sample_bank && Budget::BankTransaction.where(account: sample_bank.accounts).none?
+  chequing = sample_bank.accounts.order(:external_account_id).first
+  posted = ->(number, description, amount, day) do
+    chequing.bank_transactions.create!(external_id: "development-transaction-#{number}", description: description, amount: amount, date: this_month + day,
+      authorized_date: this_month + [ day - 1, 0 ].max)
+  end
+  file = lambda do |bank_transaction, envelope|
+    entry = Budget::Filing::Entry.new(bank_transaction: bank_transaction, drafts: [ Budget::Filing::Draft.for(bank_transaction, envelope_id: envelope.id) ])
+    Budget::Filing.new(budget).file([ entry ]) or raise "The bank sample wasn't filed: #{entry.full_messages.to_sentence}"
+  end
+  household = budget.envelopes.find_or_create_by!(name: "Household") { |envelope| envelope.starting_balance = 150 }
+
+  posted.(1, "LOBLAWS #1029 TORONTO ON", -82.45, 3)
+  posted.(2, "PAYROLL DEPOSIT", 2800, 1)
+  file.(posted.(3, "CANADIAN TIRE #0123", -36.20, 2), household)
+  # Removed by the bank: one that was never filed, which leaves the Unfiled state, and one that was, which keeps its Spend until it's un-filed.
+  posted.(4, "NETFLIX.COM", -14.99, 4).update!(removed_at: Time.current)
+  hardware = posted.(5, "HOME HARDWARE #77", -21.50, 2)
+  file.(hardware, household)
+  hardware.update!(removed_at: Time.current)
+  # As if it had synced a little while ago, so the Account's page has a time to say.
+  sample_bank.update_columns(synced_at: 12.minutes.ago)
 end

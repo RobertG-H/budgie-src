@@ -6,7 +6,7 @@ Without any of this, nothing breaks: "Connect a bank" just isn't offered, and it
 
 This page is for the operator: Claude edits the config and these docs, and never handles a Plaid secret, an encryption key or a token. The research behind it is [Plaid's Sandbox, Trial and Production](research/plaid-sandbox-trial-production.md) and [Plaid Link in a Rails app](research/plaid-link-rails-importmap.md).
 
-**What's built so far** is connecting (the `roadmap` issue #152's first build ticket): a connection and its Accounts are made, and nothing is synced yet. The Accounts say "Not synced yet." until syncing is built, and Sync now, Reconnect, Choose accounts and Disconnect come in later tickets. Deleting a bank connection's last Account deletes the connection in Budgie without telling Plaid, until Disconnect is built: harmless on Sandbox.
+**What's built so far** is connecting and syncing (the `roadmap` issue #152's first build ticket, and #155): a connection and its Accounts are made, and **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)). Reconnect, Choose accounts and Disconnect come in later tickets: until Reconnect is built, a connection the bank stopped accepting says so and stays that way. Deleting a bank connection's last Account deletes the connection in Budgie without telling Plaid, until Disconnect is built: harmless on Sandbox.
 
 - [1. The Plaid team and its keys](#1-the-plaid-team-and-its-keys)
 - [2. Link customization](#2-link-customization)
@@ -14,6 +14,7 @@ This page is for the operator: Claude edits the config and these docs, and never
 - [4. A Sandbox user with Canadian dollars](#4-a-sandbox-user-with-canadian-dollars)
 - [5. Give the values to the app](#5-give-the-values-to-the-app)
 - [6. Check it](#6-check-it)
+- [7. Check syncing](#7-check-syncing)
 - [The Trial's 10 Items](#the-trials-10-items)
 - [Coverage](#coverage)
 
@@ -51,7 +52,7 @@ Link in Production needs a Data Transparency Messaging use case, set in the Dash
 
 Sandbox's test users have accounts in US dollars, and Budgie leaves out an account that isn't in the budget's currency, so a CAD budget would be left with nothing to connect. Make a custom user with CAD accounts in **Sandbox Studio** (Build → Sandbox): **+ Create** on its Users tab, editing the JSON rather than describing the user. Then sign in to **Tartan-Dominion Bank of Canada** (`ins_43`), Sandbox's one Canadian bank, with it in Link.
 
-This one has been connected through Budgie in development. Its USD account is there to be left out of a CAD budget (and is the only one a USD budget keeps). In Plaid's amounts, positive is money out; nothing syncs them until #155.
+This one has been connected through Budgie in development. Its USD account is there to be left out of a CAD budget (and is the only one a USD budget keeps). In Plaid's amounts, positive is money out, and a sync turns them round, so LOBLAWS comes in as money out.
 
 ```json
 {
@@ -127,6 +128,19 @@ Do this on testing once its values are deployed. Claude can't: it can't reach th
 - [ ] **Cancel** on the choice page, and waiting more than 30 minutes before pressing Connect, both keep nothing
 - [ ] The token is ciphertext in the database: on the host, `docker exec budgie-db psql -U budgie budgie_production -c "select provider, left(access_token, 12) from budget_bank_connections"` shows something that starts `{"p":"` for `plaid`
 - [ ] The app's logs show `public_token` as `[FILTERED]` in the request that Link's answer was sent in
+
+## 7. Check syncing
+
+Do this on testing, with the custom user connected (each Account's date to read from on or before the custom user's transactions' dates). Claude can't: it can't reach the hosts, it never calls Plaid with real keys, and what only Plaid's own answers can settle is here. The Sandbox endpoints are calls to `sandbox.plaid.com` with the Sandbox client id, secret and the connection's access token, which is only in the database, encrypted, so they're easiest from the Dashboard's API explorer or Postman with a token from a Sandbox Item made there.
+
+- [ ] **Sync Tartan now** on a connected Account's page says `Synced from Tartan-Dominion Bank of Canada: 3 new.` (or however many there are), and **Last synced** under the panel. A first sync right after connecting can say `… hasn't sent its bank transactions yet. Try again in a few minutes.`: that's Plaid still gathering the history
+- [ ] **The bank's own description arrives.** The bank transactions read `LOBLAWS #1029`, `PAYROLL DEPOSIT` and `NETFLIX.COM`, the custom user's `description`, and not a tidied merchant name: that's `original_description`, which Budgie asks for on every call. If they read as Plaid's tidied names instead, tell Claude
+- [ ] **Signs and dates.** LOBLAWS is money out (red) and PAYROLL DEPOSIT money in, each dated its `date_posted` (Nov 4 for LOBLAWS, not Nov 3)
+- [ ] **New transactions come in.** Add a CAD transaction with `/sandbox/transactions/create` (or by editing the custom user and resetting the Item), then **Sync Tartan now** brings it in, once, however often it's pressed. One in another currency is counted as skipped
+- [ ] **Filing rules.** A Filing rule for `loblaws` on the Account files the next LOBLAWS that comes in, and the notice says `Filing rules filed 1 of them.` with a **Review them** link
+- [ ] **The date to read from.** Under **Date to read from** on an Account's page, move it earlier and press **Change date**: the next sync reads every transaction again, and nothing is duplicated
+- [ ] **A connection that needs signing in again.** `/sandbox/item/reset_login` on the Item, then **Sync Tartan now**: it says `Tartan-Dominion Bank of Canada stopped accepting the connection, so nothing was synced.`, the panel says the Account isn't syncing and has no **Sync Tartan now**, and the hourly job skips it. Reconnect, which puts it right, comes in a later ticket; until then, reconnecting in Budgie isn't possible, so do this last, on an Item you can delete
+- [ ] **The hourly job.** At twenty past the hour, **Last synced** moves on without pressing anything
 
 ## The Trial's 10 Items
 

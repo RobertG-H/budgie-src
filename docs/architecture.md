@@ -510,7 +510,7 @@ always friends paying back a share, though a Guess still takes precedence.
 Sync now says what it did ("Synced from Splitwise: 9 new, 2 changed, 1 deleted. 3 settle-ups ignored, 4 skipped."). A 401 means Splitwise no longer accepts the sign-in: the Account's page says it needs reconnecting, and the
 hourly job skips it until it's reconnected. A 429 stops that sync without moving the marker and says to try again later. Any other failure is logged with the connection's id and rolled back, doesn't stop the other connections,
 and the job raises the first once the rest are done, as `StartNewMonthsJob` does. The date to read from can be changed on the Account's page, which clears the marker so the next sync reads every expense from the new
-date again; moving it later leaves what's already there as it is. [Operating Budgie](operations.md#syncing-splitwise) has `budget:sync_connections`, which runs the job on demand.
+date again; moving it later leaves what's already there as it is. [Operating Budgie](operations.md#syncing-splitwise-and-banks) has `budget:sync_connections`, which runs the job on demand.
 
 An Account that's synced takes no CSV Import: its page has none, the Import form's Account select and the header's guess leave it out, and the server refuses one. Deleting follows the Account's rule, so one with bank transactions
 can't be deleted and one without takes its connection with it. Specs never call Splitwise: everything that asks it questions sits behind `Splitwise.client`, which every spec replaces. Connecting needs Splitwise's client id and
@@ -525,9 +525,21 @@ with a "Becomes" select: a new Account, with its name and date to read from, or 
 Trial, 10 for good): the 30 minutes since Link finished, the choices, a duplicate check (the same bank and an account whose name and mask are one of a live connection's Accounts is refused, and pointed at that Account),
 then the exchange, then `/accounts/get`, whose answer is what's stored, whose ids must include every one chosen, and whose currency leaves out an account in another (named in the notice, and with none left the Item is
 removed); then the connection and its Accounts are made in one database transaction. Cancel, the deadline and every refusal keep nothing, and an Item that was exchanged but not kept is removed. A bank's Account takes no
-CSV Import, its page has a panel for its connection that names the other Accounts it syncs, and nothing syncs it yet: the hourly job and Sync now only reach Splitwise's. Specs never call Plaid: `PlaidApi.client`
+CSV Import, and its page has a panel for its connection that names the other Accounts it syncs. Specs never call Plaid: `PlaidApi.client`
 (a plain `Net::HTTP` client, named so it can't clash with the `plaid` gem) is replaced in every spec by a fake. Connecting needs Plaid's client id, secret and environment (Sandbox in development and testing) and the
 encryption keys, and without them it isn't offered ([Plaid setup](plaid.md)).
+
+Syncing a bank fills its Accounts. **Sync TD now** on any of its Accounts' pages (named with the bank's first word) and the hourly job call `SyncPlaid`, shaped like `SyncSplitwise`: it holds the connection's row
+lock, is one database transaction, and reads Plaid's `/transactions/sync` from the connection's cursor (one cursor for the whole Item, none the first time), 500 at a time and with the bank's own description
+(`original_description`) asked for from the very first call, until Plaid says there's no more. Nothing is written until every page is read; when the bank's transactions change while they're read, Plaid says so and
+the pages are read again from where the sync began, a few times at most; and the cursor is kept, with when the sync finished, only once it has. While Plaid hasn't gathered the history yet it answers an empty
+cursor, which is kept as nothing, so the panel still says "Not synced yet." Each transaction is matched to an Account by Plaid's account id and to a bank transaction by its id (`external_id`): only posted
+ones are kept (a pending one that posts arrives again as a new one, and removing a pending one matches nothing), one in an account that was left out or dated before its Account's date to read from is left out
+without being counted, and one in another currency or of 0 is skipped and counted. A new one is a bank transaction whose amount is Plaid's negated (Plaid's positive is money out), dated the day it posted, which
+decides its month, with the bank's description, else Plaid's name for it, and its authorised date kept in `authorized_date` for recognising the same bank transaction in a CSV file later; a modified one is
+updated in place, never touching what was filed from it; and a removed one gets `removed_at`, never being deleted, and says "Removed by TD Canada Trust" where Splitwise's says "Deleted in Splitwise". Filing rules act
+on what's new in the Accounts that have them on, which a bank's do, so it's to review. Plaid saying the bank needs signing in again, or stopped sharing, marks the connection as needing reconnecting, which the hourly
+job then skips; Plaid asking Budgie to slow down says to try later; anything else changes nothing and fails the hourly run. Sync now says what it did: "Synced from TD Canada Trust: 9 new, 2 changed, 1 removed. 4 skipped."
 
 The header's top row has Import, the primary button, beside the menu, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
 bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise or a bank, while Import is a button, so it never marks a section. Bank transactions is followed by a muted

@@ -88,11 +88,20 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect(connection.reload.access_token).to eq("access-sandbox-secret")
     end
 
-    it "is never synced by the hourly job or Sync now until its sync is built, so it isn't among the Splitwise ones" do
+    it "is synced through Plaid, where Plaid is set up" do
       connection.save!
-      splitwise = create(:budget_bank_connection, budget: connection.budget)
+      allow(SyncPlaid).to receive(:call).and_return(:synced)
 
-      expect(described_class.splitwise).to contain_exactly(splitwise)
+      expect(connection.sync).to eq(:synced)
+      expect(connection).to be_provider_configured
+      PlaidApi.client = PlaidFake.new(configured: false)
+      expect(connection).not_to be_provider_configured
+    end
+
+    it "has a short name, the bank's first word, for a button that names it" do
+      expect(connection.short_name).to eq("TD")
+      expect(described_class.short_name("Tartan-Dominion Bank of Canada")).to eq("Tartan")
+      expect(described_class.short_name("…")).to eq("…")
     end
   end
 
