@@ -60,7 +60,7 @@ The balance brought forward from the previous month. Nothing resets at month end
 ## Importing
 
 **Account**:
-A real bank or card account that bank transactions come from. Budgie doesn't track what's in it; that's the user's business. It's either imported into from CSV files or synced from a connection to a bank or to Splitwise. One bank connection can have several Accounts, and an Account known from CSV files can be linked onto a bank's account, keeping its history. A Splitwise Account holds the user's share of each Splitwise expense. A synced Account takes no Import.
+A real bank or card account that bank transactions come from. Budgie doesn't track what's in it; that's the user's business. It's either imported into from CSV files or synced from a connection to a bank or to Splitwise. One bank connection can have several Accounts, and when a bank is connected, or one of its accounts is shared later, it can be linked onto an Account that's there instead of becoming a new one: one known from CSV files, or one whose bank was disconnected. The Account keeps its name, its bank transactions and its Filing rules, and is synced from then on. A Splitwise Account holds the user's share of each Splitwise expense. A synced Account takes no Import.
 _Avoid_: Wallet
 
 **Bank transaction**:

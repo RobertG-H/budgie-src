@@ -1,5 +1,5 @@
 <%# locals: (form:, choice:, index:) %>
-<%# One account the person shared in Plaid Link, and what it becomes: Plaid's name, its mask (last digits) and its kind, then the "Becomes" select, A new Account or Leave out, with the fields for that choice under it. A new Account has its name and its date to read from; one that's left out has a note. The plaid-choice controller shows only the chosen one's; without JavaScript both show, and the server reads only the chosen one's. `choice` is a ConnectPlaid::Choice, so /styleguide can draw a row from plain values. %>
+<%# One account the person shared in Plaid Link, and what it becomes: Plaid's name, its mask (last digits) and its kind, then the "Becomes" select, A new Account, one of the Accounts it can link onto (`choice.targets`, in a group of their own, only when there are any) or Leave out, with the fields for that choice under it. A new Account has its name and its date to read from; a linked one only its date, which starts at the Account's latest bank transaction's, that day included, and which the plaid-choice controller sets from the option's `data-read-from` when another Account is chosen; one that's left out has a note. The plaid-choice controller shows only the chosen one's; without JavaScript all show, and the server reads only the chosen one's. `choice` is a ConnectPlaid::Choice, so /styleguide can draw a row from plain values. %>
 <%# An account that can only be left out (`choice.left_out?`, one in another currency on Choose accounts) has the select disabled on "Left out", with the reason under it, and nothing else: a disabled select isn't sent, and the server leaves it out whatever it's sent. %>
 <% shared = choice.shared_account %>
 <%= tag.li class: "list-row block space-y-4", data: ({ controller: "plaid-choice" } unless choice.left_out?) do %>
@@ -20,8 +20,7 @@
       <% end %>
     <% else %>
       <%= render "components/field", form: fields, attribute: :becomes, control: :select, label: "Becomes" do |field| %>
-        <%= fields.select :becomes, [ [ "A new Account", ConnectPlaid::Choice::NEW ], [ "Leave out", ConnectPlaid::Choice::LEAVE ] ], {},
-              data: { plaid_choice_target: "becomes", action: "plaid-choice#toggle" }, **field %>
+        <%= fields.select :becomes, plaid_choice_options(choice), {}, data: { plaid_choice_target: "becomes", action: "plaid-choice#choose" }, **field %>
       <% end %>
 
       <div class="space-y-4" data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::NEW %>">
@@ -33,6 +32,16 @@
           <%= fields.date_field :read_from, **field %>
         <% end %>
       </div>
+
+      <% if choice.targets.any? %>
+        <div class="space-y-4" data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::LINK %>">
+          <p class="text-sm text-base-content/70">It keeps its name, bank transactions and Filing rules, and takes no CSV Import once it's synced.</p>
+          <%= render "components/field", form: fields, attribute: :link_read_from, label: "Read bank transactions dated from",
+                hint: "It starts at the date of the Account's latest bank transaction. That day's bank transactions may come in twice. Ignore the ones you've already filed." do |field| %>
+            <%= fields.date_field :link_read_from, data: { plaid_choice_target: "linkDate" }, **field %>
+          <% end %>
+        </div>
+      <% end %>
 
       <div data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::LEAVE %>">
         <p class="text-sm text-base-content/70">Left out: its bank transactions aren't brought in.</p>

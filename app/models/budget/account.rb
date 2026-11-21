@@ -17,6 +17,9 @@
 # A synced Account has the date it reads from (`read_from`): what the provider has dated before it is never read. It's the Account's and not the connection's,
 # so that a connection with several Accounts can give each its own (ADR 0018), and an Account that isn't synced has none.
 #
+# A bank's account can be linked onto an Account that's there when it's connected (`linkable`, ConnectPlaid), which keeps its name, bank transactions, Imports and Filing
+# rules, and from then on is synced and takes no Import. Its Default CSV format is cleared, and one from a disconnected bank moves to the new connection.
+#
 # A bank's account stops being shared when the person de-selects it in Choose accounts (`unshared_at`, ChoosePlaidAccounts): the Account keeps its bank transactions
 # and stays synced, and a sync brings nothing new into it (SyncPlaid) until it's selected again.
 class Budget::Account < ApplicationRecord
@@ -61,11 +64,30 @@ class Budget::Account < ApplicationRecord
   scope :importable, -> { where(bank_connection_id: nil) }
   # The synced Accounts whose bank account is still shared: the ones a sync brings anything into.
   scope :shared, -> { where(unshared_at: nil) }
+  # The Accounts a bank's account can be linked onto when it's connected, instead of becoming a new Account (ADR 0018): one that takes CSV Imports, and one whose
+  # bank was disconnected. Never one of a live connection, nor Splitwise's. Locking them needs `lock("FOR UPDATE OF budget_accounts")`, since the connection's side
+  # of the join can be null.
+  scope :linkable, -> {
+    left_joins(:bank_connection).where(bank_connection_id: nil)
+      .or(left_joins(:bank_connection).where(bank_connection: { provider: Budget::BankConnection::PLAID, access_token: nil }))
+  }
 
   # Where a new synced Account starts reading from: the date of the budget's earliest bank transaction, so that a shared expense the person paid for, whose
   # card charge is already there, gets its share back, or the 1st of this month when there are none.
   def self.default_read_from(budget)
     budget.bank_transactions.minimum(:date) || Budget.current_month
+  end
+
+  # What's wrong with `date` as a date to read from, or nothing: the same limits as a CSV file's dates (Budget::CsvFormat::Reader), where the day after today is
+  # allowed, since someone ahead of Eastern time may already be there. Linking onto an Account checks its date with it before the Account is changed (ConnectPlaid).
+  def self.read_from_problem(date)
+    if date.blank?
+      "can't be blank"
+    elsif date > Date.current.tomorrow
+      "can't be in the future"
+    elsif date < Budget::CsvFormat::Reader::EARLIEST_DATE
+      "can't be before #{Budget::CsvFormat::Reader::EARLIEST_DATE.year}"
+    end
   end
 
   # Whether its bank transactions come from a connection, such as Splitwise, rather than from CSV files. It stays so when the connection is
@@ -151,15 +173,12 @@ class Budget::Account < ApplicationRecord
   end
 
   private
-    # The same limits as a CSV file's dates (Budget::CsvFormat::Reader): the day after today is allowed, since someone ahead of Eastern time may already be there.
+    # Blank is the presence validation's to say.
     def read_from_is_a_date_that_could_be_real
       return if read_from.blank?
 
-      if read_from > Date.current.tomorrow
-        errors.add(:read_from, "can't be in the future")
-      elsif read_from < Budget::CsvFormat::Reader::EARLIEST_DATE
-        errors.add(:read_from, "can't be before #{Budget::CsvFormat::Reader::EARLIEST_DATE.year}")
-      end
+      problem = self.class.read_from_problem(read_from)
+      errors.add(:read_from, problem) if problem
     end
 
     # A synced Account has no files, so no CSV format to read them with. Its form doesn't offer one, and this refuses it from any other way in.

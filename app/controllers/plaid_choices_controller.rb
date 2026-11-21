@@ -1,4 +1,4 @@
-# The page after Plaid Link (ADR 0018): each account the person shared, and what it becomes, a new Account or left out. It's for connecting a bank, where submitting it
+# The page after Plaid Link (ADR 0018): each account the person shared, and what it becomes, a new Account, linked onto an Account that's there, or left out. It's for connecting a bank, where submitting it
 # connects (ConnectPlaid, which runs the checks in order and exchanges the public token only once they pass), and for Choose accounts on a bank that's already
 # connected, where it lists only the selected accounts that aren't Accounts yet and Save saves (ChoosePlaidAccounts). Cancel keeps nothing. What Link gave back is in
 # the session (PendingPlaidLink), for this budget only, so another budget's is a 404, and it's forgotten once the choice is submitted, on Cancel, and once 30 minutes
@@ -78,9 +78,10 @@ class PlaidChoicesController < ApplicationController
       refuse("Nothing was changed. #{error.message}")
     end
 
-    # Each account's choice, by its place in the list. `budget_id`, the connection and the Plaid ids are never params.
+    # Each account's choice, by its place in the list. `budget_id`, the connection and the Plaid ids are never params, and an Account to link onto is only ever
+    # one ConnectPlaid offers.
     def choice_params
-      params.fetch(:plaid_choice, {}).permit(accounts: [ :becomes, :name, :read_from ])[:accounts]
+      params.fetch(:plaid_choice, {}).permit(accounts: [ :becomes, :name, :read_from, :link_read_from ])[:accounts]
     end
 
     # Choose accounts goes back to the Account it was started from, while it's there; connecting goes to the Accounts page.

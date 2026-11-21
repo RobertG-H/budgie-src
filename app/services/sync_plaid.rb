@@ -246,10 +246,20 @@ class SyncPlaid
       end
 
       ids = Budget::BankTransaction.insert_all!(rows, returning: %w[ id ]).rows.flatten
-      @to_file.concat(creates.zip(ids).filter_map { |values, id| id if values[:account].files_with_rules? })
+      @to_file.concat(creates.zip(ids).filter_map { |values, id| id if values[:account].files_with_rules? && !imported_day?(values) })
     end
 
-    # The Filing rules act on what's new in the Accounts that have them on. A budget with no rules costs the one query that finds out.
+    # Whether a new one is dated on or before the latest bank transaction a CSV file brought into its Account, which is an Account linked onto a bank (ConnectPlaid):
+    # it reads from that day, included, so that day's may be twins of rows already filed, and a Filing rule would file them twice. They wait, unfiled, for a person to
+    # ignore. One query for the sync, the first time it's asked.
+    def imported_day?(values)
+      @imported_through ||= Budget::BankTransaction.where(account_id: @accounts.values.map(&:id)).where.not(import_id: nil).group(:account_id).maximum(:date)
+      latest = @imported_through[values[:account].id]
+      latest.present? && values[:date] <= latest
+    end
+
+    # The Filing rules act on what's new in the Accounts that have them on, except a linked Account's days that a CSV file already brought in (`imported_day?`). A
+    # budget with no rules costs the one query that finds out.
     def apply_filing_rules
       none = Budget::FilingRule::Applier::Result.new(filed: 0, ignored: 0)
       return none if @to_file.empty?

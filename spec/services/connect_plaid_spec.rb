@@ -141,11 +141,11 @@ RSpec.describe ConnectPlaid do
       expect(result.choices.second.errors[:name]).to eq([ "is the same as another account's on this page" ])
     end
 
-    it "are only a new Account or left out" do
-      result = connect(choices("0" => { becomes: "link:5" }))
+    it "are only a new Account, an Account it can link onto, or left out" do
+      result = connect(choices("0" => { becomes: "link:5" }, "1" => { becomes: "other" }))
 
       expect(result).to be_invalid
-      expect(result.choices.first.errors[:becomes]).to eq([ "isn't one of the choices" ])
+      expect(result.choices.map { it.errors[:becomes] }).to all(eq([ "isn't one of the choices" ]))
     end
 
     it "don't look at the name or date of an account that's left out" do
@@ -200,10 +200,11 @@ RSpec.describe ConnectPlaid do
       expect(connect).to be_refused
     end
 
-    it "leaves a connection that was disconnected to later, and connects" do
-      create(:budget_account, :plaid, budget: budget, bank_connection: existing, external_name: "TD Every Day Chequing", external_mask: "4821")
+    it "isn't a reason to refuse a connection that was disconnected, whose overlapping Account starts on Link onto instead" do
+      old_chequing = create(:budget_account, :plaid, budget: budget, bank_connection: existing, external_name: "TD Every Day Chequing", external_mask: "4821")
       existing.disconnect!
 
+      expect(described_class.choices(budget, link).first.becomes).to eq("link:#{old_chequing.id}")
       expect(connect).to be_connected
     end
   end
@@ -319,6 +320,171 @@ RSpec.describe ConnectPlaid do
       expect(connect).to be_refused
       expect(logged).to contain_exactly(a_string_including("item-1"))
       expect(logged.join).not_to include("access-for-public-1")
+    end
+  end
+
+  describe "linking onto an existing Account" do
+    let!(:csv_chequing) { create(:budget_account, budget: budget, name: "Chequing", default_csv_format: create(:budget_csv_format, budget: budget)) }
+
+    def link_choices(account, read_from: "2026-11-10", other: { becomes: "leave" })
+      choices("0" => { becomes: "link:#{account.id}", link_read_from: read_from }, "1" => other)
+    end
+
+    describe ".choices" do
+      it "offers each Account that takes CSV Imports and each of a disconnected bank's Accounts, by name, and none of a live connection's or Splitwise's" do
+        disconnected = create(:budget_bank_connection, :plaid, budget: budget)
+        old_visa = create(:budget_account, :plaid, budget: budget, bank_connection: disconnected, name: "Old Visa")
+        disconnected.disconnect!
+        create(:budget_account, :plaid, budget: budget, name: "Live Savings")
+        create(:budget_account, :synced, budget: budget, name: "Splitwise")
+        create(:budget_account, budget: create(:budget), name: "Another budget's")
+        importable = create(:budget_account, budget: budget, name: "amex")
+
+        targets = described_class.choices(budget, link).first.targets
+
+        expect(targets.map(&:name)).to eq([ "amex", "Chequing", "Old Visa" ])
+        expect(targets.map(&:id)).to eq([ importable.id, csv_chequing.id, old_visa.id ])
+      end
+
+      it "starts a target's date at its latest bank transaction's, that day included, or where a new Account would start when it has none" do
+        create(:budget_bank_transaction, account: csv_chequing, date: Date.new(2026, 11, 10))
+        create(:budget_bank_transaction, account: csv_chequing, date: Date.new(2026, 9, 2))
+        empty = create(:budget_account, budget: budget, name: "Empty")
+
+        targets = described_class.choices(budget, link).first.targets.index_by(&:name)
+
+        expect(targets.fetch("Chequing").read_from).to eq(Date.new(2026, 11, 10))
+        expect(targets.fetch("Empty").read_from).to eq(Date.new(2026, 9, 2))
+        expect(empty).not_to be_synced
+      end
+
+      it "keeps the date sent for a linked row, and starts it at the Account's own date when none was" do
+        create(:budget_bank_transaction, account: csv_chequing, date: Date.new(2026, 11, 10))
+
+        sent = choices("0" => { becomes: "link:#{csv_chequing.id}", link_read_from: "2026-11-01" }, "1" => { becomes: "link:#{csv_chequing.id}" })
+
+        expect(sent.first).to have_attributes(link_target: have_attributes(id: csv_chequing.id), link_read_from: Date.new(2026, 11, 1))
+        expect(sent.second.link_read_from).to eq(Date.new(2026, 11, 10))
+      end
+    end
+
+    it "gives the Account the connection, Plaid's id, name and mask and the date, clears its Default CSV format, and keeps the rest of it", :aggregate_failures do
+      csv_chequing.update!(files_with_rules: false)
+      kept = create(:budget_bank_transaction, account: csv_chequing, date: Date.new(2026, 11, 10))
+      rule = create(:budget_filing_rule, budget: budget, account: csv_chequing)
+
+      result = connect(link_choices(csv_chequing))
+
+      expect(result).to be_connected
+      expect(csv_chequing.reload).to have_attributes(name: "Chequing", bank_connection: budget.bank_connections.sole, external_account_id: "acc-1",
+        external_name: "TD Every Day Chequing", external_mask: "4821", read_from: Date.new(2026, 11, 10), default_csv_format: nil, files_with_rules: false)
+      expect(csv_chequing).to be_synced
+      expect(csv_chequing.bank_transactions).to eq([ kept ])
+      expect(rule.reload.account).to eq(csv_chequing)
+      expect(result.accounts).to eq([ csv_chequing ])
+      expect(result.notice).to eq("Connected TD Canada Trust. Its bank transactions arrive within the hour. Chequing keeps its bank transactions and is synced from TD Canada Trust now.")
+    end
+
+    it "lists the Accounts it made and linked in the page's order" do
+      result = connect(link_choices(csv_chequing, other: { becomes: "new", name: "Savings", read_from: "2026-10-01" }))
+
+      expect(result.accounts.map(&:name)).to eq([ "Chequing", "Savings" ])
+      expect(budget.bank_connections.sole.accounts.count).to eq(2)
+    end
+
+    it "takes no CSV Import once it's linked" do
+      connect(link_choices(csv_chequing))
+
+      import = Budget::Import.new(account: csv_chequing.reload, csv_format: create(:budget_csv_format, budget: budget, name: "Other"), file_name: "x.csv")
+      expect(import).not_to be_valid
+      expect(budget.accounts.importable).not_to include(csv_chequing)
+    end
+
+    it "moves an Account of a disconnected connection onto the new one, shares it again, and deletes the old connection once it has no Accounts" do
+      old = create(:budget_bank_connection, :plaid, budget: budget)
+      old_chequing = create(:budget_account, :plaid, budget: budget, bank_connection: old, name: "Old chequing", unshared_at: 1.day.ago)
+      old_savings = create(:budget_account, :plaid, budget: budget, bank_connection: old, name: "Old savings")
+      old.disconnect!
+
+      connect(link_choices(old_chequing))
+
+      expect(old_chequing.reload).to have_attributes(bank_connection: budget.bank_connections.find_by!(login_id: "item-1"), external_account_id: "acc-1", unshared_at: nil)
+      expect(old.reload.accounts).to eq([ old_savings ])
+
+      plaid.links("public-2", item_id: "item-2", institution_id: "ins_42", institution_name: "TD Canada Trust", accounts: [ plaid.account("acc-9", "TD ePremium Savings") ])
+      second = PendingPlaidLink.new(public_token: "public-2", institution_id: "ins_42", institution_name: "TD Canada Trust", linked_at: Time.current, budget_id: budget.id,
+        accounts: [ PendingPlaidLink::SharedAccount.new(id: "acc-9", name: "TD ePremium Savings", mask: nil, subtype: nil) ])
+      described_class.call(budget: budget, link: second,
+        choices: described_class.choices(budget, second, ActionController::Parameters.new("0" => { becomes: "link:#{old_savings.id}", link_read_from: "2026-11-01" }).permit!))
+
+      expect(Budget::BankConnection.exists?(old.id)).to be(false)
+      expect(budget.bank_connections.count).to eq(2)
+    end
+
+    it "connects with only linked Accounts, which count as connecting one" do
+      expect(connect(link_choices(csv_chequing))).to be_connected
+    end
+
+    it "refuses the same Account on two rows, on the second" do
+      result = connect(choices("0" => { becomes: "link:#{csv_chequing.id}", link_read_from: "2026-11-10" },
+                               "1" => { becomes: "link:#{csv_chequing.id}", link_read_from: "2026-11-10" }))
+
+      expect(result).to be_invalid
+      expect(result.choices.first.errors).to be_empty
+      expect(result.choices.second.errors[:becomes]).to eq([ "is already chosen for another account on this page" ])
+      expect(plaid.exchanges).to be_empty
+    end
+
+    it "refuses an Account it can't link onto, such as a live connection's or another budget's" do
+      live = create(:budget_account, :plaid, budget: budget)
+      elsewhere = create(:budget_account, budget: create(:budget))
+
+      result = connect(choices("0" => { becomes: "link:#{live.id}" }, "1" => { becomes: "link:#{elsewhere.id}" }))
+
+      expect(result.choices.map { it.errors[:becomes] }).to all(eq([ "isn't one of the choices" ]))
+      expect(plaid.exchanges).to be_empty
+    end
+
+    it "needs a date that could be real, said on the linked row" do
+      result = connect(link_choices(csv_chequing, read_from: "1980-01-01"))
+
+      expect(result).to be_invalid
+      expect(result.choices.first.errors[:link_read_from]).to eq([ "can't be before 1990" ])
+      expect(connect(link_choices(csv_chequing, read_from: "")).choices.first.errors[:link_read_from]).to eq([ "can't be blank" ])
+    end
+
+    it "refuses, removing the Item, when the Account became one it can't link onto since the page was checked" do
+      allow(plaid).to receive(:accounts).and_wrap_original do |original, *args|
+        create(:budget_account, :plaid, budget: budget).bank_connection.tap { csv_chequing.update_columns(bank_connection_id: it.id, external_account_id: "x", read_from: Date.current) }
+        original.call(*args)
+      end
+
+      result = connect(link_choices(csv_chequing))
+
+      expect(result).to be_refused
+      expect(result.alert).to eq("Nothing was connected, since Chequing can't be linked onto any more. Connect again to choose.")
+      expect(plaid.removals).to eq([ "access-for-public-1" ])
+      expect(budget.bank_connections.where(login_id: "item-1")).to be_empty
+    end
+
+    it "brings the Account's latest day in again on the first sync, unfiled even where a Filing rule fits, and nothing from before it", :aggregate_failures do
+      filed = create(:budget_bank_transaction, :filed, account: csv_chequing, date: Date.new(2026, 11, 10), amount: -82.45, description: "LOBLAWS #1234")
+      create(:budget_filing_rule, budget: budget, text: "loblaws")
+      connect(link_choices(csv_chequing))
+      connection = budget.bank_connections.sole
+      plaid.adds(connection.access_token,
+        plaid.transaction("tx-1", account: "acc-1", amount: "82.45", description: "LOBLAWS #1234", date: "2026-11-10"),
+        plaid.transaction("tx-2", account: "acc-1", amount: "12.00", description: "COFFEE", date: "2026-11-09"),
+        plaid.transaction("tx-3", account: "acc-1", amount: "40.00", description: "LOBLAWS #1029", date: "2026-11-11"))
+
+      result = SyncPlaid.call(connection)
+
+      expect(result.created).to eq(2)
+      expect(result.filed_by_rules).to eq(1)
+      expect(csv_chequing.bank_transactions.order(:id).map { [ it.date, it.external_id ] })
+        .to eq([ [ Date.new(2026, 11, 10), nil ], [ Date.new(2026, 11, 10), "tx-1" ], [ Date.new(2026, 11, 11), "tx-3" ] ])
+      expect(csv_chequing.bank_transactions.unfiled.sole.external_id).to eq("tx-1")
+      expect(filed.reload).to be_filed
     end
   end
 end
