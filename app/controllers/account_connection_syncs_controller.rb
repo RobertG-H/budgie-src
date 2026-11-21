@@ -5,7 +5,7 @@
 class AccountConnectionSyncsController < ApplicationController
   include SyncedAccountScoped
 
-  before_action :require_provider_configured
+  before_action :require_provider_available
 
   def create
     result = @connection.sync
@@ -27,8 +27,8 @@ class AccountConnectionSyncsController < ApplicationController
   end
 
   private
-    # A token can't be read without the provider's keys, which not every host has.
-    def require_provider_configured
-      redirect_to accounts_path, alert: "#{@connection.provider_name} isn't set up here, so it can't be synced." unless @connection.provider_configured?
+    # A token can't be read without the provider's keys, which not every host has, and a bank's is synced only for a person who has Plaid turned on.
+    def require_provider_available
+      redirect_to accounts_path, alert: "#{@connection.provider_name} isn't set up here, so it can't be synced." unless @connection.provider_available?
     end
 end

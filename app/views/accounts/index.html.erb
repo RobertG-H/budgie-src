@@ -2,8 +2,8 @@
 
 <%= render "components/page_header", title: "Accounts",
       description: "The real bank and card accounts your bank transactions come from. Budgie doesn't track what's in them." do %>
-  <%# Each only where it's set up: a host without Plaid's or Splitwise's keys has no way to connect to it. %>
-  <% if PlaidApi.configured? %>
+  <%# Each only where it's set up: a host without Plaid's or Splitwise's keys has no way to connect to it, and a bank only for a person who has Plaid turned on. %>
+  <% if PlaidApi.available_to?(Current.budget) %>
     <%= link_to "Connect a bank", new_plaid_connection_path, class: "btn" %>
   <% end %>
   <% if Splitwise.configured? %>

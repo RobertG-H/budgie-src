@@ -4,7 +4,7 @@ require "rails_helper"
 # in place of Import, with Sync TD now, Reconnect and Choose accounts, they take no CSV Import from any way in, and what reconnects or disconnects Splitwise doesn't
 # reach them. Reconnect and Choose accounts themselves are in spec/requests/plaid_update_mode_spec.rb.
 RSpec.describe "Accounts synced from a bank through Plaid", type: :request do
-  let(:budget) { create(:budget, currency: "CAD") }
+  let(:budget) { create(:budget, currency: "CAD", user: create(:user, :plaid)) }
   let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust") }
   let!(:chequing) do
     create(:budget_account, :plaid, budget: budget, bank_connection: connection, name: "TD Chequing", external_name: "TD Every Day Chequing", external_mask: "4821",

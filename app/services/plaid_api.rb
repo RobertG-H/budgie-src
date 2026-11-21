@@ -85,6 +85,15 @@ module PlaidApi
       client.configured? && token_encryption_keys?
     end
 
+    # Whether `budget` can use Plaid: it's set up on this host, and the operator has turned it on for the budget's person (User#feature?), since each Item the Trial
+    # gives is spent for good. Everything that offers Plaid to a budget, or calls Plaid for one, asks this and not `configured?`, so a person without it is exactly as
+    # if Plaid weren't set up: nothing is offered, its pages turn them away, and their connections aren't synced, while what they have stays as it is.
+    def available_to?(budget)
+      return false unless budget && configured?
+
+      budget.user.feature?(:plaid)
+    end
+
     private
       # Through the predicates, since the readers raise when a key is missing, and a page that asks must never be a 500 on a host that has none.
       def token_encryption_keys?

@@ -19,11 +19,11 @@ module SyncedAccountScoped
     end
 
     # What only a bank's connection does through Plaid's update mode (Reconnect and Choose accounts): another kind of connection is a 404, and it needs Plaid set up
-    # here and a token to open Link with, which a disconnected connection no longer has.
+    # here and turned on for the budget's person (PlaidApi.available_to?), and a token to open Link with, which a disconnected connection no longer has.
     def require_connected_plaid
       raise ActiveRecord::RecordNotFound unless @connection.plaid?
 
-      if !PlaidApi.configured?
+      if !PlaidApi.available_to?(Current.budget)
         redirect_to account_path(@account), alert: "Connecting a bank isn't set up here."
       elsif @connection.disconnected?
         redirect_to account_path(@account), alert: "#{@connection.name} isn't connected any more, so nothing was changed."

@@ -4,7 +4,7 @@ require "rails_helper"
 # refusing, changes nothing, and an Item that's already gone counts as removed. The Accounts stay synced, with their bank transactions, Filing rules and date to read from,
 # and say so. Deleting a connection's last Account removes the Item too, and a connection that's already disconnected has nothing to remove. Plaid is replaced by PlaidFake.
 RSpec.describe "Disconnecting a bank", type: :request do
-  let(:budget) { create(:budget, currency: "CAD") }
+  let(:budget) { create(:budget, currency: "CAD", user: create(:user, :plaid)) }
   let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust", access_token: "its-token", needs_reconnect: false) }
   let!(:chequing) do
     create(:budget_account, :plaid, budget: budget, bank_connection: connection, name: "TD Chequing", external_name: "TD Every Day Chequing", external_mask: "4821",

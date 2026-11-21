@@ -1,6 +1,7 @@
 # Syncs every connection that can be synced, which is what keeps each synced Account up to date between the times someone presses Sync now: a Splitwise Account's
 # shares and a bank's bank transactions. It runs every hour in production, which is testing as well. Each connection goes to its provider's sync
-# (Budget::BankConnection#sync: SyncSplitwise or SyncPlaid), and a provider that isn't set up on this host is skipped, since its tokens can't be read there.
+# (Budget::BankConnection#sync: SyncSplitwise or SyncPlaid), and a provider that isn't set up on this host is skipped, since its tokens can't be read there, as is
+# a bank's connection whose budget's person doesn't have Plaid turned on (PlaidApi.available_to?), which syncs again from where it got to once it's turned back on.
 #
 # A connection that needs reconnecting, or was disconnected, is skipped until it's reconnected (Budget::BankConnection.syncable). The provider no longer accepting a
 # connection, or limiting how often it can be asked, is for the person to hear about on the Account's page and not a failure of the run: the first is marked on the
@@ -13,8 +14,8 @@ class SyncBankConnectionsJob < ApplicationJob
   def perform
     failures = []
 
-    Budget::BankConnection.syncable.find_each do |connection|
-      next unless connection.provider_configured?
+    Budget::BankConnection.syncable.includes(budget: :user).find_each do |connection|
+      next unless connection.provider_available?
 
       error = connection.sync.error
       failures << failed(connection, error) if error

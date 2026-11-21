@@ -129,7 +129,7 @@ RSpec.describe SyncBankConnectionsJob, type: :job do
 
   describe "a bank's connections, through Plaid" do
     def bank_account(token)
-      connection = create(:budget_bank_connection, :plaid, budget: create(:budget, currency: "CAD"), access_token: token)
+      connection = create(:budget_bank_connection, :plaid, budget: create(:budget, currency: "CAD", user: create(:user, :plaid)), access_token: token)
       account = create(:budget_account, :plaid, budget: connection.budget, bank_connection: connection, external_account_id: "acc-#{token}")
       plaid.adds(token, plaid.transaction("tx-#{token}", account: account.external_account_id))
       [ connection, account ]
@@ -154,6 +154,41 @@ RSpec.describe SyncBankConnectionsJob, type: :job do
 
       expect(bank.bank_transactions).to be_empty
       expect(splitwise_account.bank_transactions.count).to eq(1)
+    end
+
+    it "skips the ones of a person who doesn't have Plaid turned on, keeping everything, and syncs from where they got to once it's turned on again" do
+      _, splitwise_account = connected_budget(user_id: "1", token: "token-1")
+      connection, bank = bank_account("bank-1")
+      described_class.perform_now
+      expect(bank.bank_transactions.count).to eq(1)
+      cursor = connection.reload.sync_cursor
+      plaid.adds("bank-1", plaid.transaction("tx-later", account: bank.external_account_id))
+
+      connection.budget.user.disable_feature!(:plaid)
+      plaid.transaction_requests.clear
+      described_class.perform_now
+
+      expect(plaid.transaction_requests).to be_empty
+      expect(connection.reload.sync_cursor).to eq(cursor)
+      expect(connection).to be_connected
+      expect(bank.bank_transactions.count).to eq(1)
+      expect(splitwise_account.bank_transactions.count).to eq(1)
+
+      connection.budget.user.enable_feature!(:plaid)
+      described_class.perform_now
+
+      expect(plaid.transaction_requests).to eq([ [ "bank-1", cursor ] ])
+      expect(bank.bank_transactions.pluck(:external_id)).to contain_exactly("tx-bank-1", "tx-later")
+    end
+
+    it "reads the people of every connection in one query, however many there are" do
+      3.times { |n| bank_account("bank-#{n}") }
+      user_queries = []
+      listener = ->(*, payload) { user_queries << payload[:sql] if payload[:sql].match?(/FROM "users"/) }
+
+      ActiveSupport::Notifications.subscribed(listener, "sql.active_record") { described_class.perform_now }
+
+      expect(user_queries.size).to eq(1)
     end
 
     it "marks one the bank stopped accepting, without failing the run, and skips it after" do

@@ -8,10 +8,10 @@ module PlaidLinking
   end
 
   private
-    # Connecting needs Plaid's client id, secret and environment, and the keys to keep the token under, which only some hosts have: without them nothing is
-    # offered, and a request for it is turned away.
+    # Connecting needs Plaid's client id, secret and environment, and the keys to keep the token under, which only some hosts have, and Plaid turned on for the
+    # budget's person (PlaidApi.available_to?): without them nothing is offered, and a request for it is turned away.
     def require_plaid
-      redirect_to accounts_path, alert: "Connecting a bank isn't set up here." unless PlaidApi.configured?
+      redirect_to accounts_path, alert: "Connecting a bank isn't set up here." unless PlaidApi.available_to?(Current.budget)
     end
 
     def keep_pending_link(link)

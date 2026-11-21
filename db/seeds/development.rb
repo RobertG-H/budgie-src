@@ -6,6 +6,8 @@
 #
 # The user has no Identity, and its email isn't a real one, so nobody can sign in as it through Google.
 user = User.find_or_create_by!(email: Dev::USER_EMAIL) { |new_user| new_user.name = "Dev Budgie" }
+# Plaid is turned on for a person by the operator, and for the dev user here, so connecting a bank works in development where Plaid's Sandbox keys are in .env.
+user.enable_feature!(:plaid)
 budget = Budget.find_or_create_by!(user: user) { |new_budget| new_budget.currency = "USD" }
 
 # A spread of balances: thousands, cents, zero and a negative.

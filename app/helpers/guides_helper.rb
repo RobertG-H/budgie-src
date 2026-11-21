@@ -20,6 +20,12 @@ module GuidesHelper
     "figures" => "What the figures mean"
   }.freeze
 
+  # The sections this person's guide has, in order: every one, but connecting a bank only for a person who has Plaid turned on (PlaidApi.available_to?), since
+  # it isn't offered to anyone else.
+  def guide_sections
+    GUIDE_SECTIONS.reject { |id, _| id == "connecting-a-bank" && !PlaidApi.available_to?(Current.budget) }
+  end
+
   # One section of the guide: its heading, and the block as its text, whose paragraphs and lists are spaced and marked here, once.
   def guide_section(id, &block)
     heading_id = "#{id}-heading"

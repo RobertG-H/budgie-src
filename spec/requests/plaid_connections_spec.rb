@@ -4,7 +4,7 @@ require "rails_helper"
 # the person shared becomes a new Account or is left out. The checks themselves are in spec/services/connect_plaid_spec.rb. Plaid is replaced by PlaidFake
 # (spec/support/plaid.rb), and Link itself runs only in a browser, so what it would send is posted here as the plaid-link controller posts it.
 RSpec.describe "Connecting a bank through Plaid", type: :request do
-  let(:budget) { create(:budget, currency: "CAD") }
+  let(:budget) { create(:budget, currency: "CAD", user: create(:user, :plaid)) }
 
   around { |example| travel_to(Time.zone.local(2026, 11, 19, 12)) { example.run } }
   before do
@@ -158,7 +158,7 @@ RSpec.describe "Connecting a bank through Plaid", type: :request do
 
     it "is a 404 for what Link gave another budget" do
       finish_link
-      other = create(:budget)
+      other = create(:budget, user: create(:user, :plaid))
       allow(Current).to receive(:budget).and_return(other)
 
       get plaid_choice_path
