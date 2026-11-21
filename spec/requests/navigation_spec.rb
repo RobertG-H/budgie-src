@@ -451,7 +451,7 @@ RSpec.describe "Navigation", type: :request do
   describe "the menu" do
     before { sign_in_as budget.user }
 
-    it "has Profile, the User guide and Sign out, in that order, in a native details that opens without JavaScript" do
+    it "has Profile, the User guide and Sign out, in that order, then Budgie's version, in a native details that opens without JavaScript" do
       get root_path
 
       assert_select "nav[aria-label=Main] details.dropdown[data-controller=menu]" do
@@ -460,7 +460,15 @@ RSpec.describe "Navigation", type: :request do
         assert_select "ul.menu a[href='#{guide_path}']", text: "User guide"
       end
       items = css_select("nav[aria-label=Main] ul.menu > li").map { |item| item.text.squish }
-      expect(items).to eq([ "Profile", "User guide", "Sign out" ])
+      expect(items).to eq([ "Profile", "User guide", "Sign out", "Version #{Budgie::VERSION}" ])
+    end
+
+    it "says Budgie's version, from the VERSION file, as muted text and not a link" do
+      get root_path
+
+      expect(Budgie::VERSION).to eq(Rails.root.join("VERSION").read.strip)
+      expect(Budgie::VERSION).to match(/\A\d+\.\d+\.\d+\z/)
+      assert_select "nav[aria-label=Main] ul.menu > li.menu-disabled", text: "Version #{Budgie::VERSION}"
     end
 
     it "signs out through a form of its own, which Sign out sends" do

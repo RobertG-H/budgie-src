@@ -14,6 +14,8 @@
       <li><%= link_to name, path, class: ("font-semibold" if current), aria: { current: ("page" if current) } %></li>
     <% end %>
     <li><button type="submit" form="sign-out">Sign out</button></li>
+    <%# Which version of Budgie this is, from the VERSION file: muted, and not a link or a button. %>
+    <li class="menu-disabled mt-1 border-t border-base-300 pt-1"><span class="text-xs">Version <%= Budgie::VERSION %></span></li>
   </ul>
 </details>
 <%= form_with url: session_path, method: :delete, id: "sign-out", class: "hidden" do %><% end %>
