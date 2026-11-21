@@ -19,6 +19,9 @@ require "action_cable/engine"
 Bundler.require(*Rails.groups)
 
 module Budgie
+  # Budgie's version, from the VERSION file at the root of the repo. Bump it there when a release changes what people see.
+  VERSION = File.read(File.expand_path("../VERSION", __dir__)).strip
+
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1

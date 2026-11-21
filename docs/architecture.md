@@ -96,7 +96,7 @@ for every action; `allow_unauthenticated_access` opts out.
 ### The menu, Profile and the User guide
 
 Sign out is in the header's menu, beside Import: a native `<details>` dropdown of **Profile**, **User guide**
-and **Sign out**, there for every signed-in person, with a budget or not, so it opens and closes without
+and **Sign out**, with Budgie's version in muted text at its foot (`VERSION`, read into `Budgie::VERSION`), there for every signed-in person, with a budget or not, so it opens and closes without
 JavaScript; a small Stimulus controller also closes it on a click outside it, on Escape and before Turbo
 caches the page. Profile (`/profile`) is read-only for now: the person's name, email, how they sign in, their
 budget's currency and when they joined. It's called Profile and never Account, which in Budgie is a bank or
