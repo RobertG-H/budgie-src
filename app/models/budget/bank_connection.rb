@@ -80,9 +80,10 @@ class Budget::BankConnection < ApplicationRecord
     (splitwise? ? SyncSplitwise : SyncPlaid).call(self)
   end
 
-  # Whether its provider is set up on this host, which syncing needs: without the provider's keys, and the ones the token is encrypted under, nothing can be read.
-  def provider_configured?
-    splitwise? ? Splitwise.configured? : PlaidApi.configured?
+  # Whether its provider can be used for it, which syncing needs: the provider is set up on this host (without its keys, and the ones the token is encrypted under,
+  # nothing can be read), and for a bank's, Plaid is turned on for its budget's person (PlaidApi.available_to?).
+  def provider_available?
+    splitwise? ? Splitwise.configured? : PlaidApi.available_to?(budget)
   end
 
   # Whether the provider's login is itself the one external account, as a Splitwise user is: their Account holds their share of every expense, so its external id is the
@@ -146,7 +147,7 @@ class Budget::BankConnection < ApplicationRecord
   # which deletes the connection instead.
   def remove_at_plaid
     return if disconnected?
-    raise PlaidApi::Error, "Plaid isn't set up here." unless PlaidApi.configured?
+    raise PlaidApi::Error, "Plaid isn't set up here." unless PlaidApi.available_to?(budget)
 
     PlaidApi.client.remove_item(access_token)
   rescue PlaidApi::Error => error

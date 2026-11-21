@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe "User guide", type: :request do
-  let(:user) { create(:user, :with_budget) }
+  let(:user) { create(:user, :with_budget, :plaid) }
 
   def visible_text
     Nokogiri::HTML(response.body).at("main").text.squish

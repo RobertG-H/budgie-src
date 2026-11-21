@@ -5,7 +5,7 @@ require "rails_helper"
 # selected accounts that aren't Accounts yet, or saves straight away when there are none. The saving itself is in spec/services/choose_plaid_accounts_spec.rb. Plaid is
 # replaced by PlaidFake (spec/support/plaid.rb), and Link runs only in a browser, so what it would send is posted here as the plaid-link controller posts it.
 RSpec.describe "A bank's Reconnect and Choose accounts", type: :request do
-  let(:budget) { create(:budget, currency: "CAD") }
+  let(:budget) { create(:budget, currency: "CAD", user: create(:user, :plaid)) }
   let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust", access_token: "its-token", sync_cursor: "cursor-4") }
   let!(:chequing) do
     create(:budget_account, :plaid, budget: budget, bank_connection: connection, name: "TD Chequing", external_account_id: "acc-1",
@@ -261,7 +261,7 @@ RSpec.describe "A bank's Reconnect and Choose accounts", type: :request do
 
     it "is a 404 for another budget's pending choice" do
       finish_choosing("acc-1", "acc-3")
-      sign_in_as create(:budget).user
+      sign_in_as create(:budget, user: create(:user, :plaid)).user
 
       get plaid_choice_path
 

@@ -3,6 +3,7 @@
 Budgie connects a bank through Plaid, so that each account a person shares becomes an Account whose bank transactions are synced instead of imported ([ADR 0018](adr/0018-a-plaid-connection-is-an-item-whose-accounts-become-new-or-existing-accounts.md)).
 "Connect a bank" on the Accounts page opens Plaid Link, where the person signs in to their bank and chooses the accounts to share, and then a Budgie page where they choose what each one becomes: a new Account, linked onto an Account that's already there, or left out.
 Without any of this, nothing breaks: "Connect a bank" just isn't offered, and its pages turn a request away.
+It's offered only to the people the operator has turned it on for ([Turning it on for a person](#turning-it-on-for-a-person)), since each of the Trial's 10 Items is spent for good: to everyone else, it's as if Plaid weren't set up.
 
 This page is for the operator: Claude edits the config and these docs, and never handles a Plaid secret, an encryption key or a token. The research behind it is [Plaid's Sandbox, Trial and Production](research/plaid-sandbox-trial-production.md) and [Plaid Link in a Rails app](research/plaid-link-rails-importmap.md).
 
@@ -118,9 +119,30 @@ Each destination has three more secrets, named the same way as the others ([Depl
 
 `.kamal/secrets.<destination>` maps them to the names the app reads. A deploy with them empty is harmless: the app treats that as Plaid not being set up.
 
+### Turning it on for a person
+
+Plaid is offered only to people it's turned on for, which nobody is to begin with, on any host. To everyone else it's exactly as if Plaid weren't set up: **Connect a bank** isn't offered, its pages turn them away with `Connecting a bank isn't set up here.`, their bank's Accounts have none of the panel's actions, the hourly job doesn't sync their connections, and the User guide doesn't mention connecting a bank. Splitwise isn't affected. The development seed's user has it, so development works as before.
+
+Turn it on from a Rails console on the host ([Reaching a running host](operations.md#reaching-a-running-host)), with the person's email:
+
+```sh
+docker compose run --rm kamal console -d testing
+```
+
+```ruby
+User.find_by!(email: "you@example.com").enable_feature!(:plaid)
+User.find_by!(email: "you@example.com").disable_feature!(:plaid)   # to turn it off again
+User.where("'plaid' = ANY(features)").pluck(:email)                # who has it
+```
+
+A misspelt feature name raises rather than doing nothing. Turning it off keeps everything the person has: the connection, its token, its Accounts, their bank transactions and what they were filed as stay, and nothing calls Plaid for them. Turning it on again syncs from where the last sync got to.
+
+- [ ] On testing, once this is deployed, **Connect a bank** has gone for you until you turn it on for your own user there, and is back afterwards
+- [ ] Production's values go in with only your own user turned on first: once this change is deployed to production, turn it on for yourself there, then put production's Plaid values in and deploy, and turn it on for anyone else only once you've chosen to spend one of the Trial's Items on them
+
 ## 6. Check it
 
-Do this on testing once its values are deployed. Claude can't: it can't reach the hosts, and it never runs Plaid Link.
+Do this on testing once its values are deployed and Plaid is [turned on for your user](#turning-it-on-for-a-person). Claude can't: it can't reach the hosts, and it never runs Plaid Link.
 
 - [x] **Accounts** shows **Connect a bank** beside **Connect Splitwise** and **New account**
 - [x] **Connect a bank**, then **Continue to Plaid**, opens Link; choosing Tartan-Dominion Bank of Canada and signing in as the custom user shows the Account Select pane with every account to tick

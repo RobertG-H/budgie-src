@@ -1113,6 +1113,8 @@ RSpec.describe "The words on the pages", type: :request do
   end
 
   describe "a bank's sync" do
+    before { budget.user.enable_feature!(:plaid) }
+
     let(:connection) { create(:budget_bank_connection, :plaid, budget: budget, login_name: "TD Canada Trust") }
     let!(:chequing) { create(:budget_account, :plaid, budget: budget, name: "TD Chequing", bank_connection: connection, external_account_id: "acc-1") }
 

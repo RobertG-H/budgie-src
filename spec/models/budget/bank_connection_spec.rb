@@ -88,14 +88,24 @@ RSpec.describe Budget::BankConnection, type: :model do
       expect(connection.reload.access_token).to eq("access-sandbox-secret")
     end
 
-    it "is synced through Plaid, where Plaid is set up" do
+    it "is synced through Plaid, where Plaid is set up and its budget's person has it turned on" do
       connection.save!
       allow(SyncPlaid).to receive(:call).and_return(:synced)
 
       expect(connection.sync).to eq(:synced)
-      expect(connection).to be_provider_configured
+      expect(connection).not_to be_provider_available
+      connection.budget.user.enable_feature!(:plaid)
+      expect(connection).to be_provider_available
       PlaidApi.client = PlaidFake.new(configured: false)
-      expect(connection).not_to be_provider_configured
+      expect(connection).not_to be_provider_available
+    end
+
+    it "is a Splitwise connection's to sync where Splitwise is set up, whoever has Plaid turned on" do
+      splitwise_connection = create(:budget_bank_connection)
+
+      expect(splitwise_connection).to be_provider_available
+      Splitwise.client = SplitwiseFake.new(configured: false)
+      expect(splitwise_connection).not_to be_provider_available
     end
 
     it "has a short name, the bank's first word, for a button that names it" do
@@ -163,7 +173,7 @@ RSpec.describe Budget::BankConnection, type: :model do
   end
 
   describe "removing a bank's Item at Plaid" do
-    let(:connection) { create(:budget_bank_connection, :plaid, access_token: "its-token", needs_reconnect: true) }
+    let(:connection) { create(:budget_bank_connection, :plaid, access_token: "its-token", needs_reconnect: true, budget: create(:budget, user: create(:user, :plaid))) }
 
     it "asks Plaid to remove it with the connection's token, then forgets the token and that it needed reconnecting, keeping the rest" do
       connection.update_columns(sync_cursor: "cursor-4")
@@ -208,6 +218,15 @@ RSpec.describe Budget::BankConnection, type: :model do
 
       expect { connection.disconnect_from_plaid! }.to raise_error(PlaidApi::Error, "Plaid isn't set up here.")
 
+      expect(connection.reload).not_to be_disconnected
+    end
+
+    it "refuses, without asking Plaid, for a person who doesn't have it turned on, as if Plaid weren't set up" do
+      connection.budget.user.disable_feature!(:plaid)
+
+      expect { connection.disconnect_from_plaid! }.to raise_error(PlaidApi::Error, "Plaid isn't set up here.")
+
+      expect(plaid.removals).to be_empty
       expect(connection.reload).not_to be_disconnected
     end
 
@@ -363,7 +382,7 @@ RSpec.describe Budget::BankConnection, type: :model do
     end
 
     it "can't be removed at Plaid, which needs the token, so Disconnect raises and keeps it" do
-      stuck = unreadable(create(:budget_bank_connection, :plaid))
+      stuck = unreadable(create(:budget_bank_connection, :plaid, budget: create(:budget, user: create(:user, :plaid))))
 
       expect { stuck.disconnect_from_plaid! }.to raise_error(ActiveRecord::Encryption::Errors::Decryption)
 

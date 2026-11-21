@@ -8,5 +8,10 @@ FactoryBot.define do
     trait :with_budget do
       after(:create) { |user| create(:budget, user: user) }
     end
+
+    # Can connect a bank through Plaid (PlaidApi.available_to?), which the operator turns on for a person.
+    trait :plaid do
+      features { [ "plaid" ] }
+    end
   end
 end

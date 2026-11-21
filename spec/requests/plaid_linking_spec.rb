@@ -5,7 +5,7 @@ require "rails_helper"
 # and a disconnected bank's Account offers "Connect TD again". The saving itself is in spec/services/connect_plaid_spec.rb and choose_plaid_accounts_spec.rb.
 # Plaid is replaced by PlaidFake (spec/support/plaid.rb), and Link runs only in a browser, so what it would send is posted here as the plaid-link controller does.
 RSpec.describe "Linking a bank's account onto an existing Account", type: :request do
-  let(:budget) { create(:budget, currency: "CAD") }
+  let(:budget) { create(:budget, currency: "CAD", user: create(:user, :plaid)) }
   let!(:csv_chequing) { create(:budget_account, budget: budget, name: "Chequing", default_csv_format: create(:budget_csv_format, budget: budget)) }
 
   around { |example| travel_to(Time.zone.local(2026, 11, 19, 12)) { example.run } }

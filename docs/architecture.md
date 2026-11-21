@@ -529,6 +529,12 @@ CSV Import, and its page has a panel for its connection that names the other Acc
 (a plain `Net::HTTP` client, named so it can't clash with the `plaid` gem) is replaced in every spec by a fake. Connecting needs Plaid's client id, secret and environment (Sandbox in development and testing) and the
 encryption keys, and without them it isn't offered ([Plaid setup](plaid.md)).
 
+Plaid is also turned on per person, since each of the Trial's Items is spent for good. `users.features` is a `string[]` (empty by default, and a check constraint keeps it to the names in `User::FEATURES`, which is
+only `plaid` so far) that the operator changes from a Rails console with `User#enable_feature!(:plaid)` and `#disable_feature!`, and `User#feature?` reads; an unknown name raises. `PlaidApi.available_to?(budget)`
+is Plaid being set up *and* the budget's person having it, and everything that offers Plaid to a budget or calls it for one asks that and not `configured?`: Connect a bank, its pages, the panel's actions, Sync now,
+Disconnect, deleting a connection's last Account, the hourly job (through `BankConnection#provider_available?`) and the User guide's Connecting a bank section. Without it, it's exactly as if Plaid weren't set
+up for that person; turning it off keeps the connection, its token and its Accounts, and turning it on again syncs from the saved cursor. Splitwise isn't gated. There's no admin page, rake task or gem for it.
+
 Syncing a bank fills its Accounts. **Sync TD now** on any of its Accounts' pages (named with the bank's first word) and the hourly job call `SyncPlaid`, shaped like `SyncSplitwise`: it holds the connection's row
 lock, is one database transaction, and reads Plaid's `/transactions/sync` from the connection's cursor (one cursor for the whole Item, none the first time), 500 at a time and with the bank's own description
 (`original_description`) asked for from the very first call, until Plaid says there's no more. Nothing is written until every page is read; when the bank's transactions change while they're read, Plaid says so and
@@ -602,7 +608,7 @@ What the running application depends on. Everything here is reached from the app
 | --- | --- | --- | --- |
 | [Google OAuth 2.0](google-oauth.md) | The only way to sign in. One OAuth client per environment, in one Google Cloud project | `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` | Nobody can sign in |
 | [Splitwise](splitwise.md) | Where a connected Account's bank transactions will come from. People sign in to it with OAuth 2 from the Accounts page to connect an Account, one Splitwise app per environment | `SPLITWISE_CLIENT_ID` and `SPLITWISE_CLIENT_SECRET`, and `ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY` and `ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` for the token | "Connect Splitwise" isn't offered |
-| [Plaid](plaid.md) | Where a bank's Accounts' bank transactions will come from. People connect a bank with Plaid Link, whose script comes from `cdn.plaid.com`, on the Accounts page; Sandbox in development and testing | `PLAID_CLIENT_ID`, `PLAID_SECRET` and `PLAID_ENV`, and the same encryption keys for the token | "Connect a bank" isn't offered |
+| [Plaid](plaid.md) | Where a bank's Accounts' bank transactions will come from. People connect a bank with Plaid Link, whose script comes from `cdn.plaid.com`, on the Accounts page; Sandbox in development and testing | `PLAID_CLIENT_ID`, `PLAID_SECRET` and `PLAID_ENV`, and the same encryption keys for the token | "Connect a bank" isn't offered, as it isn't to a person Plaid isn't turned on for |
 | [Zedmail SMTP relay](email.md) | Delivers invite email from `budgiebuddie.com` on testing and production | `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `MAILER_FROM` | Invites can't be sent, so nobody new can join |
 | `letter_opener_web` | Catches mail in development at `/letter_opener` instead of delivering it | Mounted in development only | — |
 | PostgreSQL 18 | The primary database, plus the cache, queue and cable databases next to it | `DB_HOST` and `BUDGIE_DATABASE_PASSWORD`; `config/database.yml` | The app won't boot |

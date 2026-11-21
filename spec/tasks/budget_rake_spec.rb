@@ -80,8 +80,15 @@ RSpec.describe "budget rake tasks", type: :task do
 
     it "counts only the connections whose provider is set up here" do
       connected_account("1")
-      create(:budget_account, :plaid)
+      create(:budget_account, :plaid, budget: create(:budget, user: create(:user, :plaid)))
       Splitwise.client = SplitwiseFake.new(configured: false)
+
+      expect(run_task("budget:sync_connections")).to eq("Synced 1 connection.\n")
+    end
+
+    it "doesn't count a bank's connection whose person doesn't have Plaid turned on" do
+      connected_account("1")
+      create(:budget_account, :plaid)
 
       expect(run_task("budget:sync_connections")).to eq("Synced 1 connection.\n")
     end

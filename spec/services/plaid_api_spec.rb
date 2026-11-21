@@ -67,6 +67,28 @@ RSpec.describe PlaidApi do
     end
   end
 
+  describe ".available_to?" do
+    let(:budget) { create(:budget, user: create(:user, :plaid)) }
+
+    it "is true where Plaid is set up and the budget's person has it turned on" do
+      expect(described_class.available_to?(budget)).to be(true)
+    end
+
+    it "is false for a person who doesn't have it turned on, as if Plaid weren't set up for them" do
+      expect(described_class.available_to?(create(:budget))).to be(false)
+    end
+
+    it "is false where Plaid isn't set up, whoever has it turned on" do
+      described_class.client = PlaidFake.new(configured: false)
+
+      expect(described_class.available_to?(budget)).to be(false)
+    end
+
+    it "is false with no budget, as before setup" do
+      expect(described_class.available_to?(nil)).to be(false)
+    end
+  end
+
   describe PlaidApi::Error do
     it "says Plaid's message for a person, or its code, or that it couldn't be done" do
       expect(described_class.new(error_code: "X", display_message: "Try later.").message).to eq("Try later.")

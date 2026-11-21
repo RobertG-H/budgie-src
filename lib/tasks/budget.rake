@@ -14,7 +14,7 @@ namespace :budget do
       next puts("Neither Splitwise nor Plaid is set up here, so nothing can be synced.")
     end
 
-    connections = Budget::BankConnection.syncable.count(&:provider_configured?)
+    connections = Budget::BankConnection.syncable.includes(budget: :user).count(&:provider_available?)
     next puts("No connection can be synced.") if connections.zero?
 
     SyncBankConnectionsJob.perform_now

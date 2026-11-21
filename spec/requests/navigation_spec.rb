@@ -117,6 +117,7 @@ RSpec.describe "Navigation", type: :request do
   end
 
   it "says Accounts is the one they're on while connecting a bank, on the page that opens Plaid Link and the page after it" do
+    budget.user.enable_feature!(:plaid)
     sign_in_as budget.user
 
     get new_plaid_connection_path
