@@ -84,7 +84,7 @@ RSpec.describe "Linking a bank's account onto an existing Account", type: :reque
       choose("0" => { becomes: "link:#{csv_chequing.id}", link_read_from: "2026-11-10" }, "1" => { becomes: "leave" })
 
       expect(response).to redirect_to(account_path(csv_chequing))
-      expect(flash[:notice]).to eq("Connected TD Canada Trust. Its bank transactions arrive within the hour. Chequing keeps its bank transactions and is synced from it now.")
+      expect(flash[:notice]).to eq("Connected TD Canada Trust. Its bank transactions arrive within the hour. Chequing keeps its bank transactions and is synced from TD Canada Trust now.")
       expect(csv_chequing.reload).to have_attributes(external_account_id: "acc-1", read_from: Date.new(2026, 11, 10), default_csv_format: nil)
 
       get account_path(csv_chequing)

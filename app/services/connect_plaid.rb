@@ -40,7 +40,9 @@ class ConnectPlaid
     NEW = "new".freeze
     LEAVE = "leave".freeze
     BECOMES = [ NEW, LEAVE ].freeze
-    LINK_PREFIX = "link:".freeze
+    # What a linked choice's panel is named by; its `becomes` is this, a colon and the Account's id.
+    LINK = "link".freeze
+    LINK_PREFIX = "#{LINK}:".freeze
 
     attribute :becomes, :string, default: NEW
     attribute :name, :string
@@ -98,7 +100,8 @@ class ConnectPlaid
   # The choices for `link`'s accounts, or only the ones in `only`: what was sent for each, by its place in the list (`params`, the form's `accounts`), or, for the
   # page as it starts, a new Account each, named for the bank and the account and reading from where the budget's bank transactions start, except one that's
   # a disconnected connection's Account at the same bank (`overlaps`), which starts linked onto it. Each offers the budget's `link_targets`, and a linked one
-  # reads from its target's date unless a date was sent. `params` is what the controller permitted.
+  # reads from its target's date unless a date was sent. A row that isn't linked starts its linked date at the first target's, so the field is never blank when the
+  # page is used without the plaid-choice controller, which moves it to the chosen target's. `params` is what the controller permitted.
   def self.choices(budget, link, params = nil, only: nil)
     read_from = Budget::Account.default_read_from(budget)
     targets = link_targets(budget, read_from)
@@ -112,17 +115,23 @@ class ConnectPlaid
       sent = sent.respond_to?(:slice) ? sent.slice(:becomes, :name, :read_from, :link_read_from).to_h.symbolize_keys : {}
       started = overlaps.key?(shared.id) ? Choice.link_value(overlaps[shared.id]) : Choice::NEW
       Choice.new(shared_account: shared, index: index, becomes: started, name: default_name(link, shared), read_from: read_from, targets: targets, **sent).tap do |choice|
-        choice.link_read_from = choice.link_target&.read_from unless sent.key?(:link_read_from)
+        choice.link_read_from = (choice.link_target || targets.first)&.read_from unless sent.key?(:link_read_from)
       end
     end
   end
 
   # The Accounts a shared account can be linked onto (`Budget::Account.linkable`), by name, each with the date it starts reading from: its latest bank
-  # transaction's, or `default` when it has none. Two queries, however many there are.
-  def self.link_targets(budget, default)
+  # transaction's, or `read_from_when_empty` when it has none. Two queries, however many there are.
+  def self.link_targets(budget, read_from_when_empty)
     accounts = budget.accounts.linkable.alphabetical.pluck(:id, :name)
     latest = Budget::BankTransaction.where(account_id: accounts.map(&:first)).group(:account_id).maximum(:date)
-    accounts.map { |id, name| LinkTarget.new(id: id, name: name, read_from: latest.fetch(id, default)) }
+    accounts.map { |id, name| LinkTarget.new(id: id, name: name, read_from: latest.fetch(id, read_from_when_empty)) }
+  end
+
+  # Whether `account`, one of the budget's bank Accounts, is `shared` by its Plaid name and mask. Both sides are read as PendingPlaidLink reads what Link sends, so a
+  # name stored from Plaid's answer compares equal to the same name from the browser, and a missing mask equals only another missing one.
+  def self.same_account?(account, shared)
+    [ PendingPlaidLink.clean(account.external_name), PendingPlaidLink.clean(account.external_mask) ] == [ shared.name, shared.mask ]
   end
 
   # The shared accounts that are an Account of one of the budget's disconnected connections at the same bank, by their Plaid name and mask, as the duplicate check
@@ -133,7 +142,7 @@ class ConnectPlaid
     remaining = accounts.to_a
 
     link.accounts.each_with_object({}) do |shared, overlapping|
-      match = remaining.find { [ PendingPlaidLink.clean(it.external_name), PendingPlaidLink.clean(it.external_mask) ] == [ shared.name, shared.mask ] }
+      match = remaining.find { same_account?(it, shared) }
       next unless match
 
       overlapping[shared.id] = match.id
@@ -149,8 +158,8 @@ class ConnectPlaid
     linked = []
     choices.each do |choice|
       choice.errors.clear
-      if choice.linking? && choice.link_target
-        target = choice.link_target
+      target = choice.link_target
+      if target
         choice.errors.add(:becomes, CHOSEN_TWICE) if linked.include?(target.id)
         linked << target.id
         problem = Budget::Account.read_from_problem(choice.link_read_from)
@@ -185,8 +194,13 @@ class ConnectPlaid
 
   # The Account `choice` makes in `connection`, for `plaid_account` as `/accounts/get` says it, which is where its id, name and mask come from, with Filing rules on.
   def self.create_account(connection, choice, plaid_account)
-    connection.budget.accounts.create!(name: choice.name, read_from: choice.read_from, bank_connection: connection, external_account_id: plaid_account.id,
-      external_name: plaid_account.name || choice.shared_account.name, external_mask: plaid_account.mask, files_with_rules: true)
+    connection.budget.accounts.create!(name: choice.name, read_from: choice.read_from, files_with_rules: true, **synced_from(connection, choice, plaid_account))
+  end
+
+  # What an Account takes from the bank's account it's synced from, new or linked: the connection, and Plaid's id, name and mask for it.
+  def self.synced_from(connection, choice, plaid_account)
+    { bank_connection: connection, external_account_id: plaid_account.id, external_name: plaid_account.name || choice.shared_account.name,
+      external_mask: plaid_account.mask }
   end
 
   # The Account `choice` links onto, given `connection` and what `/accounts/get` says of `plaid_account`, with its date. It keeps its name, bank transactions,
@@ -199,8 +213,7 @@ class ConnectPlaid
     raise Unlinkable, target.name unless account
 
     old_connection = account.bank_connection
-    account.update!(bank_connection: connection, external_account_id: plaid_account.id, external_name: plaid_account.name || choice.shared_account.name,
-      external_mask: plaid_account.mask, read_from: choice.link_read_from, default_csv_format: nil, unshared_at: nil)
+    account.update!(read_from: choice.link_read_from, default_csv_format: nil, unshared_at: nil, **synced_from(connection, choice, plaid_account))
     old_connection.destroy! if old_connection && !Budget::Account.exists?(bank_connection_id: old_connection.id)
     account
   end
@@ -256,14 +269,11 @@ class ConnectPlaid
       end
     end
 
-    # The Account of a live Plaid connection at the same bank whose Plaid name and mask are one of the shared accounts', which means this is a login the budget
-    # already has. A connection that was disconnected is a later ticket's to link onto, so it's no reason to refuse. A missing mask equals only another missing one.
-    # Both sides are read as PendingPlaidLink reads what Link sends, so a name stored from Plaid's answer compares equal to the same name from the browser.
+    # The Account of a live Plaid connection at the same bank whose Plaid name and mask are one of the shared accounts' (`same_account?`), which means this is a
+    # login the budget already has. A connection that was disconnected is no reason to refuse: its Account is one to link onto (`overlaps`).
     def already_connected_account
-      shared = @link.accounts.map { [ it.name, it.mask ] }
-
       live_connections_at_this_bank.flat_map { it.accounts.sort_by { |account| account.name.downcase } }
-        .find { shared.include?([ PendingPlaidLink.clean(it.external_name), PendingPlaidLink.clean(it.external_mask) ]) }
+        .find { |account| @link.accounts.any? { self.class.same_account?(account, it) } }
     end
 
     def live_connections_at_this_bank
@@ -284,7 +294,7 @@ class ConnectPlaid
 
       connection, accounts = save(exchange, answer, kept.map { [ it, known.fetch(it.shared_account.id) ] })
       notice = [ "Connected #{connection.name}. Its bank transactions arrive within the hour.",
-                 self.class.linked_sentence(accounts.select.with_index { |_, index| kept[index].linking? }, "it"),
+                 self.class.linked_sentence(accounts.zip(kept).select { |_, choice| choice.linking? }.map(&:first), connection.name),
                  *left_out.map { "#{known.fetch(it.shared_account.id).name || it.shared_account.name} was left out: it's in #{known.fetch(it.shared_account.id).currency || "another currency"}." } ].compact
       Result.new(status: :connected, connection: connection, accounts: accounts, notice: notice.join(" "), alert: nil, choices: @choices, error: nil)
     rescue PlaidApi::Error => error

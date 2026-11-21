@@ -382,7 +382,7 @@ RSpec.describe ConnectPlaid do
       expect(csv_chequing.bank_transactions).to eq([ kept ])
       expect(rule.reload.account).to eq(csv_chequing)
       expect(result.accounts).to eq([ csv_chequing ])
-      expect(result.notice).to eq("Connected TD Canada Trust. Its bank transactions arrive within the hour. Chequing keeps its bank transactions and is synced from it now.")
+      expect(result.notice).to eq("Connected TD Canada Trust. Its bank transactions arrive within the hour. Chequing keeps its bank transactions and is synced from TD Canada Trust now.")
     end
 
     it "lists the Accounts it made and linked in the page's order" do
@@ -467,18 +467,22 @@ RSpec.describe ConnectPlaid do
       expect(budget.bank_connections.where(login_id: "item-1")).to be_empty
     end
 
-    it "brings the Account's latest day in again on the first sync, unfiled, and nothing from before it", :aggregate_failures do
+    it "brings the Account's latest day in again on the first sync, unfiled even where a Filing rule fits, and nothing from before it", :aggregate_failures do
       filed = create(:budget_bank_transaction, :filed, account: csv_chequing, date: Date.new(2026, 11, 10), amount: -82.45, description: "LOBLAWS #1234")
+      create(:budget_filing_rule, budget: budget, text: "loblaws")
       connect(link_choices(csv_chequing))
       connection = budget.bank_connections.sole
       plaid.adds(connection.access_token,
         plaid.transaction("tx-1", account: "acc-1", amount: "82.45", description: "LOBLAWS #1234", date: "2026-11-10"),
-        plaid.transaction("tx-2", account: "acc-1", amount: "12.00", description: "COFFEE", date: "2026-11-09"))
+        plaid.transaction("tx-2", account: "acc-1", amount: "12.00", description: "COFFEE", date: "2026-11-09"),
+        plaid.transaction("tx-3", account: "acc-1", amount: "40.00", description: "LOBLAWS #1029", date: "2026-11-11"))
 
       result = SyncPlaid.call(connection)
 
-      expect(result.created).to eq(1)
-      expect(csv_chequing.bank_transactions.order(:id).map { [ it.date, it.external_id ] }).to eq([ [ Date.new(2026, 11, 10), nil ], [ Date.new(2026, 11, 10), "tx-1" ] ])
+      expect(result.created).to eq(2)
+      expect(result.filed_by_rules).to eq(1)
+      expect(csv_chequing.bank_transactions.order(:id).map { [ it.date, it.external_id ] })
+        .to eq([ [ Date.new(2026, 11, 10), nil ], [ Date.new(2026, 11, 10), "tx-1" ], [ Date.new(2026, 11, 11), "tx-3" ] ])
       expect(csv_chequing.bank_transactions.unfiled.sole.external_id).to eq("tx-1")
       expect(filed.reload).to be_filed
     end

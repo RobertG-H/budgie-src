@@ -34,7 +34,7 @@
       </div>
 
       <% if choice.targets.any? %>
-        <div class="space-y-4" data-plaid-choice-target="panel" data-becomes="link">
+        <div class="space-y-4" data-plaid-choice-target="panel" data-becomes="<%= ConnectPlaid::Choice::LINK %>">
           <p class="text-sm text-base-content/70">It keeps its name, bank transactions and Filing rules, and takes no CSV Import once it's synced.</p>
           <%= render "components/field", form: fields, attribute: :link_read_from, label: "Read bank transactions dated from",
                 hint: "It starts at the date of the Account's latest bank transaction. That day's bank transactions may come in twice. Ignore the ones you've already filed." do |field| %>
