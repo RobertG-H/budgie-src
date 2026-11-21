@@ -13,7 +13,7 @@
 
 <section id="bank-connections" aria-labelledby="bank-connections-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="bank-connections-heading" class="text-xl font-semibold">Connecting a bank</h2>
-  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then Choose accounts' rows, where an account in another currency can only be left out. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, one the bank stopped accepting, and an Account the bank no longer shares.</p>
+  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then Choose accounts' rows, where an account in another currency can only be left out. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, one the bank stopped accepting, an Account the bank no longer shares, and one whose bank was disconnected. Each connection that's working has Disconnect, which asks first.</p>
 
   <div class="mx-auto max-w-xl space-y-4">
     <%= render "plaid_choices/currency_hint", currency: "CAD" %>
@@ -37,11 +37,16 @@
   </div>
 
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Every Day Chequing", external_mask: "4821",
-        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#", reconnect_path: "#", choose_path: "#" %>
+        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#", reconnect_path: "#", choose_path: "#",
+        disconnect_path: "#", disconnect_question: "Disconnect TD Canada Trust? TD Every Day Chequing and TD Savings stop syncing and keep their bank transactions. Connecting TD Canada Trust again later counts as a new connection on Plaid's Trial." %>
   <%= render "accounts/plaid_connection", bank: "Tartan-Dominion Bank of Canada", short_name: "Tartan", external_name: "Plaid Credit Card", external_mask: nil,
-        others: [], last_synced: "Not synced yet.", sync_path: "#", reconnect_path: "#", choose_path: "#" %>
+        others: [], last_synced: "Not synced yet.", sync_path: "#", reconnect_path: "#", choose_path: "#",
+        disconnect_path: "#", disconnect_question: "Disconnect Tartan-Dominion Bank of Canada? Plaid Credit Card stops syncing and keeps its bank transactions. Connecting Tartan-Dominion Bank of Canada again later counts as a new connection on Plaid's Trial." %>
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Savings", external_mask: "0042",
-        others: [ [ "TD Every Day Chequing", "#" ], [ "TD Visa", "#" ] ], last_synced: "Last synced 3 days ago.", reconnect_path: "#", choose_path: "#", needs_reconnect: true %>
+        others: [ [ "TD Every Day Chequing", "#" ], [ "TD Visa", "#" ] ], last_synced: "Last synced 3 days ago.", reconnect_path: "#", choose_path: "#", needs_reconnect: true,
+        disconnect_path: "#", disconnect_question: "Disconnect TD Canada Trust? TD Savings, TD Every Day Chequing and TD Visa stop syncing and keep their bank transactions. Connecting TD Canada Trust again later counts as a new connection on Plaid's Trial." %>
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD ePremium Savings", external_mask: "1100",
         others: [ [ "TD Every Day Chequing", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#", reconnect_path: "#", choose_path: "#", unshared: true %>
+  <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Every Day Chequing", external_mask: "4821",
+        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 3 days ago.", disconnected: true %>
 </section>

@@ -6,7 +6,7 @@ Without any of this, nothing breaks: "Connect a bank" just isn't offered, and it
 
 This page is for the operator: Claude edits the config and these docs, and never handles a Plaid secret, an encryption key or a token. The research behind it is [Plaid's Sandbox, Trial and Production](research/plaid-sandbox-trial-production.md) and [Plaid Link in a Rails app](research/plaid-link-rails-importmap.md).
 
-**What's built so far** is connecting, syncing, Reconnect and Choose accounts (the `roadmap` issue #152's first build ticket, #155 and #156): a connection and its Accounts are made, **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)), and **Reconnect** and **Choose accounts** use Link's update mode to sign in again and to change which accounts are shared ([Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)). Disconnect comes in a later ticket. Deleting a bank connection's last Account deletes the connection in Budgie without telling Plaid, until Disconnect is built: harmless on Sandbox.
+**What's built so far** is connecting, syncing, Reconnect, Choose accounts and Disconnect (the `roadmap` issue #152's first build ticket, #155, #156 and #157): a connection and its Accounts are made, **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)), and **Reconnect** and **Choose accounts** use Link's update mode to sign in again and to change which accounts are shared ([Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)). **Disconnect TD** removes the Item at Plaid and forgets the token, and deleting a bank connection's last Account removes the Item too ([Disconnect](#9-check-disconnect)). Linking onto an existing Account comes in a later ticket.
 
 - [1. The Plaid team and its keys](#1-the-plaid-team-and-its-keys)
 - [2. Link customization](#2-link-customization)
@@ -15,6 +15,7 @@ This page is for the operator: Claude edits the config and these docs, and never
 - [5. Give the values to the app](#5-give-the-values-to-the-app)
 - [6. Check it](#6-check-it)
 - [7. Check syncing](#7-check-syncing)
+- [9. Check Disconnect](#9-check-disconnect)
 - [The Trial's 10 Items](#the-trials-10-items)
 - [Coverage](#coverage)
 
@@ -36,9 +37,9 @@ Production's values go in only after that ticket: until then, connecting a bank 
 
 In the Dashboard, under Link → Link customization, edit the `default` customization (the one a link token gets when it names none):
 
-- [ ] **Account Select** is set to **Multi select**, so the person chooses which of the bank's accounts to share, and Link sends only those
-- [ ] Its **countries** are exactly Canada and its **language** English (`CA` and `en`), which is what Budgie's link token asks for: a customization applies only when they match exactly. They're under the **gear** beside the customization's name ("default"), not in the list of panes on the right
-- [ ] **Publish changes**
+- [x] **Account Select** is set to **Multi select**, so the person chooses which of the bank's accounts to share, and Link sends only those
+- [x] Its **countries** are exactly Canada and its **language** English (`CA` and `en`), which is what Budgie's link token asks for: a customization applies only when they match exactly. They're under the **gear** beside the customization's name ("default"), not in the list of panes on the right
+- [x] **Publish changes**
 
 The preview's banks are the United States' whatever the countries are set to; Link itself shows the banks of the countries the link token asks for.
 
@@ -46,7 +47,7 @@ The preview's banks are the United States' whatever the countries are set to; Li
 
 Link in Production needs a Data Transparency Messaging use case, set in the Dashboard (Link → Data Transparency Messaging). Sandbox works without it.
 
-- [ ] A use case is chosen that says Budgie reads transactions to budget with, such as personal financial management
+- [x] A use case is chosen that says Budgie reads transactions to budget with, such as personal financial management
 
 ## 4. A Sandbox user with Canadian dollars
 
@@ -86,8 +87,8 @@ This one has been connected through Budgie in development. Its USD account is th
 
 Once it's saved, choose it in the **Credentials** dropdown at the top of Sandbox Studio, which shows the username and password to type into Link.
 
-- [ ] A custom user with a chequing account, a savings account and a credit card, each with `"currency": "CAD"`, and one account with `"currency": "USD"` to see it left out
-- [ ] Its name and password written down where you test from, from the **Credentials** dropdown
+- [x] A custom user with a chequing account, a savings account and a credit card, each with `"currency": "CAD"`, and one account with `"currency": "USD"` to see it left out
+- [x] Its name and password written down where you test from, from the **Credentials** dropdown
 
 ## 5. Give the values to the app
 
@@ -119,44 +120,56 @@ Each destination has three more secrets, named the same way as the others ([Depl
 
 Do this on testing once its values are deployed. Claude can't: it can't reach the hosts, and it never runs Plaid Link.
 
-- [ ] **Accounts** shows **Connect a bank** beside **Connect Splitwise** and **New account**
-- [ ] **Connect a bank**, then **Continue to Plaid**, opens Link; choosing Tartan-Dominion Bank of Canada and signing in as the custom user shows the Account Select pane with every account to tick
-- [ ] Finishing Link lands on **Connect Tartan-Dominion Bank of Canada**, which lists the accounts that were ticked, each with its name, its last digits, its kind and **Becomes** (A new Account or Leave out)
-- [ ] **Connect Tartan-Dominion Bank of Canada** goes to the first new Account's page with `Connected Tartan-Dominion Bank of Canada. Its bank transactions arrive within the hour.`, and names the USD account as left out
-- [ ] Each new Account's page has the bank's panel and no **Import**, and the Accounts list says `Synced from Tartan-Dominion Bank of Canada.` under each
-- [ ] Connecting the same custom user again is refused before Link's token is exchanged: `Tartan-Dominion Bank of Canada is already connected, …`
-- [ ] **Cancel** on the choice page, and waiting more than 30 minutes before pressing Connect, both keep nothing
+- [x] **Accounts** shows **Connect a bank** beside **Connect Splitwise** and **New account**
+- [x] **Connect a bank**, then **Continue to Plaid**, opens Link; choosing Tartan-Dominion Bank of Canada and signing in as the custom user shows the Account Select pane with every account to tick
+- [x] Finishing Link lands on **Connect Tartan-Dominion Bank of Canada**, which lists the accounts that were ticked, each with its name, its last digits, its kind and **Becomes** (A new Account or Leave out)
+- [x] **Connect Tartan-Dominion Bank of Canada** goes to the first new Account's page with `Connected Tartan-Dominion Bank of Canada. Its bank transactions arrive within the hour.`, and names the USD account as left out
+- [x] Each new Account's page has the bank's panel and no **Import**, and the Accounts list says `Synced from Tartan-Dominion Bank of Canada.` under each
+- [x] Connecting the same custom user again is refused before Link's token is exchanged: `Tartan-Dominion Bank of Canada is already connected, …`
+- [x] **Cancel** on the choice page, and waiting more than 30 minutes before pressing Connect, both keep nothing
 - [ ] The token is ciphertext in the database: on the host, `docker exec budgie-db psql -U budgie budgie_production -c "select provider, left(access_token, 12) from budget_bank_connections"` shows something that starts `{"p":"` for `plaid`
-- [ ] The app's logs show `public_token` as `[FILTERED]` in the request that Link's answer was sent in
+- [x] The app's logs show `public_token` as `[FILTERED]` in the request that Link's answer was sent in
 
 ## 7. Check syncing
 
 Do this on testing, with the custom user connected (each Account's date to read from on or before the custom user's transactions' dates). Claude can't: it can't reach the hosts, it never calls Plaid with real keys, and what only Plaid's own answers can settle is here. The Sandbox endpoints are calls to `sandbox.plaid.com` with the Sandbox client id, secret and the connection's access token, which is only in the database, encrypted, so they're easiest from the Dashboard's API explorer or Postman with a token from a Sandbox Item made there.
 
-- [ ] **Sync Tartan now** on a connected Account's page says `Synced from Tartan-Dominion Bank of Canada: 3 new.` (or however many there are), and **Last synced** under the panel. A first sync right after connecting can say `… hasn't sent its bank transactions yet. Try again in a few minutes.`: that's Plaid still gathering the history
-- [ ] **The bank's own description arrives.** The bank transactions read `LOBLAWS #1029`, `PAYROLL DEPOSIT` and `NETFLIX.COM`, the custom user's `description`, and not a tidied merchant name: that's `original_description`, which Budgie asks for on every call. If they read as Plaid's tidied names instead, tell Claude
-- [ ] **Signs and dates.** LOBLAWS is money out (red) and PAYROLL DEPOSIT money in, each dated its `date_posted` (Nov 4 for LOBLAWS, not Nov 3)
-- [ ] **New transactions come in.** Add a CAD transaction with `/sandbox/transactions/create` (or by editing the custom user and resetting the Item), then **Sync Tartan now** brings it in, once, however often it's pressed. One in another currency is counted as skipped
-- [ ] **Filing rules.** A Filing rule for `loblaws` on the Account files the next LOBLAWS that comes in, and the notice says `Filing rules filed 1 of them.` with a **Review them** link
-- [ ] **The date to read from.** Under **Date to read from** on an Account's page, move it earlier and press **Change date**: the next sync reads every transaction again, and nothing is duplicated
-- [ ] **A connection that needs signing in again.** `/sandbox/item/reset_login` on the Item, then **Sync Tartan now**: it says `Tartan-Dominion Bank of Canada stopped accepting the connection, so nothing was synced.`, the panel says the Account isn't syncing and has no **Sync Tartan now**, and the hourly job skips it. Section 8 puts it right
-- [ ] **The hourly job.** At twenty past the hour, **Last synced** moves on without pressing anything
+- [x] **Sync Tartan now** on a connected Account's page says `Synced from Tartan-Dominion Bank of Canada: 3 new.` (or however many there are), and **Last synced** under the panel. A first sync right after connecting can say `… hasn't sent its bank transactions yet. Try again in a few minutes.`: that's Plaid still gathering the history
+- [x] **The bank's own description arrives.** The bank transactions read `LOBLAWS #1029`, `PAYROLL DEPOSIT` and `NETFLIX.COM`, the custom user's `description`, and not a tidied merchant name: that's `original_description`, which Budgie asks for on every call. If they read as Plaid's tidied names instead, tell Claude
+- [x] **Signs and dates.** LOBLAWS is money out (red) and PAYROLL DEPOSIT money in, each dated its `date_posted` (Nov 4 for LOBLAWS, not Nov 3)
+- [x] **New transactions come in.** Add a CAD transaction with `/sandbox/transactions/create` (or by editing the custom user and resetting the Item), then **Sync Tartan now** brings it in, once, however often it's pressed. One in another currency is counted as skipped
+- [x] **Filing rules.** A Filing rule for `loblaws` on the Account files the next LOBLAWS that comes in, and the notice says `Filing rules filed 1 of them.` with a **Review them** link
+- [x] **The date to read from.** Under **Date to read from** on an Account's page, move it earlier and press **Change date**: the next sync reads every transaction again, and nothing is duplicated
+- [x] **A connection that needs signing in again.** `/sandbox/item/reset_login` on the Item, then **Sync Tartan now**: it says `Tartan-Dominion Bank of Canada stopped accepting the connection, so nothing was synced.`, the panel says the Account isn't syncing and has no **Sync Tartan now**, and the hourly job skips it. Section 8 puts it right
+- [x] **The hourly job.** At twenty past the hour, **Last synced** moves on without pressing anything
 
 ## 8. Check Reconnect and Choose accounts
 
 Do this on testing, with the custom user connected and at least two of its accounts made Accounts. Both are Plaid Link's update mode, which keeps the Item: what to look for is that nothing is renumbered, which only Plaid's own answers can show.
 
-- [ ] **Reconnect clears needs-reconnect.** `/sandbox/item/reset_login` on the Item, then **Sync Tartan now** says it stopped accepting the connection. The Accounts page has a **Needs reconnecting** badge on each of the connection's Accounts, and each Account's panel names the others as not syncing, with **Reconnect** as the primary button. **Reconnect**, then **Continue to Plaid**, signs in again in Link (no Account Select pane), and finishing it says `Reconnected Tartan-Dominion Bank of Canada.`, the badges are gone and **Sync Tartan now** is back
-- [ ] **Reconnect changes nothing when left.** Closing Link without finishing leaves the connection as it was
-- [ ] **Sync after Reconnect brings nothing in twice.** **Sync Tartan now** after reconnecting says nothing new for what was already there
-- [ ] **Choose accounts adds an account.** With one of the custom user's accounts left out, **Choose accounts** on an Account's page, then **Continue to Plaid**, shows the Account Select pane with the current selection ticked. Ticking the one left out lands on **Choose accounts on Tartan-Dominion Bank of Canada**, listing only that one (the USD one, if ticked, shows **Left out** greyed out with its reason). **Save** says `Added … from Tartan-Dominion Bank of Canada.`, and the next **Sync Tartan now** brings its bank transactions in and nothing twice in the Accounts that were already there
-- [ ] **Choose accounts removes an account.** Choose accounts again and untick one: it saves straight away (no choice page) with `… is no longer shared, so nothing new comes in.`; that Account's page says `No longer shared from Tartan-Dominion Bank of Canada, …` above the panel and keeps its bank transactions, and the Accounts list says `No longer shared from Tartan-Dominion Bank of Canada.`
-- [ ] **The ids that stayed are unchanged.** `/accounts/get` on the Item (from the Dashboard's API explorer) after both shows the same `account_id` for every account that stayed selected as before, and Budgie's Accounts for them still sync. If an id changed, tell Claude
-- [ ] **Sharing it again.** Choose accounts once more and tick it again: `… is shared again.`, the warning is gone, and the next sync brings in what's new without bringing in twice what it already had
+- [x] **Reconnect clears needs-reconnect.** `/sandbox/item/reset_login` on the Item, then **Sync Tartan now** says it stopped accepting the connection. The Accounts page has a **Needs reconnecting** badge on each of the connection's Accounts, and each Account's panel names the others as not syncing, with **Reconnect** as the primary button. **Reconnect**, then **Continue to Plaid**, signs in again in Link (no Account Select pane), and finishing it says `Reconnected Tartan-Dominion Bank of Canada.`, the badges are gone and **Sync Tartan now** is back
+- [x] **Reconnect changes nothing when left.** Closing Link without finishing leaves the connection as it was
+- [x] **Sync after Reconnect brings nothing in twice.** **Sync Tartan now** after reconnecting says nothing new for what was already there
+- [x] **Choose accounts adds an account.** With one of the custom user's accounts left out, **Choose accounts** on an Account's page, then **Continue to Plaid**, shows the Account Select pane with the current selection ticked. Ticking the one left out lands on **Choose accounts on Tartan-Dominion Bank of Canada**, listing only that one (the USD one, if ticked, shows **Left out** greyed out with its reason). **Save** says `Added … from Tartan-Dominion Bank of Canada.`, and the next **Sync Tartan now** brings its bank transactions in and nothing twice in the Accounts that were already there
+- [x] **Choose accounts removes an account.** Choose accounts again and untick one: it saves straight away (no choice page) with `… is no longer shared, so nothing new comes in.`; that Account's page says `No longer shared from Tartan-Dominion Bank of Canada, …` above the panel and keeps its bank transactions, and the Accounts list says `No longer shared from Tartan-Dominion Bank of Canada.`
+- [x] **The ids that stayed are unchanged.** `/accounts/get` on the Item (from the Dashboard's API explorer) after both shows the same `account_id` for every account that stayed selected as before, and Budgie's Accounts for them still sync. If an id changed, tell Claude
+- [x] **Sharing it again.** Choose accounts once more and tick it again: `… is shared again.`, the warning is gone, and the next sync brings in what's new without bringing in twice what it already had
+
+## 9. Check Disconnect
+
+Do this on testing, with the custom user connected and at least two of its accounts made Accounts. **Disconnect TD** is final, and on Sandbox it costs nothing, so connect the bank again afterwards (Section 6) to check the rest. On production's Trial, removing an Item frees no slot, so don't try it there.
+
+- [x] **The question names the Accounts and the Trial.** On an Account's page, **Disconnect Tartan** (named for your bank) asks `Disconnect Tartan-Dominion Bank of Canada? … stop syncing and keep their bank transactions. Connecting Tartan-Dominion Bank of Canada again later counts as a new connection on Plaid's Trial.`, naming every Account the connection syncs. Cancel leaves everything as it was
+- [x] **Disconnect removes the Sandbox Item.** Confirming says `Disconnected from Tartan-Dominion Bank of Canada.` In the Plaid Dashboard's activity log (Developers, Logs) there's a successful `/item/remove` for the Item, and the Item's access token no longer works (`/accounts/get` on it answers `INVALID_ACCESS_TOKEN`)
+- [x] **The Accounts keep what they had.** Each Account's page says `Was synced from Tartan-Dominion Bank of Canada, which was disconnected.` with no **Sync Tartan now**, **Reconnect**, **Choose accounts** or **Disconnect**, and still has its bank transactions, its Filing rules and its **Date to read from**. The Accounts list says the same under each name, with no **Needs reconnecting** badge, and an Account still takes no Import
+- [x] **The hourly job skips it.** At twenty past the hour, **Last synced** doesn't move
+- [x] **Removed outside Budgie.** Connect again, then remove the Item at my.plaid.com (or `/item/remove` from the API explorer) and press **Sync Tartan now**: it says `Tartan-Dominion Bank of Canada was disconnected, since Plaid says it's no longer there, so nothing was synced.` and the Accounts now say they were disconnected
+- [x] **Deleting the last Account.** On a connection with an Account that has no bank transactions, delete the others first, then the last: the question says `Its connection to Tartan-Dominion Bank of Canada is removed with it, and Budgie stops having access to Tartan-Dominion Bank of Canada.`, and afterwards the Dashboard's log has a `/item/remove` for the Item and the Account and connection are gone. Deleting an Account of a disconnected connection makes no `/item/remove` call
+- [x] **Plaid refusing it.** With `PLAID_SECRET` changed to a wrong one in `.env.testing` (restore it after), **Disconnect** and deleting a last Account are each refused with an alert saying `Plaid refused it (…), so … and nothing was changed. Try again later.`, and the connection and its Accounts are as they were
 
 ## The Trial's 10 Items
 
-On the Trial, a team can make 10 Items in Production, ever. Every public token exchanged for an access token counts, and **removing an Item (`/item/remove`) frees none**. Budgie keeps no count: it exchanges only when the person presses Connect on the choice page, after the duplicate check, so no Item is spent by leaving Link or the page, and once the 10 are used Plaid refuses the exchange and the Accounts page says so in Plaid's words. Sandbox has no limit.
+On the Trial, a team can make 10 Items in Production, ever. Every public token exchanged for an access token counts, and **removing an Item (`/item/remove`) frees none**, so Disconnect doesn't either, and connecting a bank again after it is a new Item. Budgie keeps no count: it exchanges only when the person presses Connect on the choice page, after the duplicate check, so no Item is spent by leaving Link or the page, and once the 10 are used Plaid refuses the exchange and the Accounts page says so in Plaid's words. Sandbox has no limit.
 
 Budgie removes an Item it exchanged but couldn't keep, such as one where every account chosen was in another currency, so Plaid stops reading the bank for it, but that Item still counts.
 

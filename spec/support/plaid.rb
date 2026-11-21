@@ -23,10 +23,30 @@
 # and records each update-mode link token it was asked for:
 #
 #   plaid.item("access-sandbox-token", accounts: [ plaid.account("acc-1", "TD Every Day Chequing") ])
+#
+# `/item/remove` (Disconnect, and deleting a connection's last Account) answers with success unless told otherwise, and `PlaidFake.item_not_found`,
+# `.invalid_access_token` and `.unreachable` are the errors it fails with when the Item is already gone, its token isn't one Plaid knows, or Plaid can't be reached:
+#
+#   plaid.fails(:remove_item, PlaidFake.item_not_found)
+#   expect(plaid.removals).to eq([ "access-sandbox-token" ])
 #   expect(plaid.update_link_tokens).to eq([ { access_token: "access-sandbox-token", client_user_id: budget.id, account_selection: true } ])
 class PlaidFake
   attr_reader :link_tokens, :update_link_tokens, :exchanges, :account_requests, :removals, :transaction_requests
   attr_accessor :transactions_page_size
+
+  # What Plaid answers `/item/remove` with, for `fails` and `fails_once`, when the Item is already gone (removed at my.plaid.com, say), when its access token isn't one it
+  # knows, and when it can't be reached at all, as PlaidApi::Client reports that.
+  def self.item_not_found
+    PlaidApi::Error.new(error_code: "ITEM_NOT_FOUND", error_type: "ITEM_ERROR", status: 400)
+  end
+
+  def self.invalid_access_token
+    PlaidApi::Error.new(error_code: "INVALID_ACCESS_TOKEN", error_type: "INVALID_INPUT", status: 400)
+  end
+
+  def self.unreachable
+    PlaidApi::Error.new("Plaid couldn't be reached.")
+  end
 
   def initialize(configured: true)
     @configured = configured

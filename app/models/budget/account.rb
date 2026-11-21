@@ -108,6 +108,32 @@ class Budget::Account < ApplicationRecord
     imports.latest_first.first
   end
 
+  # Whether deleting it takes a live bank connection's Item at Plaid with it: it's the connection's last Account, so the connection goes too (`after_destroy`), and the
+  # connection still has a token. One that's already disconnected has no Item left, and Splitwise's connection has none.
+  def removes_item_with_it?
+    live_bank? && connection_siblings.none?
+  end
+
+  # Whether it's synced from a bank (through Plaid) whose connection still has a token, and whether that was forgotten by Disconnect.
+  def live_bank?
+    bank_connection.present? && bank_connection.plaid? && !bank_connection.disconnected?
+  end
+
+  def disconnected_bank?
+    bank_connection.present? && bank_connection.plaid? && bank_connection.disconnected?
+  end
+
+  # Deletes it as a person asks to, which is true when it was and false with the reasons on `errors` when it can't be. When that takes the connection's Item with it, the
+  # Item is removed at Plaid first, and only once nothing refuses the delete, since an Account with bank transactions stays and so must its connection. Plaid being asked
+  # first and the rows written after means a failed delete can leave a connection whose Item is already gone, which a sync finds out and disconnects, and never an Item
+  # left at Plaid without an Account. It raises PlaidApi::Error, with nothing changed, when Plaid can't be reached or refuses (Budget::BankConnection#remove_at_plaid).
+  def destroy_with_connection
+    return destroy unless removes_item_with_it? && bank_transactions.none?
+
+    bank_connection.remove_at_plaid
+    destroy
+  end
+
   # Changes the date to read from, which is true when it was changed or already was that, and false with the reasons on `errors` when it can't be. A new date means every
   # expense dated from it is to be read again, which a sync marker that's already past them would skip, so the connection's marker is forgotten with it. What's already in
   # the Account stays as it is, and what's read again is matched by id, so nothing is brought in twice. Nothing reads the connection's token, so it works for a connection

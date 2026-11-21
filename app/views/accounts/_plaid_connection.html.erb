@@ -1,14 +1,14 @@
-<%# locals: (bank:, short_name:, external_name:, external_mask:, others:, last_synced:, sync_path: nil, reconnect_path: nil, choose_path: nil, needs_reconnect: false, unshared: false) %>
-<%# The panel on the page of an Account synced from a bank through Plaid, in place of Import: which of the bank's accounts it is, and which other Accounts the same connection syncs, with links, since what's done to the connection here (Sync now, Reconnect and Choose accounts, and Disconnect, which comes later) is done to them too. It takes plain values, so /styleguide can draw it: `others` is each other Account's name and page. %>
-<%# Sync now is named with the bank's short name ("Sync TD now"), since it syncs the bank's connection and not only this Account, and is there only with a `sync_path`, which the page gives for a connection that works where Plaid is set up. Reconnect and Choose accounts are there with their paths, which the page gives for a connection that has a token where Plaid is set up. A connection the bank stopped accepting says so as a warning naming the other Accounts that aren't syncing either, and Reconnect is then the primary button. An Account whose bank account was de-selected in Choose accounts (`unshared`) says so in a warning above the panel, and "Was synced from" which bank account it is. %>
-<% if unshared %>
+<%# locals: (bank:, short_name:, external_name:, external_mask:, others:, last_synced:, sync_path: nil, reconnect_path: nil, choose_path: nil, needs_reconnect: false, unshared: false, disconnected: false, disconnect_path: nil, disconnect_question: nil) %>
+<%# The panel on the page of an Account synced from a bank through Plaid, in place of Import: which of the bank's accounts it is, and which other Accounts the same connection syncs, with links, since what's done to the connection here (Sync now, Reconnect, Choose accounts and Disconnect) is done to them too. It takes plain values, so /styleguide can draw it: `others` is each other Account's name and page. %>
+<%# Sync now is named with the bank's short name ("Sync TD now"), since it syncs the bank's connection and not only this Account, and is there only with a `sync_path`, which the page gives for a connection that works where Plaid is set up. Reconnect and Choose accounts are there with their paths, which the page gives for a connection that has a token where Plaid is set up. A connection the bank stopped accepting says so as a warning naming the other Accounts that aren't syncing either, and Reconnect is then the primary button. Disconnect (`disconnect_path`, asking `disconnect_question` first) is there for a connection that has a token where Plaid is set up, whether or not it needs reconnecting, and ends Budgie's access to the bank for good. Once it has been (`disconnected`) the panel says so, in the words the Accounts list uses, with no actions and none of the warnings, since there's nothing to reconnect or choose accounts on. An Account whose bank account was de-selected in Choose accounts (`unshared`) says so in a warning above the panel, and "Was synced from" which bank account it is. %>
+<% if unshared && !disconnected %>
   <div role="status" class="alert alert-warning mt-4">
     <span>No longer shared from <%= bank %>, so nothing new comes in. Its bank transactions stay as they are. Choose accounts to share it again.</span>
   </div>
 <% end %>
 <%= render "components/panel", class: "mt-4" do %>
   <h2 class="font-semibold"><%= bank %></h2>
-  <% if needs_reconnect %>
+  <% if needs_reconnect && !disconnected %>
     <div role="status" class="alert alert-warning mt-2">
       <span>
         <%= bank %> stopped accepting the connection, so <%= others.any? ? "this Account and #{others.map(&:first).to_sentence} aren't" : "this Account isn't" %> syncing.
@@ -17,14 +17,21 @@
     </div>
   <% end %>
   <p class="mt-1 text-base-content/70">
-    <%= unshared ? "Was synced from" : "Synced from" %> <%= bank %>, <%= external_name %><% if external_mask.present? %> ••<%= external_mask %><% end %>.
-    <% if others.any? %>
-      The same connection syncs <%= safe_join(others.map { |name, href| link_to(name, href, class: "link") }, ", ") %>,
-      so what's done here is done to <%= others.one? ? "it" : "them" %> too.
+    <% if disconnected %>
+      Was synced from <%= bank %>, which was disconnected. It was <%= external_name %><% if external_mask.present? %> ••<%= external_mask %><% end %>.
+      <% if others.any? %>
+        <%= safe_join(others.map { |name, href| link_to(name, href, class: "link") }, ", ") %> <%= others.one? ? "was" : "were" %> disconnected with it.
+      <% end %>
+    <% else %>
+      <%= unshared ? "Was synced from" : "Synced from" %> <%= bank %>, <%= external_name %><% if external_mask.present? %> ••<%= external_mask %><% end %>.
+      <% if others.any? %>
+        The same connection syncs <%= safe_join(others.map { |name, href| link_to(name, href, class: "link") }, ", ") %>,
+        so what's done here is done to <%= others.one? ? "it" : "them" %> too.
+      <% end %>
     <% end %>
   </p>
   <p class="mt-1 text-sm text-base-content/70"><%= last_synced %></p>
-  <% if sync_path || reconnect_path || choose_path %>
+  <% if !disconnected && (sync_path || reconnect_path || choose_path || disconnect_path) %>
     <div class="mt-4 flex flex-wrap items-center gap-2">
       <% if sync_path && !needs_reconnect %>
         <%# A sync can take a few seconds, so the button says so, and can't be pressed twice. %>
@@ -35,6 +42,10 @@
       <% end %>
       <% if choose_path %>
         <%= link_to "Choose accounts", choose_path, class: "btn" %>
+      <% end %>
+      <% if disconnect_path %>
+        <%# Final: Plaid is told to remove the Item, so coming back is a new connection. The question says so. %>
+        <%= render "components/delete_button", path: disconnect_path, label: "Disconnect #{short_name}", confirm: disconnect_question %>
       <% end %>
     </div>
   <% end %>

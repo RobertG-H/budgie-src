@@ -403,14 +403,30 @@ RSpec.describe SyncPlaid do
       expect(bank_transactions).to be_empty
     end
 
-    it "carries any other error of Plaid's, such as an Item that's gone, and changes nothing" do
-      plaid.fails_once(:transactions_sync, PlaidApi::Error.new(error_code: "ITEM_NOT_FOUND", error_type: "ITEM_ERROR", status: 400))
+    it "carries any other error of Plaid's, and changes nothing" do
+      plaid.fails_once(:transactions_sync, PlaidApi::Error.new(error_code: "INTERNAL_SERVER_ERROR", error_type: "API_ERROR", status: 500))
 
       result = sync
 
-      expect(result.failure).to eq("Plaid refused it (ITEM_NOT_FOUND), so nothing was synced. Try again later.")
+      expect(result.failure).to eq("Plaid refused it (INTERNAL_SERVER_ERROR), so nothing was synced. Try again later.")
       expect(result.error).to be_a(PlaidApi::Error)
       expect(connection.reload).not_to be_needs_reconnect
+      expect(connection).not_to be_disconnected
+    end
+
+    it "marks the connection disconnected when the Item is gone, such as removed at my.plaid.com, and says so, with nothing to raise" do
+      adds tx("tx-1")
+      plaid.fails_once(:transactions_sync, PlaidFake.item_not_found)
+
+      result = sync
+
+      expect(result.failure).to eq("TD Canada Trust was disconnected, since Plaid says it's no longer there, so nothing was synced.")
+      expect(result.error).to be_nil
+      expect(connection.reload).to be_disconnected
+      expect(connection).not_to be_needs_reconnect
+      expect(bank_transactions).to be_empty
+      expect(chequing.reload).to be_synced
+      expect(Budget::BankConnection.syncable).not_to include(connection)
     end
 
     it "lets an error that isn't Plaid's go, which rolls back, so the hourly job can log it with the connection" do

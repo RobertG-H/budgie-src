@@ -24,6 +24,9 @@ class Budget::BankConnection < ApplicationRecord
   PLAID = "plaid".freeze
   PROVIDER_NAMES = { SPLITWISE => "Splitwise", PLAID => "Plaid" }.freeze
   PROVIDERS = PROVIDER_NAMES.keys.freeze
+  # What Plaid says to `/item/remove` when there's nothing left to remove: the Item is gone already (removed at my.plaid.com, say), or its access token isn't one it
+  # knows. Either way Budgie's access has ended, which is what was asked for.
+  ITEM_ALREADY_REMOVED = %w[ ITEM_NOT_FOUND INVALID_ACCESS_TOKEN ].freeze
 
   belongs_to :budget
   # An Account that is synced through it. It refuses to be deleted while one has it: the Account goes first, and takes the connection with it when
@@ -126,6 +129,28 @@ class Budget::BankConnection < ApplicationRecord
   # untouched. With no token there's nothing to have stopped working, so that's forgotten too.
   def disconnect!
     replace_token(nil, needs_reconnect: false)
+  end
+
+  # Ends Budgie's access to a bank for good: asks Plaid to remove the Item, which also ends its billing, and only then forgets the token. The Accounts, their bank
+  # transactions and what they were filed as stay. Plaid is called first and nothing is written until it has answered, and never inside a database transaction that a
+  # failed write could roll back after Plaid has been told, so the worst a failure afterwards leaves is a connection whose Item is already gone, which the next sync
+  # finds out (SyncPlaid) and disconnects. It raises PlaidApi::Error, and leaves the token, when Plaid can't be reached or refuses; a key that's been lost, which the
+  # token can't be read without, raises ActiveRecord::Encryption::Errors::Decryption, since then Plaid can't be told. A connection that's already disconnected has no
+  # Item left to remove.
+  def disconnect_from_plaid!
+    remove_at_plaid
+    disconnect!
+  end
+
+  # Asks Plaid to remove the Item, as far as that's needed: the same as `disconnect_from_plaid!` without forgetting the token, for deleting a connection's last Account,
+  # which deletes the connection instead.
+  def remove_at_plaid
+    return if disconnected?
+    raise PlaidApi::Error, "Plaid isn't set up here." unless PlaidApi.configured?
+
+    PlaidApi.client.remove_item(access_token)
+  rescue PlaidApi::Error => error
+    raise unless ITEM_ALREADY_REMOVED.include?(error.error_code)
   end
 
   # Gives the connection a new token, for the same login, and says it works again. The login's name is refreshed, since it's what the provider

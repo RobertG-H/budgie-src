@@ -3,7 +3,9 @@ module AccountsHelper
   # and how many it has.
   def account_detail(account, transaction_count)
     count = transaction_count.zero? ? "No bank transactions yet." : pluralize(transaction_count, "bank transaction")
-    if account.unshared?
+    if account.disconnected_bank?
+      "Was synced from #{account.synced_from}, which was disconnected. #{count}"
+    elsif account.unshared?
       "No longer shared from #{account.synced_from}. #{count}"
     elsif account.synced?
       "Synced from #{account.synced_from}. #{count}"
@@ -19,18 +21,32 @@ module AccountsHelper
     "Delete the #{account.name_was} account?#{filing_rules_deleted_with(account)}#{connection_after_deleting(account)}"
   end
 
-  # What deleting a synced Account does to its connection, or nothing for one that isn't synced or one of a disconnected bank's that isn't its last.
+  # What deleting a synced Account does to its connection, or nothing for one that isn't synced or one of a disconnected bank's that isn't its last. A live bank's last
+  # Account takes its Item at Plaid with it, which ends Budgie's access to the bank.
   def connection_after_deleting(account)
     return unless account.synced?
-    return " Its connection to #{account.synced_from} is removed with it." if account.connection_siblings.none?
 
-    connection = account.bank_connection
-    " #{account.synced_from} will stop bringing in #{account.name_was}. Choose accounts can bring it back." if connection.plaid? && !connection.disconnected?
+    bank = account.synced_from
+    if account.connection_siblings.none?
+      " Its connection to #{bank} is removed with it#{", and Budgie stops having access to #{bank}" if account.removes_item_with_it?}."
+    elsif account.live_bank?
+      " #{bank} will stop bringing in #{account.name_was}. Choose accounts can bring it back."
+    end
   end
 
   # When a synced Account last synced, in words: "Last synced 12 minutes ago.", or "Not synced yet." before one has finished.
   def last_synced_text(connection)
     connection.synced_at ? "Last synced #{time_ago_in_words(connection.synced_at)} ago." : "Not synced yet."
+  end
+
+  # What's asked before a bank is disconnected (Plaid's Item removed, for good): which Accounts stop syncing, that they keep their bank transactions, and that coming back is
+  # a new connection, which counts against Plaid's Trial: the one place the app says so. Those that stop syncing are the ones the bank still shares.
+  def disconnect_bank_question(connection)
+    accounts = connection.accounts.shared.alphabetical.to_a.presence || connection.accounts.alphabetical.to_a
+    names = accounts.map(&:name).to_sentence
+    one = accounts.one?
+    "Disconnect #{connection.name}? #{names} #{one ? "stops" : "stop"} syncing and #{one ? "keeps its" : "keep their"} bank transactions. " \
+      "Connecting #{connection.name} again later counts as a new connection on Plaid's Trial."
   end
 
   # What's asked before an Account's connection is disconnected: the token is forgotten, and everything that came through it stays.

@@ -552,6 +552,17 @@ page renders, and one in another currency can only be left out. Save (`ChoosePla
 an Account or sharing one again resets the cursor, so the next sync reads everything again, matched by id, and when every selected account is already an Account it saves without asking. Deleting one of a live
 connection's Accounts, which has to have no bank transactions, leaves its bank account unmapped, which the sync skips and Choose accounts can bring back.
 
+**Disconnect** ends Budgie's access to a bank for good. **Disconnect TD** is in the panel of each of the connection's Accounts, for a connection that has a token where Plaid is set up, whether or not it needs
+reconnecting. It asks first, naming every Account the connection still syncs and warning that connecting the bank again later counts as a new connection on Plaid's Trial, and then
+`BankConnection#disconnect_from_plaid!` calls `/item/remove` and only afterwards forgets the token (`disconnect!`, which also clears needs-reconnect), so Plaid is never called inside a database transaction that a
+later write could roll back. Plaid being unreachable, or answering any other error, refuses it with an alert and changes nothing, so it can be tried again; `ITEM_NOT_FOUND` and `INVALID_ACCESS_TOKEN` count as already
+removed. Each Account stays synced (so it still takes no Import) with its bank transactions, Filing rules and date to read from, and says "Was synced from TD Canada Trust, which was disconnected." on the Accounts list and in its
+panel, which has no actions; the hourly job skips it, since `syncable` needs a token. A sync that gets `ITEM_NOT_FOUND`, because the Item was removed outside Budgie, disconnects the connection too, outside the rolled-back
+transaction, and says so. Deleting a live connection's last Account (`Budget::Account#destroy_with_connection`, which `AccountsController#destroy` calls) removes the Item first, only once nothing refuses the delete (an Account
+with bank transactions stays, so does its Item), and is refused with nothing changed when Plaid can't be reached; a disconnected connection's last Account is deleted without a Plaid call, and its question says
+the connection goes with it and that Budgie stops having access to the bank. A failed write after Plaid was told leaves a connection whose Item is already gone, which the next sync's `ITEM_NOT_FOUND` tidies up.
+Destroying a whole Budget (`user:delete`) deletes its connections without calling Plaid.
+
 The header's top row has Import, the primary button, beside the menu, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
 bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise or a bank, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
 count of the unfiled ones ("12 unfiled", or "99+ unfiled"), a link to the Unfiled state, and of the ones to review ("8 to review"), a link to the To review state: both come from one query, counting at most 100 of each and read once per request, so every page with the header costs one query more.

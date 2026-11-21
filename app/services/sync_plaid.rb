@@ -36,12 +36,14 @@ class SyncPlaid
 
   # What Plaid says when the bank's transactions changed while the pages were read: read them all again from where the sync began.
   MUTATION = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION".freeze
+  # What Plaid says when the Item isn't there: it was removed outside Budgie, such as at my.plaid.com, which is final, so the connection is disconnected (`disconnect!`).
+  ITEM_GONE = "ITEM_NOT_FOUND".freeze
   # What Plaid says when the bank stopped sharing with it, which only connecting again puts right (`needs_reconnect!`).
   NEEDS_RECONNECT = %w[ ITEM_LOGIN_REQUIRED ACCESS_NOT_GRANTED NO_ACCOUNTS USER_SETUP_REQUIRED ].freeze
 
   # What a sync did, in the counts a person is told, or why it didn't. `not_ready` is a sync that worked but found Plaid hasn't gathered the bank's transactions yet.
   # A failure's words are for a person and never carry the token or what Plaid answered; `error` is the exception behind one the hourly job should raise (one that's
-  # neither the bank stopping sharing nor Plaid asking to slow down, which are for the person to hear and nothing more).
+  # neither the bank stopping sharing, the Item being gone nor Plaid asking to slow down, which are for the person to hear and nothing more).
   Result = Data.define(:bank, :created, :changed, :removed, :skipped, :filed_by_rules, :ignored_by_rules, :not_ready, :failure, :error) do
     def self.failed(bank, failure, error: nil)
       new(bank: bank, created: 0, changed: 0, removed: 0, skipped: 0, filed_by_rules: 0, ignored_by_rules: 0, not_ready: false, failure: failure, error: error)
@@ -92,6 +94,10 @@ class SyncPlaid
     if NEEDS_RECONNECT.include?(error.error_code)
       @connection.needs_reconnect!
       Result.failed(bank, "#{bank} stopped accepting the connection, so nothing was synced.")
+    elsif error.error_code == ITEM_GONE
+      # Outside the rolled-back transaction, as `needs_reconnect!` is: nothing is kept from this sync, but the token is, for good, forgotten.
+      @connection.disconnect!
+      Result.failed(bank, "#{bank} was disconnected, since Plaid says it's no longer there, so nothing was synced.")
     elsif error.rate_limited?
       Result.failed(bank, "Plaid is limiting how often Budgie can ask, so nothing was synced. Try again later.")
     else
