@@ -1,11 +1,18 @@
 <%# locals: () %>
-<%# Connecting a bank through Plaid, drawn from plain values: the rows of the page after Plaid Link (a new Account, one left out, and on Choose accounts one in another currency that can only be left out), the hint above them, and the panel on a synced Account's page in each of its states. The forms go nowhere: they're only here to be looked at. %>
+<%# Connecting a bank through Plaid, drawn from plain values: the rows of the page after Plaid Link (a new Account, one left out, one linked onto an existing Account as a disconnected bank's Account starts, one linking onto an Account another row has, and on Choose accounts one in another currency that can only be left out), the hint above them, and the panel on a synced Account's page in each of its states. The forms go nowhere: they're only here to be looked at. %>
+<% targets = [ ConnectPlaid::LinkTarget.new(id: 1, name: "Chequing", read_from: Date.new(2026, 11, 10)),
+                ConnectPlaid::LinkTarget.new(id: 2, name: "Old TD Savings", read_from: Date.new(2026, 10, 28)) ] %>
+<% linked = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "f", name: "TD ePremium Savings", mask: "0042", subtype: "savings"),
+     becomes: ConnectPlaid::Choice.link_value(2), name: "TD ePremium Savings", read_from: Date.new(2026, 1, 2), link_read_from: Date.new(2026, 10, 28), targets: targets) %>
+<% twice = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "g", name: "TD Every Day Chequing", mask: "4821", subtype: "checking"),
+     becomes: ConnectPlaid::Choice.link_value(1), name: "TD Every Day Chequing", read_from: Date.new(2026, 1, 2), link_read_from: Date.new(2026, 11, 10), targets: targets)
+     .tap { it.errors.add(:becomes, ConnectPlaid::CHOSEN_TWICE) } %>
 <% chequing = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "a", name: "TD Every Day Chequing", mask: "4821", subtype: "checking"),
-     becomes: ConnectPlaid::Choice::NEW, name: "TD Every Day Chequing", read_from: Date.new(2026, 1, 2)) %>
+     becomes: ConnectPlaid::Choice::NEW, name: "TD Every Day Chequing", read_from: Date.new(2026, 1, 2), targets: targets) %>
 <% usd = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "b", name: "TD U.S. Dollar Account", mask: "1100", subtype: "savings"),
      becomes: ConnectPlaid::Choice::LEAVE, name: "TD U.S. Dollar Account", read_from: Date.new(2026, 1, 2)) %>
 <% visa = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "d", name: "TD Visa Infinite", mask: "7000", subtype: "credit card"),
-     becomes: ConnectPlaid::Choice::NEW, name: "TD Visa Infinite", read_from: Date.new(2026, 1, 2)) %>
+     becomes: ConnectPlaid::Choice::NEW, name: "TD Visa Infinite", read_from: Date.new(2026, 1, 2), targets: targets) %>
 <% usd_left_out = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "e", name: "TD U.S. Dollar Account", mask: "2200", subtype: "savings"),
      becomes: ConnectPlaid::Choice::LEAVE, left_out_reason: "It's in USD and your budget is in CAD, so it can only be left out.") %>
 <% taken = ConnectPlaid::Choice.new(shared_account: PendingPlaidLink::SharedAccount.new(id: "c", name: "Visa Infinite", mask: nil, subtype: "credit card"),
@@ -13,7 +20,7 @@
 
 <section id="bank-connections" aria-labelledby="bank-connections-heading" class="space-y-4 border-t border-base-300 pt-6">
   <h2 id="bank-connections-heading" class="text-xl font-semibold">Connecting a bank</h2>
-  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken. Then Choose accounts' rows, where an account in another currency can only be left out. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, one the bank stopped accepting, an Account the bank no longer shares, and one whose bank was disconnected. Each connection that's working has Disconnect, which asks first.</p>
+  <p class="text-base-content/70">The rows of the page after Plaid Link, each with what it becomes: a new Account, with its name and date to read from, or left out. One has a name that's taken, one starts linked onto a disconnected bank's Account, and one links onto an Account another row has already chosen. Then Choose accounts' rows, where an account in another currency can only be left out. Then the panel a synced Account's page has in place of Import: syncing, not synced yet, one the bank stopped accepting, an Account the bank no longer shares, and one whose bank was disconnected, with Connect TD again. Each connection that's working has Disconnect, which asks first.</p>
 
   <div class="mx-auto max-w-xl space-y-4">
     <%= render "plaid_choices/currency_hint", currency: "CAD" %>
@@ -22,6 +29,8 @@
         <%= render "plaid_choices/choice", form: form, choice: chequing, index: 0 %>
         <%= render "plaid_choices/choice", form: form, choice: usd, index: 1 %>
         <%= render "plaid_choices/choice", form: form, choice: taken, index: 2 %>
+        <%= render "plaid_choices/choice", form: form, choice: linked, index: 5 %>
+        <%= render "plaid_choices/choice", form: form, choice: twice, index: 6 %>
       <% end %>
     <% end %>
   </div>
@@ -48,5 +57,5 @@
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD ePremium Savings", external_mask: "1100",
         others: [ [ "TD Every Day Chequing", "#" ] ], last_synced: "Last synced 12 minutes ago.", sync_path: "#", reconnect_path: "#", choose_path: "#", unshared: true %>
   <%= render "accounts/plaid_connection", bank: "TD Canada Trust", short_name: "TD", external_name: "TD Every Day Chequing", external_mask: "4821",
-        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 3 days ago.", disconnected: true %>
+        others: [ [ "TD Savings", "#" ] ], last_synced: "Last synced 3 days ago.", disconnected: true, connect_again_path: "#" %>
 </section>

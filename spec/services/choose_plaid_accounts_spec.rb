@@ -21,14 +21,15 @@ RSpec.describe ChoosePlaidAccounts do
       plaid.account("acc-1", "TD Every Day Chequing", mask: "4821"),
       plaid.account("acc-2", "TD ePremium Savings", mask: "1100", subtype: "savings"),
       plaid.account("acc-3", "Visa Infinite", mask: "7000", subtype: "credit card", type: "credit"),
-      plaid.account("acc-4", "TD U.S. Dollar Account", mask: "2200", subtype: "savings", currency: "USD")
+      plaid.account("acc-4", "TD U.S. Dollar Account", mask: "2200", subtype: "savings", currency: "USD"),
+      plaid.account("acc-5", "TD Line of Credit", mask: "3300", subtype: "line of credit", type: "credit")
     ])
   end
 
   # What Link's onSuccess sends: the whole selection, which here has de-selected TD ePremium Savings and selected two new ones.
   def selection(*ids)
     names = { "acc-1" => [ "TD Every Day Chequing", "4821" ], "acc-2" => [ "TD ePremium Savings", "1100" ], "acc-3" => [ "Visa Infinite", "7000" ],
-              "acc-4" => [ "TD U.S. Dollar Account", "2200" ], "acc-9" => [ "Crafted", "9999" ] }
+              "acc-4" => [ "TD U.S. Dollar Account", "2200" ], "acc-5" => [ "TD Line of Credit", "3300" ], "acc-9" => [ "Crafted", "9999" ] }
     accounts = ids.each_with_index.to_h { |id, index| [ index.to_s, { id: id, name: names.fetch(id).first, mask: names.fetch(id).last } ] }
     PendingPlaidLink.for_selection(ActionController::Parameters.new(accounts: accounts).permit!, account: chequing)
   end
@@ -195,6 +196,49 @@ RSpec.describe ChoosePlaidAccounts do
       expect(result).to have_attributes(created: 1, changed: 0)
       expect(Budget::BankTransaction.where(external_id: "tx-1").count).to eq(1)
       expect(Budget::BankTransaction.find_by!(external_id: "tx-2").account.external_account_id).to eq("acc-3")
+    end
+  end
+
+  describe "linking onto an existing Account" do
+    let!(:csv_visa) { create(:budget_account, budget: budget, name: "Visa", default_csv_format: create(:budget_csv_format, budget: budget)) }
+
+    it "offers the Accounts it can link onto, and never one of this connection's" do
+      choices = described_class.new(connection: connection, link: selection("acc-1", "acc-3")).choices
+
+      expect(choices.sole.targets.map(&:name)).to eq([ "Visa" ])
+    end
+
+    it "moves the Account onto the connection, clears its Default CSV format, resets the cursor and says so", :aggregate_failures do
+      create(:budget_bank_transaction, account: csv_visa, date: Date.new(2026, 11, 12))
+
+      result = choose(selection("acc-1", "acc-2", "acc-3"), { "2" => { becomes: "link:#{csv_visa.id}", link_read_from: "2026-11-12" } })
+
+      expect(result).to be_saved
+      expect(csv_visa.reload).to have_attributes(name: "Visa", bank_connection: connection, external_account_id: "acc-3", external_name: "Visa Infinite",
+        external_mask: "7000", read_from: Date.new(2026, 11, 12), default_csv_format: nil)
+      expect(csv_visa.bank_transactions.count).to eq(1)
+      expect(connection.reload.sync_cursor).to be_nil
+      expect(result.notice).to eq("Visa keeps its bank transactions and is synced from TD Canada Trust now.")
+    end
+
+    it "moves a disconnected bank's Account here and deletes its old connection once it's empty" do
+      old = create(:budget_bank_connection, :plaid, budget: budget)
+      old_visa = create(:budget_account, :plaid, budget: budget, bank_connection: old, name: "Old Visa", unshared_at: 1.day.ago)
+      old.disconnect!
+
+      choose(selection("acc-1", "acc-2", "acc-3"), { "2" => { becomes: "link:#{old_visa.id}", link_read_from: "2026-11-01" } })
+
+      expect(old_visa.reload).to have_attributes(bank_connection: connection, unshared_at: nil)
+      expect(Budget::BankConnection.exists?(old.id)).to be(false)
+    end
+
+    it "refuses the same Account on two rows, and changes nothing" do
+      result = choose(selection("acc-1", "acc-2", "acc-3", "acc-5"),
+        { "2" => { becomes: "link:#{csv_visa.id}", link_read_from: "2026-11-01" }, "3" => { becomes: "link:#{csv_visa.id}", link_read_from: "2026-11-01" } })
+
+      expect(result).to be_invalid
+      expect(result.choices.last.errors[:becomes]).to eq([ "is already chosen for another account on this page" ])
+      expect(csv_visa.reload).not_to be_synced
     end
   end
 end

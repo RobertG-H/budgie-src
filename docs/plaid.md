@@ -1,12 +1,12 @@
 # Plaid setup
 
 Budgie connects a bank through Plaid, so that each account a person shares becomes an Account whose bank transactions are synced instead of imported ([ADR 0018](adr/0018-a-plaid-connection-is-an-item-whose-accounts-become-new-or-existing-accounts.md)).
-"Connect a bank" on the Accounts page opens Plaid Link, where the person signs in to their bank and chooses the accounts to share, and then a Budgie page where they choose what each one becomes: a new Account, or left out.
+"Connect a bank" on the Accounts page opens Plaid Link, where the person signs in to their bank and chooses the accounts to share, and then a Budgie page where they choose what each one becomes: a new Account, linked onto an Account that's already there, or left out.
 Without any of this, nothing breaks: "Connect a bank" just isn't offered, and its pages turn a request away.
 
 This page is for the operator: Claude edits the config and these docs, and never handles a Plaid secret, an encryption key or a token. The research behind it is [Plaid's Sandbox, Trial and Production](research/plaid-sandbox-trial-production.md) and [Plaid Link in a Rails app](research/plaid-link-rails-importmap.md).
 
-**What's built so far** is connecting, syncing, Reconnect, Choose accounts and Disconnect (the `roadmap` issue #152's first build ticket, #155, #156 and #157): a connection and its Accounts are made, **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)), and **Reconnect** and **Choose accounts** use Link's update mode to sign in again and to change which accounts are shared ([Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)). **Disconnect TD** removes the Item at Plaid and forgets the token, and deleting a bank connection's last Account removes the Item too ([Disconnect](#9-check-disconnect)). Linking onto an existing Account comes in a later ticket.
+**What's built** is connecting, syncing, Reconnect, Choose accounts, Disconnect and linking onto an existing Account (the `roadmap` issue #152's first build ticket, #155, #156, #157 and #158): a connection and its Accounts are made, **Sync TD now** on an Account's page and a job every hour bring each posted transaction in as a bank transaction, keeping it up to date as the bank changes or removes it ([Syncing](#7-check-syncing)), and **Reconnect** and **Choose accounts** use Link's update mode to sign in again and to change which accounts are shared ([Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)). **Disconnect TD** removes the Item at Plaid and forgets the token, and deleting a bank connection's last Account removes the Item too ([Disconnect](#9-check-disconnect)). A bank's account can be linked onto an Account that takes CSV Imports, or onto one whose bank was disconnected, which **Connect TD again** brings back, keeping its name, bank transactions and Filing rules ([Linking](#10-check-linking-onto-an-existing-account)).
 
 - [1. The Plaid team and its keys](#1-the-plaid-team-and-its-keys)
 - [2. Link customization](#2-link-customization)
@@ -15,7 +15,9 @@ This page is for the operator: Claude edits the config and these docs, and never
 - [5. Give the values to the app](#5-give-the-values-to-the-app)
 - [6. Check it](#6-check-it)
 - [7. Check syncing](#7-check-syncing)
+- [8. Check Reconnect and Choose accounts](#8-check-reconnect-and-choose-accounts)
 - [9. Check Disconnect](#9-check-disconnect)
+- [10. Check linking onto an existing Account](#10-check-linking-onto-an-existing-account)
 - [The Trial's 10 Items](#the-trials-10-items)
 - [Coverage](#coverage)
 
@@ -27,9 +29,9 @@ Its **Keys** page (Developers → Keys) has one client id and a secret for each 
 | Environment | Used by | `PLAID_ENV` |
 | --- | --- | --- |
 | Sandbox | development and testing | `sandbox` |
-| Production | production, **only once linking onto an existing Account has shipped** (ticket 6 of #152) | `production` |
+| Production | production, **once [Section 10](#10-check-linking-onto-an-existing-account) is ticked on testing** | `production` |
 
-Production's values go in only after that ticket: until then, connecting a bank in production could only make new Accounts, leaving every CSV-only Account as a dead twin of the one that's synced, and each try would spend one of the Trial's 10 Items for good. So production has no "Connect a bank" until then.
+Linking onto an existing Account has shipped (#158), so production's values can now go in: connecting a bank there links each account onto the CSV Account it already has, rather than leaving that Account as a dead twin of a new synced one. Tick Section 10 on testing first, since each try in production spends one of the Trial's 10 Items for good.
 
 **Put each value in your password manager first.**
 
@@ -111,8 +113,8 @@ Each destination has three more secrets, named the same way as the others ([Depl
 | In `.env.testing` and the `testing` GitHub environment | In `.env.production` and the `production` GitHub environment |
 | --- | --- |
 | `TESTING_PLAID_CLIENT_ID` | `PRODUCTION_PLAID_CLIENT_ID` |
-| `TESTING_PLAID_SECRET`, the **Sandbox** secret | `PRODUCTION_PLAID_SECRET`, the **Production** secret, only after ticket 6 |
-| `TESTING_PLAID_ENV=sandbox` | `PRODUCTION_PLAID_ENV=production`, only after ticket 6 |
+| `TESTING_PLAID_SECRET`, the **Sandbox** secret | `PRODUCTION_PLAID_SECRET`, the **Production** secret, once Section 10 is ticked |
+| `TESTING_PLAID_ENV=sandbox` | `PRODUCTION_PLAID_ENV=production`, once Section 10 is ticked |
 
 `.kamal/secrets.<destination>` maps them to the names the app reads. A deploy with them empty is harmless: the app treats that as Plaid not being set up.
 
@@ -166,6 +168,17 @@ Do this on testing, with the custom user connected and at least two of its accou
 - [x] **Removed outside Budgie.** Connect again, then remove the Item at my.plaid.com (or `/item/remove` from the API explorer) and press **Sync Tartan now**: it says `Tartan-Dominion Bank of Canada was disconnected, since Plaid says it's no longer there, so nothing was synced.` and the Accounts now say they were disconnected
 - [x] **Deleting the last Account.** On a connection with an Account that has no bank transactions, delete the others first, then the last: the question says `Its connection to Tartan-Dominion Bank of Canada is removed with it, and Budgie stops having access to Tartan-Dominion Bank of Canada.`, and afterwards the Dashboard's log has a `/item/remove` for the Item and the Account and connection are gone. Deleting an Account of a disconnected connection makes no `/item/remove` call
 - [x] **Plaid refusing it.** With `PLAID_SECRET` changed to a wrong one in `.env.testing` (restore it after), **Disconnect** and deleting a last Account are each refused with an alert saying `Plaid refused it (…), so … and nothing was changed. Try again later.`, and the connection and its Accounts are as they were
+
+## 10. Check linking onto an existing Account
+
+Do this on testing, with the custom user's bank not connected (Disconnect it first if it is). Claude can't: it can't reach the hosts and never runs Plaid Link. What to look for is that the Account stays one Account the whole way through, which only real Plaid answers can show.
+
+- [ ] **An Account with CSV rows.** Make an Account (say Chequing), give it a CSV format and **Import** a file into it whose latest row is dated the same day as one of the custom user's transactions for the account you'll link, and file a row or two
+- [ ] **The choice page offers it.** **Connect a bank**, finish Link, and the **Becomes** select of each row has **Link onto an existing Account** with Chequing in it, between **A new Account** and **Leave out**. Choosing Chequing shows **Read bank transactions dated from** set to Chequing's latest bank transaction's date and the note `That day's bank transactions may come in twice. Ignore the ones you've already filed.`
+- [ ] **The same Account twice is refused.** Choosing Chequing on two rows and pressing Connect says `… Becomes is already chosen for another account on this page` and exchanges nothing (the Dashboard's log has no new `/item/public_token/exchange`)
+- [ ] **Linking keeps the Account.** Link one row onto Chequing and **Connect**: it goes to Chequing's page with `… Chequing keeps its bank transactions and is synced from it now.`, which has the bank's panel and no **Import**, its name, its earlier bank transactions (filed as they were) and its Filing rules; its **Edit** form has no Default CSV format
+- [ ] **The first sync brings the day in again.** **Sync Tartan now** brings in that day's transactions, unfiled beside the CSV rows of the same day, and nothing dated before it. **Ignore** the twins
+- [ ] **Disconnect and Connect again.** **Disconnect Tartan** on Chequing's page. Its panel says `Was synced from …, which was disconnected. … Connecting … again can link this Account back onto it, keeping its bank transactions.` with **Connect Tartan again** and no **Reconnect**. Press it and finish Link: on the choice page Chequing's row already says **Becomes** Chequing. **Connect** keeps Chequing as one Account with all its bank transactions, the next sync brings in only what's new (matched by Plaid's id, the same day's twins at most), and the old connection is gone (the Accounts list no longer says `Was synced from …, which was disconnected.` under Chequing)
 
 ## The Trial's 10 Items
 

@@ -521,8 +521,8 @@ secret and the keys the token is encrypted with, and without them it isn't offer
 id, name and mask for it (`external_account_id`, `external_name`, `external_mask`), its own date to read from, and its Filing rules on. "Connect a bank" on the Accounts page opens a page that makes a link token as it
 renders and loads Plaid's `link-initialize.js` from Plaid's CDN in its `<head>` (never pinned or vendored); a `plaid-link` Stimulus controller waits for Plaid's script, opens Link, and on success puts the public token,
 the bank and each shared account's id, name, mask and kind in an ordinary form and submits it. That is kept in the session with the time Link finished and the budget's id, and the next page lists each account
-with a "Becomes" select: a new Account, with its name and date to read from, or Leave out. Submitting it runs `ConnectPlaid`, whose checks go in order so that nothing before the exchange spends an Item (on Plaid's
-Trial, 10 for good): the 30 minutes since Link finished, the choices, a duplicate check (the same bank and an account whose name and mask are one of a live connection's Accounts is refused, and pointed at that Account),
+with a "Becomes" select: a new Account, with its name and date to read from, an Account to link onto, or Leave out. Submitting it runs `ConnectPlaid`, whose checks go in order so that nothing before the exchange spends an Item (on Plaid's
+Trial, 10 for good): the 30 minutes since Link finished, the choices, a duplicate check (the same bank and an account whose name and mask are one of a live connection's Accounts is refused, and pointed at that Account; one of a disconnected connection's starts that row on linking onto it),
 then the exchange, then `/accounts/get`, whose answer is what's stored, whose ids must include every one chosen, and whose currency leaves out an account in another (named in the notice, and with none left the Item is
 removed); then the connection and its Accounts are made in one database transaction. Cancel, the deadline and every refusal keep nothing, and an Item that was exchanged but not kept is removed. A bank's Account takes no
 CSV Import, and its page has a panel for its connection that names the other Accounts it syncs. Specs never call Plaid: `PlaidApi.client`
@@ -557,11 +557,20 @@ reconnecting. It asks first, naming every Account the connection still syncs and
 `BankConnection#disconnect_from_plaid!` calls `/item/remove` and only afterwards forgets the token (`disconnect!`, which also clears needs-reconnect), so Plaid is never called inside a database transaction that a
 later write could roll back. Plaid being unreachable, or answering any other error, refuses it with an alert and changes nothing, so it can be tried again; `ITEM_NOT_FOUND` and `INVALID_ACCESS_TOKEN` count as already
 removed. Each Account stays synced (so it still takes no Import) with its bank transactions, Filing rules and date to read from, and says "Was synced from TD Canada Trust, which was disconnected." on the Accounts list and in its
-panel, which has no actions; the hourly job skips it, since `syncable` needs a token. A sync that gets `ITEM_NOT_FOUND`, because the Item was removed outside Budgie, disconnects the connection too, outside the rolled-back
+panel, which has none of the connection's actions, only Connect TD again (below); the hourly job skips it, since `syncable` needs a token. A sync that gets `ITEM_NOT_FOUND`, because the Item was removed outside Budgie, disconnects the connection too, outside the rolled-back
 transaction, and says so. Deleting a live connection's last Account (`Budget::Account#destroy_with_connection`, which `AccountsController#destroy` calls) removes the Item first, only once nothing refuses the delete (an Account
 with bank transactions stays, so does its Item), and is refused with nothing changed when Plaid can't be reached; a disconnected connection's last Account is deleted without a Plaid call, and its question says
 the connection goes with it and that Budgie stops having access to the bank. A failed write after Plaid was told leaves a connection whose Item is already gone, which the next sync's `ITEM_NOT_FOUND` tidies up.
 Destroying a whole Budget (`user:delete`) deletes its connections without calling Plaid.
+
+**Linking onto an existing Account** keeps one continuous Account per real account, so connecting a bank doesn't leave a CSV Account as a dead twin. On the Connect page and on Choose accounts the "Becomes" select
+has an optgroup, "Link onto an existing Account", of the budget's Accounts that take CSV Imports and the Accounts of a disconnected bank (`Budget::Account.linkable`), never a live connection's or Splitwise's. A linked
+row asks only for its date to read from, which starts at the date of the Account's latest bank transaction, that day included, so that day's may come in twice, unfiled, and the person ignores them, rather than
+silently losing what the bank posted after the CSV file was downloaded (ADR 0010); the duplicate key's occurrence count makes the synced row a second one rather than a clash. The same Account on two rows is refused,
+on the page. Linking (`ConnectPlaid.link_account`) runs in the database transaction that makes the connection or saves the choice, locks the Account and checks it can still be linked onto, gives it the connection,
+Plaid's id, name and mask and the date, clears its Default CSV format, so it takes no CSV Import from then on, and keeps its name, bank transactions, Imports, Filing rules and their setting. An Account of a
+disconnected connection moves to the new one, is shared again, and the old connection row is deleted once it has no Accounts. On Choose accounts a link resets the cursor, as mapping any account does. A disconnected
+bank's Account offers **Connect TD again** in its panel, where Plaid is set up: it opens Connect a bank for a new Item (never Reconnect), whose choice page starts the row that overlaps it on linking back onto it.
 
 The header's top row has Import, the primary button, beside the menu, and under it a second row of links to the pages that aren't a month's: Budget, Records, Bank transactions, Accounts, Filing rules and CSV formats. The one being looked at is marked in
 bold and with `aria-current`, worked out in one helper that goes by the path and, for a record's form, by the page it was opened from; an Import belongs to Accounts, and so does connecting Splitwise or a bank, while Import is a button, so it never marks a section. Bank transactions is followed by a muted
